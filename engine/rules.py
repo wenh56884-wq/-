@@ -13,7 +13,12 @@ LEVEL_RED = "red"
 LEVEL_ORANGE = "orange"
 LEVEL_YELLOW = "yellow"
 LEVEL_NONE = "none"
-LEVELS: tuple[str, ...] = (LEVEL_RED, LEVEL_ORANGE, LEVEL_YELLOW, LEVEL_NONE)
+# 灰档：可用指标不足（data insufficient），UI 文案「数据不足 · 请联系教务补录」
+# 排在最后：它不表示平静档，get_warning_list 用它过滤时被当成「数据不全」而非「正常」
+LEVEL_UNKNOWN = "unknown"
+LEVELS: tuple[str, ...] = (
+    LEVEL_RED, LEVEL_ORANGE, LEVEL_YELLOW, LEVEL_NONE, LEVEL_UNKNOWN,
+)
 
 # --- warning_threshold.metric 取值（数据库行的键）---
 METRIC_FAIL_COUNT = "fail_count"

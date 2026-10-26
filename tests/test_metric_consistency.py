@@ -123,11 +123,8 @@ def test_library_activity_stored_as_zero_to_one():
 
 # ----------------------------------------------------------------
 # 5. 缺失不冒充（字典 §3.2：coverage / missing / 灰档）
+#    P4-3B-2 已还债：normalize_metrics 缺失即 None，输出 coverage / missing，不再填充
 # ----------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="技术债：normalize_metrics 仍在用 1.0/0.0 填充，待 P4-3B-2",
-    strict=False,
-)
 def test_missing_attendance_reports_coverage_and_no_green_level():
     """缺出勤时：coverage==2、missing==["attendance_rate"]、level 不得是正常档。
 
@@ -208,3 +205,153 @@ def test_course_pref_is_assembled_by_build_script():
     )
     assert "course_pref" in src, "build_profile_raw.py 未装配 course_pref；违背字典第 1 节"
     assert "elective_selection" in src, "未从 elective_selection 取选修方向；违背字典第 1 节"
+
+
+# ----------------------------------------------------------------
+# 9. gpa 符号的装配层证据（字典 §1 第 1.1 条第 1 点）
+#    P4-3B-2 追加：从「原始两学期均分」出发，验证 fetch/装配层而不是直传 metrics
+# ----------------------------------------------------------------
+def test_gpa_direction_is_mirrored(monkeypatch):
+    """上学期 82 / 本学期 71 → warning 侧 gpa_drop == 11.0，profile 侧 gpa_trend == -11.0。
+
+    分工：warning 走 fetch_class_rows（打桩 _query，验真的组装逻辑），
+    profile 走 build_features（画像侧约定 trend = 本期 − 上期）。
+    违背 docs\\指标口径字典.md 第 1 节第 1.1 条第 1 点「gpa_drop == -gpa_trend」。
+    """
+    prev_gpa, cur_gpa = 82.0, 71.0
+
+    def _fake_query(sql: str, params) -> list[dict]:
+        # 上级学期探测 → 返回上期学期号
+        if "sc.term < %s" in sql:
+            return [{"term": "2025-2026-1"}]
+        # 考勤 SQL（缺考勤 → 空列表，本例不关心出勤）
+        if "a.absent_sessions" in sql:
+            return []
+        # 当期成绩 SQL（带 fail_count 聚合列）
+        if "fail_count" in sql:
+            return [{"student_no": "S007", "name": "庚", "gpa": cur_gpa, "fail_count": 0}]
+        # 上期成绩 SQL
+        return [{"student_no": "S007", "gpa": prev_gpa}]
+
+    monkeypatch.setattr(warning, "_query", _fake_query)
+    rows = warning.fetch_class_rows(TENANT_ID, "RJ2401", TERM)
+    assert rows, "打桩后应取到一行，否则 Fetch 层未按预期走 _query"
+    drop = rows[0]["gpa_drop"]
+
+    trend = profile.build_features(
+        {"student_no": "S007", "term": TERM,
+         "gpa": cur_gpa, "gpa_trend": round(cur_gpa - prev_gpa, 2)}
+    )["study"]["gpa_trend"]
+
+    assert drop == 11.0, f"warning 侧 gpa_drop 应为 11.0（上期 82 − 本期 71），实际 {drop}"
+    assert trend == -11.0, f"profile 侧 gpa_trend 应为 -11.0（本期 − 上期），实际 {trend}"
+    assert drop == round(-trend, 2), (
+        f"gpa_drop 必须等于 -gpa_trend，实际 {drop} vs {trend}；违背字典第 1 节第 1.1 条第 1 点"
+    )
+
+
+# ----------------------------------------------------------------
+# 10. rank 方向一致（字典 §1：两个引擎同名函数方向相同）
+# ----------------------------------------------------------------
+def test_rank_pct_same_direction():
+    """warning / profile 的 rank 都是第一名 0.0、末位 1.0，值域 [0,1]。
+
+    违背 docs\\指标口径字典.md 第 1 节 rank_pct 行「0 = 第一，1 = 末位」。
+    """
+    gpa_of = {"S1": 90.0, "S2": 80.0, "S3": 70.0}
+    for name, rank in (("warning", warning.compute_rank_pct(gpa_of)),
+                       ("profile", profile.compute_rank_pct(gpa_of))):
+        assert rank["S1"] == 0.0, f"{name}：最高分应为 0.0，实际 {rank['S1']}"
+        assert rank["S3"] == 1.0, f"{name}：末位应为 1.0，实际 {rank['S3']}"
+        assert all(0.0 <= v <= 1.0 for v in rank.values()), f"{name}：值域必须落在 [0,1]"
+
+
+# ----------------------------------------------------------------
+# 11. rank 分组差异是合法的（字典 §1 第 1.1 条第 2 点）
+# ----------------------------------------------------------------
+def test_rank_pct_grouping_differs_is_legal():
+    """2 个班同属 1 个专业：班级第一的 major_rank_pct 不必是 0，差异是分组导致的，不是 bug。
+
+    违背 docs\\指标口径字典.md 第 1 节第 1.1 条第 2 点。
+    """
+    gpa_of = {"S1": 90.0, "S2": 80.0, "S3": 70.0, "S4": 60.0}
+    class_of = {"S1": "RJ2401", "S2": "RJ2401", "S3": "RJ2402", "S4": "RJ2402"}
+    major_of = {sno: "软件工程" for sno in gpa_of}
+
+    per_class = {
+        sno: warning.compute_rank_pct({s: gpa_of[s] for s in gpa_of if class_of[s] == klass})[sno]
+        for sno, klass in class_of.items()
+    }
+    by_major = profile.compute_rank_pct(gpa_of, major_of)
+
+    for sno in ("S1", "S3"):  # 两个班的班级第一名
+        assert per_class[sno] == 0.0, f"{sno} 应为班级第一，实际 {per_class[sno]}"
+    assert per_class["S1"] != by_major["S2"], "班级第一与专业口径不同是合法差异"
+    assert by_major["S1"] == 0.0 and by_major["S4"] == 1.0
+    # 画像学业标签只认专业口径
+    tag = profile.build_features({"gpa": gpa_of["S3"], "major_rank_pct": by_major["S3"]})["tags"][0]
+    assert tag == "专业后50%", f"S3 专业口径应归档「专业后50%」，实际 {tag}"
+
+
+# ----------------------------------------------------------------
+# 12. library_activity 存储约定（字典 §4：DECIMAL(5,4) 存 0-1）
+# ----------------------------------------------------------------
+def test_library_activity_stays_unit_interval():
+    """to_feature_row 写 0.42，读回必须还是 0.42（误差 < 1e-4）。
+
+    违背 docs\\指标口径字典.md 第 4 节「library_activity DECIMAL(5,4) 0-1 归一值」。
+    """
+    row = profile.to_feature_row(
+        profile.build_features({"student_no": "S008", "term": TERM, "library_activity": 0.42})
+    )
+    stored = row["library_activity"]
+    assert stored is not None, "library_activity 必须写入，不得丢弃"
+    assert abs(float(stored) - 0.42) < 1e-4, f"落库值 {stored}，期望 0.42；违背字典第 4 节"
+
+
+# ----------------------------------------------------------------
+# 13. 缺失不再冒充满勤（字典 §3.2 第 2 条：权重在可用项内重归）
+# ----------------------------------------------------------------
+def test_missing_attendance_not_filled_as_full():
+    """同一名学生只差一条出勤记录，两次计算必须得到不同结果。
+
+    违背 docs\\指标口径字典.md 第 3 节第 3.2 条第 2 条「factor = 总权重 / 可用权重」。
+    若实现把 factor 写成常量 1.0（不重归），b 会得 30，本用例必须失败。
+    """
+    rules = WarningRules.defaults(TENANT_ID)
+    a = warning.compute_student(
+        TENANT_ID, "S009", TERM,
+        metrics={"fail_count": 2, "gpa": 60.0, "gpa_drop": 0.0, "attendance_rate": 0.95},
+        rules=rules,
+    )
+    b = warning.compute_student(
+        TENANT_ID, "S009", TERM,
+        metrics={"fail_count": 2, "gpa": 60.0, "gpa_drop": 0.0},  # 无 attendance_rate
+        rules=rules,
+    )
+    assert b["coverage"] == 2, f"缺出勤时可用指标应为 2，实际 {b['coverage']}"
+    assert b["missing"] == ["attendance_rate"], f"缺失清单不符：{b['missing']}"
+    assert a["metrics"]["attendance_rate"] == 0.95
+    assert b["metrics"]["attendance_rate"] is None, "缺出勤必须写 None，不得补 1.0"
+    assert a["risk_score"] == 30, f"三项齐全应得 30（挂 2 门），实际 {a['risk_score']}"
+    assert b["risk_score"] == 45, f"缺 1 项应重归权重 30×3/2=45，实际 {b['risk_score']}"
+    assert a["risk_score"] != b["risk_score"], "缺数据必须影响结果，否则又是在冒充"
+
+
+# ----------------------------------------------------------------
+# 14. 仅 1 项可用 → 灰档（字典 §3.2 第 3 条 + 字典 §5 的最小值方法）
+# ----------------------------------------------------------------
+def test_single_metric_is_unknown():
+    """只有 1 项可用指标时给 unknown 灰档，不得标为正常档、不得外推分数。
+
+    违背 docs\\指标口径字典.md 第 3 节第 3.2 条第 3 条。
+    """
+    result = warning.compute_student(
+        TENANT_ID, "S010", TERM,
+        metrics={"attendance_rate": 0.9},  # 只有 1 项可用
+        rules=WarningRules.defaults(TENANT_ID),
+    )
+    assert result["coverage"] == 1, f"可用指标应为 1，实际 {result['coverage']}"
+    assert result["level"] == "unknown", f"应给灰档 unknown，实际 {result['level']}"
+    assert result["reasons"] == ["数据不足，无法评估"], f"归因话术不符：{result['reasons']}"
+    assert result["level"] != LEVEL_NONE, "仅 1 项可用不得标为正常档"

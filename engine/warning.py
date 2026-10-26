@@ -11,20 +11,25 @@ import pymysql
 
 from app.config import get_settings
 from engine.rules import (
+    LEVEL_UNKNOWN,
     LEVELS,
     WarningRules,
     build_rules,
 )
 
 # 引擎版本号，用于前端/审计溯源
-ENGINE_VERSION = "warning-v1"
+ENGINE_VERSION = "warning-v2"
 # 风险分裁剪区间
 SCORE_MIN = 0
 SCORE_MAX = 100
-# 缺考勤记录时的默认出勤率（不产生指标三得分）
-DEFAULT_ATTENDANCE_RATE = 1.0
-# metrics 字段统一保留位数
-_METRIC_NDIGITS = {"gpa": 2, "gpa_drop": 2, "attendance_rate": 4, "rank_pct": 4}
+# metrics 字段统一保留位数（缺失件不在这里补默认值）
+_METRIC_NDIGITS = {"gpa": 2, "gpa_drop": 2, "attendance_rate": 4, "class_rank_pct": 4}
+# 参与打分的三个指标（顺序固定：也是 missing 列表的输出顺序）
+_SCORE_METRICS: tuple[str, ...] = ("fail_count", "gpa_drop", "attendance_rate")
+# 可用指标不足时的灰档话术
+REASON_INSUFFICIENT = "数据不足，无法评估"
+# 少于这么多可用指标就不再重归权重（字典 3.2：1 项外推会凭空造出高风险档）
+MIN_COVERAGE_TO_RESCALE = 2
 
 MetricsFetcher = Callable[[int, str, str], Mapping[str, Any] | None]
 RowsFetcher = Callable[[int, str, str], Sequence[Mapping[str, Any]]]
@@ -54,22 +59,22 @@ def _fmt(value: float) -> str:
 def normalize_metrics(raw: Mapping[str, Any]) -> dict[str, Any]:
     """把原始行（MySQL Decimal / 手工 dict）统一转成标准 metrics 字典。
 
-    缺失字段取零值：fail_count=0、gpa=0.0、gpa_drop=0.0、rank_pct=0.0，
-    attendance_rate 缺失取 DEFAULT_ATTENDANCE_RATE（无考勤记录按全勤处理）。
+    **缺失即 None，不参与加权**：不写 0 / 0.0 / 1.0 填充（见 docs\指标口径字典.md 第 3.2 节）。
+    class_rank_pct 仅供展示，不参与打分；缺失同样为 None。
     """
-    def _f(key: str, default: float) -> float:
+    def _f(key: str) -> float | None:
         v = raw.get(key)
         if v is None:
-            return default
+            return None
         return round(float(v), _METRIC_NDIGITS[key])
 
     fail_count = raw.get("fail_count")
     return {
-        "fail_count": int(fail_count) if fail_count is not None else 0,
-        "gpa": _f("gpa", 0.0),
-        "gpa_drop": _f("gpa_drop", 0.0),
-        "attendance_rate": _f("attendance_rate", DEFAULT_ATTENDANCE_RATE),
-        "rank_pct": _f("rank_pct", 0.0),
+        "fail_count": None if fail_count is None else int(fail_count),
+        "gpa": _f("gpa"),
+        "gpa_drop": _f("gpa_drop"),
+        "attendance_rate": _f("attendance_rate"),
+        "class_rank_pct": _f("class_rank_pct"),
     }
 
 
@@ -147,7 +152,8 @@ def _fetch_previous_term(tenant_id: int, class_name: str, term: str) -> str | No
 def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[str, Any]]:
     """读取该租户某班级某学期的原始指标行（含 name），按 student_no 升序。
 
-    仅对有成绩记录的学生出行；rank_pct 在本函数内按班级均分排名确定。
+    仅对有成绩记录的学生出行；class_rank_pct 在本函数内按班级均分排名确定。
+    缺考勤 / 无上学期成绩时对应字段一律为 None（不得按全勤 1.0 或下滑 0.0 冒充）。
     """
     cur_sql = (
         "SELECT s.student_no AS student_no, s.name AS name, "
@@ -191,23 +197,29 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
         if total > 0:
             attendance[str(r["student_no"])] = (total - absent) / total
 
-    # rank_pct：按班级均分由高到低排名换算的落后百分位（0=第一，1=末位）
+    # class_rank_pct：按班级均分由高到低排名换算的落后百分位（0=第一，1=末位）
     gpa_of = {str(r["student_no"]): round(float(r["gpa"]), 2) for r in cur_rows}
-    rank_pct = compute_rank_pct(gpa_of)
+    class_rank_pct = compute_rank_pct(gpa_of)
 
     rows: list[dict[str, Any]] = []
     for r in sorted(cur_rows, key=lambda x: str(x["student_no"])):
         sno = str(r["student_no"])
         gpa = gpa_of[sno]
         prev = prev_gpa.get(sno)
+        # 方向显式化：先算「本学期 − 上学期」（正数=进步，与 profile.gpa_trend 同向），
+        # 预警侧再取反写 gpa_drop（正数=下降），保证 gpa_drop == -gpa_trend（字典 1.1 节第 1 点）
+        delta = round(gpa - prev, 2) if prev is not None else None
+        gpa_drop = None if delta is None else round(-delta, 2)
+        # 无考勤记录 → None（不得按 1.0 全勤处理）
+        rate = attendance.get(sno)
         rows.append({
             "student_no": sno,
             "name": str(r["name"]) if r["name"] is not None else "",
             "fail_count": int(r["fail_count"] or 0),
             "gpa": gpa,
-            "gpa_drop": round(prev - gpa, 2) if prev is not None else 0.0,
-            "attendance_rate": round(attendance.get(sno, DEFAULT_ATTENDANCE_RATE), 4),
-            "rank_pct": rank_pct[sno],
+            "gpa_drop": gpa_drop,
+            "attendance_rate": None if rate is None else round(rate, 4),
+            "class_rank_pct": class_rank_pct[sno],
         })
     return rows
 
@@ -235,38 +247,74 @@ def fetch_student_row(tenant_id: int, student_no: str, term: str) -> dict[str, A
 # 打分 / 分级 / 归因（纯计算）
 # ----------------------------------------------------------------
 def _reason_templates(metrics: Mapping[str, Any]) -> dict[str, str]:
-    """三条指标的模板化归因句式（数值全部取自 metrics，无主观词）。"""
-    return {
-        "fail_count": f"本学期挂科{int(metrics['fail_count'])}门",
-        "gpa_drop": f"本学期平均成绩下滑{_fmt(metrics['gpa_drop'])}分",
-        "attendance_rate": (
+    """三条指标的模板化归因句式（数值全部取自 metrics，无主观词）。
+
+    缺失项**不生成句子**（字典 3.2 节）：不得对 None 做 int()/float()。
+    """
+    templates: dict[str, str] = {}
+    if metrics.get("fail_count") is not None:
+        templates["fail_count"] = f"本学期挂科{int(metrics['fail_count'])}门"
+    if metrics.get("gpa_drop") is not None:
+        templates["gpa_drop"] = f"本学期平均成绩下滑{_fmt(metrics['gpa_drop'])}分"
+    if metrics.get("attendance_rate") is not None:
+        templates["attendance_rate"] = (
             f"本学期出勤率降至{_fmt(round(float(metrics['attendance_rate']) * 100, 1))}%"
-        ),
-    }
+        )
+    return templates
 
 
 def build_reasons(metrics: Mapping[str, Any], rules: WarningRules) -> list[str]:
-    """取触发项中得分最高的 1~3 条归因，得分相同时按指标固定顺序。"""
-    order = ("fail_count", "gpa_drop", "attendance_rate")
-    scores = {
-        "fail_count": rules.fail_count.score(metrics["fail_count"]),
-        "gpa_drop": rules.gpa_drop.score(metrics["gpa_drop"]),
-        "attendance_rate": rules.attendance.score(metrics["attendance_rate"]),
+    """取触发项中得分最高的 1~3 条归因，得分相同时按指标固定顺序。
+
+    缺失（None）项直接跳过，不产生归因句。
+    """
+    scorers = {
+        "fail_count": rules.fail_count.score,
+        "gpa_drop": rules.gpa_drop.score,
+        "attendance_rate": rules.attendance.score,
     }
-    triggered = [(k, scores[k]) for k in order if scores[k] > 0]
+    order = ("fail_count", "gpa_drop", "attendance_rate")
+    # 只对非 None 项打分：None 直接跳过，不进计分规则（否则 float(None) 抛 TypeError）
+    scores = {k: scorers[k](metrics[k]) for k in order if metrics.get(k) is not None}
+    triggered = [(k, scores[k]) for k in order if k in scores and scores[k] > 0]
     triggered.sort(key=lambda kv: (-kv[1], order.index(kv[0])))
     templates = _reason_templates(metrics)
     return [templates[k] for k, _s in triggered[:3]]
 
 
+def coverage_and_score(metrics: Mapping[str, Any], rules: WarningRules) -> tuple[int, int]:
+    """返回 (可用指标数, 风险分)：只对可用项打分，权重在可用项内重新归一。
+
+    factor = Σ三项 weight / Σ可用项 weight，**仅当 coverage >= MIN_COVERAGE_TO_RESCALE 时启用**；
+    coverage < 2 时 factor = 1.0 —— 只有 1 项可用时外推会把 1 门挂科放大成 45 分，
+    凭空造出高风险档，比不放大更糟（docs\指标口径字典.md 第 3.2 节第 2 条）。
+    """
+    scorers = {
+        "fail_count": rules.fail_count.score,
+        "gpa_drop": rules.gpa_drop.score,
+        "attendance_rate": rules.attendance.score,
+    }
+    weights = {
+        "fail_count": rules.fail_count.weight,
+        "gpa_drop": rules.gpa_drop.weight,
+        "attendance_rate": rules.attendance.weight,
+    }
+    available = [k for k in _SCORE_METRICS if metrics.get(k) is not None]
+    coverage = len(available)
+    raw_total = sum(scorers[k](metrics[k]) for k in available)
+
+    factor = 1.0
+    if coverage >= MIN_COVERAGE_TO_RESCALE:
+        available_w = sum(weights[k] for k in available)
+        total_w = sum(weights[k] for k in _SCORE_METRICS)
+        factor = total_w / available_w if available_w > 0 else 1.0
+    return coverage, int(_clamp(_round_half_up(raw_total * factor), SCORE_MIN, SCORE_MAX))
+
+
 def risk_score_of(metrics: Mapping[str, Any], rules: WarningRules) -> int:
-    """三项指标加权和，四舍五入后裁剪到 0~100。"""
-    total = (
-        rules.fail_count.score(metrics["fail_count"])
-        + rules.gpa_drop.score(metrics["gpa_drop"])
-        + rules.attendance.score(metrics["attendance_rate"])
-    )
-    return int(_clamp(_round_half_up(total), SCORE_MIN, SCORE_MAX))
+    """三项指标加权和（缺失项不参与），四舍五入后裁剪到 0~100。"""
+    _coverage, score = coverage_and_score(metrics, rules)
+    return score
 
 
 def evaluate_student(
@@ -275,15 +323,34 @@ def evaluate_student(
     rules: WarningRules,
     name: str = "",
 ) -> dict[str, Any]:
-    """把一条原始指标行算成标准预警结果（纯函数，不碰 IO）。"""
+    """把一条原始指标行算成标准预警结果（纯函数，不碰 IO）。
+
+    可用指标不足 MIN_COVERAGE_TO_RESCALE 项时给灰档 unknown，
+    **不得标为绿色（正常）**——「没有数据」≠「一切正常」（字典 3.2 节第 3 条）。
+    """
     m = normalize_metrics(metrics)
-    score = risk_score_of(m, rules)
+    coverage, score = coverage_and_score(m, rules)
+    missing = [k for k in _SCORE_METRICS if m.get(k) is None]
+    if coverage < MIN_COVERAGE_TO_RESCALE:
+        # 数据不足：等级灰档、不参与红/橙/黄排名，reasons 给出固定话术
+        return {
+            "student_no": student_no,
+            "name": name if name else str(metrics.get("name") or ""),
+            "risk_score": score,
+            "level": LEVEL_UNKNOWN,
+            "reasons": [REASON_INSUFFICIENT],
+            "coverage": coverage,
+            "missing": missing,
+            "metrics": m,
+        }
     return {
         "student_no": student_no,
         "name": name if name else str(metrics.get("name") or ""),
         "risk_score": score,
         "level": rules.level_of(score),
         "reasons": build_reasons(m, rules),
+        "coverage": coverage,
+        "missing": missing,
         "metrics": m,
     }
 

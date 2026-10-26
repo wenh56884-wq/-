@@ -130,9 +130,13 @@ def test_case5_three_worse_is_red_and_capped():
     assert result["level"] == LEVEL_RED
     assert 0 <= result["risk_score"] <= 100
     assert len(result["reasons"]) == 3
+    # v2 新增接口字段 coverage / missing（缺失不冒充，字典第 3.2 节）
     assert set(result) == {
-        "student_no", "name", "risk_score", "level", "reasons", "metrics",
+        "student_no", "name", "risk_score", "level", "reasons",
+        "coverage", "missing", "metrics",
     }
+    assert result["coverage"] == 3
+    assert result["missing"] == []
 
 
 def test_case6_same_input_same_output():
@@ -213,4 +217,4 @@ def test_engine_has_no_llm_or_random():
         src = (_ROOT / "engine" / name).read_text(encoding="utf-8")
         for banned in ("random", "langchain", "langgraph", "openai", "ChatOpenAI"):
             assert banned not in src, f"{name} 出现禁用记号：{banned}"
-    assert ENGINE_VERSION == "warning-v1"
+    assert ENGINE_VERSION == "warning-v2"
