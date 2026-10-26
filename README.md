@@ -124,3 +124,4 @@ D:\qihang\
 - P2：实现 `scripts\init_db.py`——幂等执行两份 schema，逐表打印结果。
 - P2-续：实现 `scripts\seed_mock.py`——500 名学生模拟数据（校情自检 + 风险埋点 + hidden_risk.csv）。
 - P2-续：修正 `db\mysql_schema.sql` / `db\duckdb_schema.sql` 的 `term` 列为 VARCHAR(20)。
+- P2-ETL：实现 `etl\mask.py`（手机号/邮箱/微信号脱敏）、`etl\clean_jobs.py`（5 文件清洗统一 schema）、`scripts\load_jobs.py`（灌入 MySQL job + DuckDB job_feature）。
