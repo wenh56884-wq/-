@@ -199,7 +199,7 @@ function clearChat() {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--qh-red);
   color: #fff;
   font-size: 12px;
@@ -253,7 +253,7 @@ function clearChat() {
 .typing-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #c9cdd4;
   animation: typing-bounce 1s infinite;
 }

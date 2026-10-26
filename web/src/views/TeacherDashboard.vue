@@ -546,42 +546,57 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
 }
 
-.stat-card {
-  border-left-width: 4px;
-  border-left-style: solid;
-}
-
-.stat-red {
-  border-left-color: var(--qh-red);
-}
-
-.stat-orange {
-  border-left-color: var(--qh-orange);
-}
-
-.stat-yellow {
-  border-left-color: var(--qh-yellow);
-}
-
-.stat-normal {
-  border-left-color: #c9cdd4;
-}
-
+/* 等级用「标签前的小方点 + 数值着色」表达，不用单侧粗边框装饰 */
 .stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
-  color: #86909c;
+  color: var(--qh-text-mute);
+}
+
+.stat-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 2px;
+  background: #d4d4d8;
+}
+
+.stat-red .stat-label::before {
+  background: var(--qh-red);
+}
+
+.stat-orange .stat-label::before {
+  background: var(--qh-orange);
+}
+
+.stat-yellow .stat-label::before {
+  background: var(--qh-yellow);
+}
+
+.stat-normal .stat-label::before {
+  background: #a1a1aa;
 }
 
 .stat-value {
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 600;
-  color: var(--qh-red);
-  line-height: 1.4;
+  color: var(--qh-text);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 1024px) {
+  .stat-value {
+    font-size: 30px;
+  }
 }
 
 .stat-value.small {
-  font-size: 22px;
-  color: #1f2329;
+  font-size: 20px;
+  color: var(--qh-text);
 }
 
 .chart-box {
