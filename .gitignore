@@ -12,6 +12,8 @@ venv/
 .env.local
 
 # --- data & runtime ---
+data/raw/
+data/cleaned/
 data/*.duckdb
 data/*.duckdb.wal
 data/*.csv
