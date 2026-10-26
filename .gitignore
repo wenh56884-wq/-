@@ -15,7 +15,8 @@ venv/
 data/*.duckdb
 data/*.duckdb.wal
 data/*.csv
-logs/
+logs/*
+!logs/.gitkeep
 *.log
 
 # --- ide / os ---
