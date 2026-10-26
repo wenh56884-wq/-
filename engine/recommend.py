@@ -232,11 +232,15 @@ def _connect(settings: Settings | None = None) -> pymysql.connections.Connection
     s = settings or get_settings()
     return pymysql.connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
                            password=s.mysql_password, database=s.mysql_db,
-                           charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
+                           charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
+                           connect_timeout=5)
 
 
 def _query(sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
-    conn = _connect()
+    try:
+        conn = _connect()
+    except (pymysql.MySQLError, OSError):
+        return []
     try:
         with conn.cursor() as cur:
             cur.execute(sql, tuple(params))
@@ -401,8 +405,10 @@ def write_recommend_log(result: Mapping[str, Any]) -> int:
                 "content_score": float(item.get("final_score") or 0.0),
                 "cf_score": None,  # 协同过滤未实现，占位留空
                 "final_score": float(item.get("final_score") or 0.0),
-                "hit_items": json.dumps(item.get("hit_items") or [], ensure_ascii=False),
-                "gap_items": json.dumps(item.get("gap_items") or [], ensure_ascii=False),
+                # 原样传 list：DuckDBStore.write_recommend_log 负责统一序列化。
+                # 这里若先 json.dumps，store 会再 dumps 一次，落库变成双重转义字符串。
+                "hit_items": list(item.get("hit_items") or []),
+                "gap_items": list(item.get("gap_items") or []),
                 "advice": str(item.get("advice") or ""),
                 "engine_version": RECOMMEND_ENGINE_VERSION,
             }) or 0)

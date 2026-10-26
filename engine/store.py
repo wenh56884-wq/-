@@ -113,7 +113,11 @@ class DuckDBStore(Store):
         for jf in ("course_pref", "tags"):
             v = result.get(jf)
             if isinstance(v, str) and v:
-                result[jf] = json.loads(v)
+                try:
+                    result[jf] = json.loads(v)
+                except ValueError:
+                    # 脏数据不阻断画像读取：按缺失处理，避免整条记录不可用
+                    result[jf] = {} if jf == "course_pref" else []
         return result
 
     def write_recommend_log(self, log: dict[str, Any]) -> int:

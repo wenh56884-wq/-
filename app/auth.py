@@ -85,7 +85,7 @@ def _connect(settings: Settings | None = None) -> pymysql.connections.Connection
     return pymysql.connect(
         host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
         password=s.mysql_password, database=s.mysql_db, charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
+        cursorclass=pymysql.cursors.DictCursor, connect_timeout=5,
     )
 
 
@@ -109,7 +109,11 @@ def authenticate(role: str, account: str, password: str,
         params.append(tenant_id)
     sql += " LIMIT 1"
 
-    conn = _connect()
+    try:
+        conn = _connect()
+    except (pymysql.MySQLError, OSError):
+        # 库不可用按“账号或口令错误”处理，绝不把连接异常抛成 500
+        return None
     try:
         with conn.cursor() as cur:
             cur.execute(sql, tuple(params))
@@ -196,18 +200,6 @@ def get_current_ctx(
     if ctx.actor_type not in (ROLE_TEACHER, ROLE_STUDENT) or not ctx.tenant_id:
         raise _UNAUTHORIZED
     return ctx
-
-
-def get_current_ctx_payload(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-) -> dict[str, Any]:
-    """同 get_current_ctx，但返回原始 claims（供 /chat 取 student_no 等展示信息）。"""
-    if credentials is None or not credentials.credentials:
-        raise _UNAUTHORIZED
-    try:
-        return decode_token(credentials.credentials)
-    except JWTError:
-        raise _UNAUTHORIZED
 
 
 def require_teacher(ctx: ToolContext = Depends(get_current_ctx)) -> ToolContext:

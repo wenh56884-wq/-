@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
 
 import pymysql
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -24,7 +23,6 @@ from app.auth import (
     authenticate,
     create_access_token,
     get_current_ctx,
-    get_current_ctx_payload,
 )
 from app.config import get_settings
 from app.routers import career as career_router
@@ -41,7 +39,7 @@ def _check_mysql() -> str:
     s = get_settings()
     conn = pymysql.connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
                            password=s.mysql_password, database=s.mysql_db,
-                           charset="utf8mb4")
+                           charset="utf8mb4", connect_timeout=5)
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
@@ -61,7 +59,7 @@ def _check_duckdb() -> str:
         return "down"
 
 
-def _run_chat(ctx: ToolContext, payload: dict[str, Any], body: ChatIn) -> tuple[str, bool]:
+def _run_chat(ctx: ToolContext, body: ChatIn) -> tuple[str, bool]:
     """调 LangGraph 对话入口；图未就绪或异常时降级成无数值话术（degraded=True）。"""
     term = body.term
     try:
@@ -70,7 +68,7 @@ def _run_chat(ctx: ToolContext, payload: dict[str, Any], body: ChatIn) -> tuple[
         return ("智能体编排尚未启用，暂无法回答该问题。"
                 "你可以先查看「预警列表」与「个人画像」中的结构化数据。", True)
     try:
-        result = run_chat(ctx, body.query, term=term, claims=payload)
+        result = run_chat(ctx, body.query, term=term)
     except NotImplementedError:
         return ("智能体编排尚未启用，暂无法回答该问题。"
                 "你可以先查看「预警列表」与「个人画像」中的结构化数据。", True)
@@ -155,10 +153,11 @@ def create_app() -> FastAPI:
         except Exception:
             db = "down"
         settings = get_settings()
+        duckdb_state = _check_duckdb()
         return HealthOut(
-            status="ok" if (db == "ok" and _check_duckdb() == "ok") else "degraded",
+            status="ok" if (db == "ok" and duckdb_state == "ok") else "degraded",
             db=db,
-            duckdb=_check_duckdb(),
+            duckdb=duckdb_state,
             llm="configured" if settings.deepseek_api_key else "missing",
         )
 
@@ -184,16 +183,13 @@ def create_app() -> FastAPI:
 
     @app.post("/chat", response_model=ChatOut, tags=["系统"])
     def chat(body: ChatIn,
-             claims: dict[str, Any] = Depends(get_current_ctx_payload)) -> ChatOut:
-        """对话：调 LangGraph；返回 answer + trace_id，便于 Critic 回查工具结果。"""
-        ctx = ToolContext(
-            actor_type=str(claims.get("role") or ""),
-            tenant_id=int(claims.get("tenant_id") or 0),
-            student_id=int(claims["student_id"]) if claims.get("student_id") else None,
-            teacher_id=int(claims["teacher_id"]) if claims.get("teacher_id") else None,
-        )
+             ctx: ToolContext = Depends(get_current_ctx)) -> ChatOut:
+        """对话：调 LangGraph；返回 answer + trace_id，便于 Critic 回查工具结果。
+
+        身份只从 get_current_ctx 取（已校验角色与租户），不再手工解析 claims。
+        """
         trace_id = uuid.uuid4().hex[:12]
-        answer, degraded = _run_chat(ctx, claims, body)
+        answer, degraded = _run_chat(ctx, body)
         audit_event(actor_type=ctx.actor_type,
                     actor_id=ctx.student_id or ctx.teacher_id or 0,
                     action="api.chat", target=trace_id,

@@ -33,7 +33,7 @@ _DICT_PATH = Path(__file__).resolve().parents[1] / "rules" / "direction_keywords
 # 测试注入口：非空时审计条目同步写内存，便于断言（monkeypatch.setattr(tools, "AUDIT_SINK", [])）
 AUDIT_SINK: list[dict[str, Any]] | None = None
 
-# 升学/就业缺口的三类 DIM（规则版占位，推荐引擎 P9 未实现前的口径）
+# 升学/就业缺口的三类 DIM（教师端班级差距口径，与岗位推荐打分口径相互独立）
 _GAP_DIMS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("实践/项目经历", ("项目", "实习", "工程实践", "实践经验"), "project_rate"),
     ("职业证书", ("证书", "资格证", "持证"), "cert_rate"),
@@ -89,12 +89,17 @@ def _connect(settings: Settings | None = None) -> pymysql.connections.Connection
         database=s.mysql_db,
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=5,
     )
 
 
 def _query(sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
     """带租户条件的查询统一入口；库不可用时返回空列表（由上层按空结果处理）。"""
-    conn = _connect()
+    try:
+        conn = _connect()
+    except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
+        print(f"[tools] MySQL 连接失败：{exc}", file=sys.stderr)
+        return []
     try:
         with conn.cursor() as cur:
             cur.execute(sql, tuple(params))
@@ -108,7 +113,11 @@ def _query(sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
 
 def _write_raw(sql: str, params: Sequence[Any]) -> int:
     """写操作统一入口，返回影响行数；失败返回 0（审计失败不得影响主流程）。"""
-    conn = _connect()
+    try:
+        conn = _connect()
+    except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
+        print(f"[tools] MySQL 连接失败：{exc}", file=sys.stderr)
+        return 0
     try:
         with conn.cursor() as cur:
             cur.execute(sql, tuple(params))
@@ -501,7 +510,7 @@ def warning_list(ctx: ToolContext, class_name: str, term: str,
 
 
 def career_gap(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
-    """班级能力结构 vs 目标岗位需求差距（规则版，推荐引擎 P9 未实现前的口径）。
+    """班级能力结构 vs 目标岗位需求差距（规则版班级口径）。
 
     目标方向 = 本班浏览最多的岗位方向；岗位侧需求取本班浏览过的该类岗位；
     缺口口径：需求侧出现对应关键词的岗位占比 − 班级侧具备该项经历的人数占比。
@@ -567,7 +576,7 @@ def career_gap(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
         "class_ability": ability,
         "job_demand": demand,
         "gaps": gaps,
-        "note": "规则版缺口（关键词 prevalence 差）；推荐引擎 P9 实现后改为匹配打分口径",
+        "note": "规则版缺口（需求侧关键词出现率 − 班级具备率）；与个人推荐打分口径相互独立",
         "engine_version": CAREER_ENGINE_VERSION,
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,

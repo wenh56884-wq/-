@@ -390,12 +390,16 @@ def _connect() -> pymysql.connections.Connection:
         database=s.mysql_db,
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=5,
     )
 
 
 def _query(sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
     """执行查询并返回字典行列表；库不可用时返回空列表。"""
-    conn = _connect()
+    try:
+        conn = _connect()
+    except (pymysql.MySQLError, OSError):
+        return []
     try:
         with conn.cursor() as cur:
             cur.execute(sql, params)

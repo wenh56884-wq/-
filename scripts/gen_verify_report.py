@@ -1,5 +1,5 @@
 # scripts/gen_verify_report.py
-# 职责：一键生成 docs\VERIFY.md —— 环境水印 + 10 项端到端结果 + 20 人级数值一致性 + 已知问题
+# 职责：一键生成 docs\VERIFY.md —— 环境水印 + 12 项端到端结果 + 20 人级数值一致性 + 已知问题
 # 依赖：标准库 urllib / json / datetime；pymysql / duckdb / app.config
 # 说明：**数据全部实测**（真实 HTTP 调用 + 真实库查询）；服务未启动会自动拉起 venv 的 uvicorn。
 
@@ -194,7 +194,7 @@ def duckdb_stats() -> dict[str, Any]:
 
 
 def run_smoke_items(klass: str, students: list[tuple[str, int]]) -> list[tuple[str, str, str, str]]:
-    """10 项端到端检查（与学生/教师两条链路都真实跑一遍）。"""
+    """12 项端到端检查（与学生/教师两条链路都真实跑一遍）。"""
     items: list[tuple[str, str, str, str]] = []
 
     code, health = http_json("GET", "/health")
@@ -367,7 +367,7 @@ def main() -> int:
          f"recommend_log：{stats['logs']} 条")
     emit(f"- 抽查班级：{klass}（{len(students)} 人在报告样本内）")
     emit()
-    emit("## 3. 端到端 10 项结果")
+    emit("## 3. 端到端 12 项结果")
     emit()
     items = run_smoke_items(klass, students)
     emit("| # | 检查项 | 结论 | 实测数据 |")

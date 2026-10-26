@@ -135,6 +135,36 @@ def test_missing_gpa_reports_gap_not_zero():
 # ----------------------------------------------------------------
 # 5) 同输入结果一致（无随机数）
 # ----------------------------------------------------------------
+def test_write_recommend_log_keeps_structured_items(monkeypatch):
+    """落库前不得先 json.dumps：store 会统一序列化，先 dumps 会变成双重转义字符串。"""
+    captured: dict = {}
+
+    class FakeStore:
+        def write_recommend_log(self, log):
+            captured.update(log)
+            return 1
+
+    monkeypatch.setattr("engine.store.DuckDBStore", FakeStore)
+    written = rec.write_recommend_log(
+        {
+            "student_no": "S001",
+            "items": [
+                {
+                    "job_id": 101,
+                    "final_score": 0.92,
+                    "hit_items": ["专业完全匹配"],
+                    "gap_items": [],
+                    "advice": "建议选修课程",
+                }
+            ],
+        }
+    )
+    assert written == 1
+    assert captured["hit_items"] == ["专业完全匹配"]
+    assert captured["gap_items"] == []
+    assert captured["job_id"] == 101
+
+
 def test_deterministic_and_sorted_by_score_then_id():
     """同输入两次排序结果完全一致；同分时按 job_id 升序（确定性二次键）。"""
     jobs = [JOB_ACCOUNTING, JOB_BACKEND, JOB_NO_SKILLS]

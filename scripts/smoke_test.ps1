@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 <#
- scripts\smoke_test.ps1 —— 端到端冒烟（10 项）
+ scripts\smoke_test.ps1 —— 端到端冒烟（12 项）
  用法：powershell -ExecutionPolicy Bypass -File scripts\smoke_test.ps1 [-BaseUrl http://127.0.0.1:8000]
  返回：每项 PASS / FAIL / SKIP + 耗时；存在 FAIL 时 exit 1
  说明：服务未启动时会自动尝试用本仓库 .venv 拉起 uvicorn（app.main:app）
@@ -254,10 +254,8 @@ Invoke-Check -Index "9" -Name "学生查他人被拒 403" -Action {
 # ---- 10. 学生推荐接口 ----
 Invoke-Check -Index "10" -Name "学生推荐接口" -Action {
     $rec = Invoke-Api -Method GET -Path "/student/recommendations" -Headers $sHeaders -Query @{ term = $Term; top_n = 5 }
-    if ($rec.recommend_version -eq "pending") {
-        return @{ Status = "SKIP"; Detail = "待 P9 实现，当前返回占位结构（字段已留全）" }
-    }
-    return @{ Status = "PASS"; Detail = "count=$(@($rec.items).Count) version=$($rec.recommend_version)" }
+    $ok = ($rec.recommend_version -ne "pending") -and (@($rec.items).Count -gt 0)
+    return @{ Status = $(if ($ok) { "PASS" } else { "FAIL" }); Detail = "count=$(@($rec.items).Count) version=$($rec.recommend_version)" }
 }
 
 # ---- 11. 前端静态托管（P10-3）：有构建产物才检查，没构建就 SKIP ----

@@ -49,6 +49,6 @@ def my_recommendations(
     top_n: int = Query(default=10, ge=1, le=50, description="返回条数"),
     ctx: ToolContext = Depends(require_student),
 ) -> dict[str, Any]:
-    """本人岗位推荐 + 三段式理由（推荐引擎未实现前返回占位结构）。"""
+    """本人岗位推荐 + 三段式理由（engine.recommend 规则版，确定性打分）。"""
     return _guard(ctx, "my_recommendations", term or "",
                   lambda: tools.my_recommendations(ctx, term, top_n=top_n))
