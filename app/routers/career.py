@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from agents import tools
 from agents.career import context as cx
 from agents.career import nodes
 from agents.tools import ToolContext
@@ -55,6 +56,13 @@ class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
 
 
+class IntentIn(BaseModel):
+    """职业目标选择：大一新生必须先选，大二/大三可调整。"""
+
+    intent: str = Field(min_length=1, max_length=10,
+                        description="考公 / 考研 / 考编 / 就业")
+
+
 # ----------------------------------------------------------------
 # 统一守卫：把引擎/模型的异常翻译成 HTTP 语义
 # ----------------------------------------------------------------
@@ -92,6 +100,22 @@ def list_templates(ctx: ToolContext = Depends(require_student)) -> dict[str, Any
         "templates": cx.available_templates(),
         "engine_version": CAREER_ENGINE_VERSION,
     }
+
+
+@router.get("/guide")
+def career_guide(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """本人年级 + 目标 + 确定性规划路径；大一未选目标时返回 needs_intent。"""
+    return _guard(ctx, "career_guide", lambda: tools.my_career_guide(ctx))
+
+
+@router.put("/intent")
+def put_intent(
+    payload: IntentIn,
+    ctx: ToolContext = Depends(require_student),
+) -> dict[str, Any]:
+    """保存本人职业目标（考公/考研/考编/就业），重复提交覆盖。"""
+    return _guard(ctx, "save_career_intent",
+                  lambda: tools.save_career_intent(ctx, payload.intent))
 
 
 @router.put("/extra")

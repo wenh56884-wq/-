@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 import pymysql
 
 from app.config import get_settings
+from engine.career_guide import grade_label
 
 RULES_DIR = Path(__file__).resolve().parents[2] / "rules"
 
@@ -90,23 +91,10 @@ def available_templates() -> list[str]:
 def _grade_label(enroll_year: Any, today: date | None = None) -> str | None:
     """由入学年份推算年级标签（大一大二大三大四/已毕业）。
 
-    为什么必须算：`student.grade` 存的是**入学年份**（如 2025），
-    而考公门槛要判断的是"是否应届/是否大四"。直接把 2025 拿去比 "大四" 永远失败。
-    这是确定性推算（按学年：9 月进入新学年），不含任何随机或模型参与。
+    保留本函数名是为了兼容既有调用与测试；实际算法统一在
+    engine.career_guide.grade_label，避免教师端/学生端两处口径漂移。
     """
-    if not enroll_year:
-        return None
-    try:
-        year = int(enroll_year)
-    except (TypeError, ValueError):
-        return None
-    base = today or date.today()
-    # 9 月及以后算新学年
-    academic_year = base.year if base.month >= 9 else base.year - 1
-    grade_no = academic_year - year + 1
-    if grade_no <= 0:
-        return "未入学"
-    return {1: "大一", 2: "大二", 3: "大三", 4: "大四"}.get(grade_no, "已毕业")
+    return grade_label(enroll_year, today)
 
 
 # ----------------------------------------------------------------
@@ -229,6 +217,51 @@ def save_student_extra(
                 ),
             )
             conn.commit()
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------------------
+# 职业目标（career_intent，大一先选，大二/大三可调整）
+# ----------------------------------------------------------------
+def fetch_intent(tenant_id: int, student_id: int) -> str | None:
+    """读取学生选择的职业目标；未选择或库不可用返回 None。"""
+    try:
+        conn = connect()
+    except (pymysql.MySQLError, OSError):
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT intent FROM career_intent "
+                "WHERE tenant_id = %s AND student_id = %s LIMIT 1",
+                (tenant_id, student_id),
+            )
+            row = cur.fetchone()
+        return str(row["intent"]) if row and row.get("intent") else None
+    except (pymysql.MySQLError, OSError):
+        return None
+    finally:
+        conn.close()
+
+
+def save_intent(tenant_id: int, student_id: int, intent: str) -> int:
+    """写入/更新职业目标（同一学生一行，重复提交覆盖）。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO career_intent (tenant_id, student_id, intent)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE intent = VALUES(intent)
+                """,
+                (tenant_id, student_id, intent),
+            )
+            conn.commit()
+            # MySQL 对「值未变化」的 ON DUPLICATE KEY UPDATE 可能返回 0，
+            # 但接口语义是“已保存”，故不把 rowcount 当成功与否。
+            return 1
     finally:
         conn.close()
 

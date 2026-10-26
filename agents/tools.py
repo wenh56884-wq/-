@@ -198,18 +198,94 @@ def _require_student(ctx: ToolContext, action: str, target: str) -> None:
         _deny(ctx, action, target, "ctx.student_id 缺失，无法确定「本人」是谁")
 
 
+def _nearby_classes(ctx: ToolContext, class_name: str, limit: int = 5) -> list[str]:
+    """找与输入最相近的班级名，供「你是不是想找 X」提示。
+
+    为什么要这一步：把「AI220100」当成越权拒绝，用户只会看到一句拦人话，
+    却不知道正确写法是「AI2201」。给出候选比给一句报错有用得多。
+    匹配规则：输入的字母前缀相同，或输入是候选的前缀（反之亦然）。
+    """
+    rows = _query(
+        "SELECT DISTINCT s.class_name AS class_name FROM student s "
+        "WHERE s.tenant_id = %s ORDER BY s.class_name",
+        (ctx.tenant_id,),
+    )
+    names = [str(r.get("class_name") or "") for r in rows if r.get("class_name")]
+    if not names:
+        return []
+    probe = str(class_name or "").strip().lower()
+    if not probe:
+        return names[:limit]
+
+    import re as _re
+
+    prefix = _re.match(r"[a-z]+", probe)
+    pattern = prefix.group(0) if prefix else ""
+
+    def rank(name: str) -> tuple[int, int, str]:
+        low = name.lower()
+        if low == probe:
+            return (0, 0, low)
+        # 一方是另一方的前缀（AI220100 / AI2201 这种多打几位最常见的错法）
+        if low.startswith(probe) or probe.startswith(low):
+            return (1, abs(len(low) - len(probe)), low)
+        # 字母前缀相同（AI220100 vs AI2301）
+        if pattern and low.startswith(pattern):
+            return (2, abs(len(low) - len(probe)), low)
+        # 公共前缀长度越长越像
+        common = 0
+        for a, b in zip(low, probe):
+            if a != b:
+                break
+            common += 1
+        return (3, -common, low)
+
+    ranked = sorted(names, key=rank)
+    # 只保留「真的像」的：同字母前缀，或共同前缀 >= 2 个字符。
+    # 不加这一层的话，输入 ZZZZ999 也会硬推荐 AI2201，属于乱猜。
+    picked = [n for n in ranked
+              if (pattern and n.lower().startswith(pattern))
+              or (len(n) >= 2 and len(probe) >= 2 and n.lower()[:2] == probe[:2])]
+    return picked[:limit]
+
+
 def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, Any]:
-    """班级必须属于本租户，否则按「跨租户」拒绝并留痕。"""
+    """校验班级可访问。**三种情况分开处理**，不把「输错名字」当成越权。
+
+    1) 本租户有该班        → 正常返回
+    2) 该班只在别的租户存在 → 越权（403 + 审计 denied），这才是真的跨租户访问
+    3) 任何租户都没有该班   → 参数错误（422 + 提示相近班级），不是安全问题
+
+    为什么要分开：原来 2/3 都走 _deny（403「不属于当前租户」），
+    用户把 AI2201 打成 AI220100 时会看到一句「越权」，既误导又污染审计日志。
+    """
     rows = _query(
         "SELECT COUNT(DISTINCT s.id) AS cnt FROM student s "
         "WHERE s.tenant_id = %s AND s.class_name = %s",
         (ctx.tenant_id, class_name),
     )
     cnt = int(rows[0]["cnt"]) if rows else 0
-    if cnt == 0:
+    if cnt > 0:
+        return {"headcount": cnt}
+
+    # 该班是否存在于其他租户？存在 → 真越权
+    other = _query(
+        "SELECT COUNT(DISTINCT s.id) AS cnt FROM student s "
+        "WHERE s.tenant_id <> %s AND s.class_name = %s",
+        (ctx.tenant_id, class_name),
+    )
+    other_cnt = int(other[0]["cnt"]) if other else 0
+    if other_cnt > 0:
+        # _deny 内部会抛 PermissionError，这里不会继续往下走
         _deny(ctx, action, str(class_name),
-              f"班级 {class_name} 不属于当前租户（或该班无数据）")
-    return {"headcount": cnt}
+              f"班级 {class_name} 属于其他租户，跨租户访问已拦截")
+
+    # 哪都没有 → 输错了，给候选而不是判越权
+    nearby = _nearby_classes(ctx, class_name)
+    hint = f"；你是不是想找：{'、'.join(nearby)}" if nearby else ""
+    raise ValueError(
+        f"班级「{class_name}」不存在（本租户没有这个班）{hint}"
+    )
 
 
 def _fetch_student(ctx: ToolContext, student_no: str, action: str) -> dict[str, Any]:

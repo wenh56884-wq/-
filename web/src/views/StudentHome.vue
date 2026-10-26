@@ -7,8 +7,74 @@
       <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
       <el-switch v-model="autoRefresh" size="small" active-text="30 秒自动刷新" />
       <el-button size="small" :loading="warningLoading || recLoading" @click="reloadAll">立即刷新</el-button>
-      <span class="live-tip">不想问？去「智能助手」直接提问</span>
+      <span class="live-tip">不想问？点右下角 AI 小人直接提问</span>
     </div>
+
+    <el-card v-loading="guideLoading" shadow="never" class="guide-card">
+      <template #header>
+        <div class="guide-head">
+          <span class="card-title" style="margin: 0">生涯规划</span>
+          <el-tag size="small" effect="plain">{{ guide.grade || '年级未知' }}</el-tag>
+          <el-tag v-if="guide.intent" size="small" type="success" effect="dark">{{ guide.intent }}</el-tag>
+          <el-tag v-if="guide.needs_intent" size="small" type="warning" effect="dark">待选方向</el-tag>
+        </div>
+      </template>
+
+      <template v-if="guide.needs_intent">
+        <el-alert type="warning" :closable="false" show-icon
+          title="大一新生先选定方向：考公 / 考研 / 考编 / 就业。选定后系统生成四年规划。" />
+        <div class="intent-row">
+          <el-radio-group v-model="selectedIntent">
+            <el-radio-button v-for="opt in guide.options || []" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </el-radio-button>
+          </el-radio-group>
+          <el-button type="primary" :loading="intentSaving" :disabled="!selectedIntent" @click="saveIntent">
+            保存目标并生成规划
+          </el-button>
+        </div>
+        <div class="intent-desc">{{ selectedIntentDesc }}</div>
+      </template>
+
+      <template v-else>
+        <div class="guide-headline">{{ guide.headline }}</div>
+        <div class="guide-meta">
+          <span>方向：<b>{{ guide.direction?.name || '待探索' }}</b></span>
+          <span class="muted">（{{ directionSourceText }}）</span>
+          <el-button link type="primary" @click="showIntentPicker = !showIntentPicker">
+            {{ showIntentPicker ? '收起' : '调整目标' }}
+          </el-button>
+        </div>
+
+        <div v-if="showIntentPicker" class="intent-row">
+          <el-radio-group v-model="selectedIntent">
+            <el-radio-button v-for="opt in guide.options || []" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </el-radio-button>
+          </el-radio-group>
+          <el-button type="primary" :loading="intentSaving" :disabled="!selectedIntent" @click="saveIntent">
+            保存目标
+          </el-button>
+        </div>
+
+        <div class="guide-steps">
+          <div v-for="(step, index) in guide.steps || []" :key="index" class="guide-step">
+            <div class="step-head">
+              <span class="step-index">{{ index + 1 }}</span>
+              <span class="step-stage">{{ step.阶段 }}</span>
+            </div>
+            <div class="step-goal">{{ step.目标 }}</div>
+            <ul class="step-actions">
+              <li v-for="(action, i) in step.行动 || []" :key="i">{{ action }}</li>
+            </ul>
+          </div>
+        </div>
+        <div class="engine-line">
+          规划引擎 {{ guide.engine_version || '-' }} · {{ guide.note }}
+          <span v-if="guideTip" class="err">{{ guideTip }}</span>
+        </div>
+      </template>
+    </el-card>
 
     <el-card v-loading="warningLoading" shadow="never" class="info-card">
       <div class="card-title">本人信息</div>
@@ -87,7 +153,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import http from '../api/http'
@@ -104,6 +170,12 @@ const clock = useClock()
 
 const term = ref('2025-2026-2')
 const topN = ref(5)
+const guideLoading = ref(false)
+const guideTip = ref('')
+const intentSaving = ref(false)
+const guide = ref({})
+const selectedIntent = ref('')
+const showIntentPicker = ref(false)
 const warningLoading = ref(false)
 const recLoading = ref(false)
 const warningTip = ref('')
@@ -111,6 +183,16 @@ const recTip = ref('')
 const warning = ref({})
 const recs = ref({})
 const items = ref([])
+
+const directionSourceText = computed(() => {
+  const map = { 'profile.interest': '来自画像兴趣', intent: '由目标推导', none: '待补充' }
+  return map[guide.value?.direction?.source] || '待补充'
+})
+
+const selectedIntentDesc = computed(() => {
+  const opt = (guide.value?.options || []).find((item) => item.value === selectedIntent.value)
+  return opt?.desc || ''
+})
 
 function levelText(level) {
   return LEVEL_TEXT[level] || level || '-'
@@ -139,6 +221,42 @@ function salaryText(item) {
   const max = item.salary_max
   if (min === null || min === undefined || max === null || max === undefined) return '薪资面议'
   return `${Math.round(Number(min))}-${Math.round(Number(max))}`
+}
+
+async function loadGuide() {
+  guideLoading.value = true
+  guideTip.value = ''
+  try {
+    const { data } = await http.get('/career/guide', { params: { term: term.value } })
+    guide.value = data || {}
+    selectedIntent.value = data?.intent || ''
+  } catch (err) {
+    guide.value = {}
+    guideTip.value = err?.response?.data?.detail || '生涯规划加载失败'
+  } finally {
+    guideLoading.value = false
+  }
+}
+
+async function saveIntent() {
+  const value = String(selectedIntent.value || '').trim()
+  if (!value) {
+    ElMessage.warning('请先选择目标')
+    return
+  }
+  intentSaving.value = true
+  try {
+    await http.put('/career/intent', { intent: value })
+    ElMessage.success(`已保存目标：${value}`)
+    showIntentPicker.value = false
+    await loadGuide()
+  } catch (err) {
+    const detail = err?.response?.data?.detail || '目标保存失败'
+    ElMessage.error(detail)
+    guideTip.value = detail
+  } finally {
+    intentSaving.value = false
+  }
 }
 
 async function loadWarning() {
@@ -178,6 +296,7 @@ async function loadRecommendations() {
 }
 
 async function reloadAll() {
+  // 规划卡不参与 30 秒自动刷新：避免学生正在选择目标时被定时请求重置选项
   await Promise.all([loadWarning(), loadRecommendations()])
   lastLoadAt.value = new Date()
 }
@@ -188,7 +307,7 @@ watch(autoRefresh, (on) => {
 })
 
 onMounted(async () => {
-  await reloadAll()
+  await Promise.all([reloadAll(), loadGuide()])
 })
 
 onBeforeUnmount(() => {
@@ -219,8 +338,101 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
+.guide-card,
 .info-card {
   margin-bottom: 12px;
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.guide-headline {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 4px 0 8px;
+}
+
+.guide-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #4e5969;
+  margin-bottom: 10px;
+}
+
+.intent-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.intent-desc {
+  font-size: 12px;
+  color: #86909c;
+  margin-top: 8px;
+}
+
+.guide-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.guide-step {
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-index {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;
+  background: var(--qh-red);
+  color: #fff;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-stage {
+  font-weight: 600;
+}
+
+.step-goal {
+  font-size: 12px;
+  color: #4e5969;
+  margin: 6px 0;
+}
+
+.step-actions {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #4e5969;
+  line-height: 1.8;
+}
+
+.muted {
+  color: #86909c;
+  font-size: 12px;
 }
 
 .reason-title {
@@ -280,7 +492,7 @@ onBeforeUnmount(() => {
   height: 22px;
   line-height: 22px;
   text-align: center;
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--qh-red);
   color: #fff;
   font-size: 12px;

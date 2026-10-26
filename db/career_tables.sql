@@ -1,5 +1,5 @@
 -- ============================================================
--- 职业规划规培模块 · 5 张表（career-v1）
+-- 职业规划规培模块 · 7 张表（career-v1）
 -- 全部为新增表，不改动已有 13 张表的任何字段与索引
 -- 执行：mysql -u root -p qihang < db\career_tables.sql
 -- 幂等：全部 IF NOT EXISTS
@@ -157,7 +157,27 @@ CREATE TABLE IF NOT EXISTS notice_match (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='通知与学生画像的相关性判定';
 
+-- -----------------------------------------------------------
+-- 7. career_intent —— 学生自选职业目标（大一先选，大二/大三可调整）
+--    只存学生选择，不存模型判断；规划文案由 engine.career_guide 生成
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS career_intent (
+    id          BIGINT      NOT NULL AUTO_INCREMENT,
+    tenant_id   BIGINT      NOT NULL,
+    student_id  BIGINT      NOT NULL,
+    intent      VARCHAR(20) NOT NULL COMMENT '考公/考研/考编/就业',
+    created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_intent_student (tenant_id, student_id),
+    KEY idx_intent_student (student_id),
+    CONSTRAINT fk_intent_student FOREIGN KEY (student_id) REFERENCES student (id) ON DELETE CASCADE,
+    CONSTRAINT ck_intent CHECK (intent IN ('考公', '考研', '考编', '就业'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='学生职业目标选择（大一先选，可调整）';
+
 -- 验收：
 --   SHOW TABLES LIKE '%career%';  SHOW TABLES LIKE 'student_extra';
 --   SHOW TABLES LIKE 'notice%';   SHOW TABLES LIKE 'week_snapshot';
---   共 6 张新表
+--   SHOW TABLES LIKE 'career_intent';
+--   共 7 张新表

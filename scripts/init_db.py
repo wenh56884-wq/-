@@ -1,5 +1,5 @@
 # scripts/init_db.py
-# 职责：读 .env、执行 mysql_schema.sql 与 duckdb_schema.sql，幂等建表
+# 职责：读 .env、执行 MySQL 多份 schema 与 duckdb_schema.sql，幂等建表
 # 依赖：pymysql / duckdb / app.config / pathlib
 # 说明：脚本可脱离 FastAPI 服务独立运行
 
@@ -18,8 +18,11 @@ if str(_ROOT) not in sys.path:
 
 from app.config import get_settings
 
-# SQL 文件路径
-_MYSQL_SQL = _ROOT / "db" / "mysql_schema.sql"
+# SQL 文件路径（按顺序执行；career_tables 依赖 mysql_schema 里的 student 表）
+_MYSQL_SQL_FILES = (
+    _ROOT / "db" / "mysql_schema.sql",
+    _ROOT / "db" / "career_tables.sql",
+)
 _DUCKDB_SQL = _ROOT / "db" / "duckdb_schema.sql"
 
 
@@ -43,9 +46,6 @@ def init_mysql(settings) -> None:
     print(f"  host={settings.mysql_host}:{settings.mysql_port} db={settings.mysql_db}")
     print("=" * 60)
 
-    sql_text = _MYSQL_SQL.read_text(encoding="utf-8")
-    statements = _split_statements(sql_text)
-
     conn = pymysql.connect(
         host=settings.mysql_host,
         port=settings.mysql_port,
@@ -55,22 +55,25 @@ def init_mysql(settings) -> None:
         autocommit=True,
     )
     try:
-        for stmt in statements:
-            stripped = stmt.strip()
-            if not stripped:
-                continue
-            # 提取表名用于日志
-            table_name = _extract_table_name(stripped)
-            with conn.cursor() as cur:
-                cur.execute(stripped)
-            if table_name:
-                print(f"  [OK] {table_name}")
-            elif stripped.upper().startswith("CREATE DATABASE"):
-                print("  [OK] database qihang")
-            elif stripped.upper().startswith("INSERT"):
-                print("  [OK] seed tenant: 重庆财经学院")
-            elif stripped.upper().startswith("USE "):
-                print(f"  [OK] USE {settings.mysql_db}")
+        for sql_path in _MYSQL_SQL_FILES:
+            print(f"-- {sql_path.name}")
+            sql_text = sql_path.read_text(encoding="utf-8")
+            for stmt in _split_statements(sql_text):
+                stripped = stmt.strip()
+                if not stripped:
+                    continue
+                # 提取表名用于日志
+                table_name = _extract_table_name(stripped)
+                with conn.cursor() as cur:
+                    cur.execute(stripped)
+                if table_name:
+                    print(f"  [OK] {table_name}")
+                elif stripped.upper().startswith("CREATE DATABASE"):
+                    print("  [OK] database qihang")
+                elif stripped.upper().startswith("INSERT"):
+                    print("  [OK] seed tenant: 重庆财经学院")
+                elif stripped.upper().startswith("USE "):
+                    print(f"  [OK] USE {settings.mysql_db}")
         print("MySQL 初始化完成。")
     finally:
         conn.close()

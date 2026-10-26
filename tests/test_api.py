@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import uuid
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -23,7 +25,8 @@ from app.main import create_app  # noqa: E402
 
 TERM = "2025-2026-2"
 TENANT = 1
-EMPLOYEE_NO = "T9001"
+# 进程唯一：同一台机器并行跑测试时，避免两个进程互相删除对方的临时教师
+EMPLOYEE_NO = f"T9{os.getpid() % 100000:05d}"
 TEACHER_PWD = "teacher@123"
 
 
@@ -190,14 +193,14 @@ def test_student_sees_only_self(client, db):
 
 
 @requires_mysql
-def test_cross_tenant_class_is_403(client, db):
-    """教师查不属于本租户的班级 → 403（由工具层拦截，路由翻译成 403）。"""
+def test_unknown_class_is_422(client, db):
+    """教师输入不存在的班级 → 422 参数错误（真正的跨租户 403 由工具层测试覆盖）。"""
     token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
     resp = client.get("/teacher/class-overview",
                       params={"class_name": "RJ9901", "term": TERM},
                       headers={"Authorization": f"Bearer {token}"})
-    assert resp.status_code == 403
-    assert "不属于当前租户" in resp.json()["detail"]
+    assert resp.status_code == 422
+    assert "不存在" in resp.json()["detail"]
 
 
 @requires_mysql
@@ -257,21 +260,26 @@ def test_chat_requires_auth(client, db):
 def test_anonymous_request_still_audited(client, db):
     """失败请求（无 token）也要写 audit_log：这是『失败也写』的硬性规则。"""
     conn, klass, _ = db
+    probe = f"audit-{uuid.uuid4().hex[:8]}"
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(1) AS n FROM audit_log")
         before = int(cur.fetchone()["n"])
 
-    client.get("/teacher/warnings", params={"class_name": klass, "term": TERM})
+    client.get("/teacher/warnings",
+               params={"class_name": klass, "term": TERM, "probe": probe})
 
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(1) AS n FROM audit_log")
         after = int(cur.fetchone()["n"])
+        # 只认本次请求的探针，避免并行测试进程的审计行插在中间
         cur.execute(
             "SELECT actor_type, actor_id, action, detail FROM audit_log "
-            "ORDER BY id DESC LIMIT 1"
+            "WHERE action = %s AND target LIKE %s ORDER BY id DESC LIMIT 1",
+            ("GET /teacher/warnings", f"%{probe}%"),
         )
         last = cur.fetchone()
     assert after > before, "匿名/失败请求也必须写审计"
+    assert last is not None, f"未找到本次请求的审计行（probe={probe}）"
     detail = last["detail"]
     if not isinstance(detail, dict):
         import json
@@ -280,6 +288,67 @@ def test_anonymous_request_still_audited(client, db):
     assert last["action"] == "GET /teacher/warnings"
     assert detail["status"] == 401
     assert "duration_ms" in detail
+
+
+# ----------------------------------------------------------------
+# 5. 生涯规划：年级分层 + 目标选择
+# ----------------------------------------------------------------
+@requires_mysql
+def test_career_guide_returns_grade_and_options(client, db):
+    """学生端 /career/guide：必须返回年级、四选一选项与规划结构。"""
+    conn, klass, stu = db
+    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    resp = client.get("/career/guide", params={"term": TERM},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["student_no"] == str(stu["student_no"])
+    assert body["grade"]
+    assert [opt["value"] for opt in body["options"]] == ["考公", "考研", "考编", "就业"]
+    assert isinstance(body["steps"], list)
+    assert body["engine_version"] == "career-guide-v1"
+
+
+@requires_mysql
+def test_career_intent_roundtrip_and_restore(client, db):
+    """保存目标后 guide 能读到；用例结束恢复原值（不污染演示数据）。"""
+    conn, klass, stu = db
+    student_id = int(stu["id"])
+    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT intent FROM career_intent WHERE student_id = %s", (student_id,))
+        before = cur.fetchone()
+
+    try:
+        saved = client.put("/career/intent", json={"intent": "考研"}, headers=headers)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["intent"] == "考研"
+
+        guide = client.get("/career/guide", params={"term": TERM}, headers=headers).json()
+        assert guide["intent"] == "考研"
+        assert guide["needs_intent"] is False
+        assert guide["steps"]
+    finally:
+        with conn.cursor() as cur:
+            if before is None:
+                cur.execute("DELETE FROM career_intent WHERE student_id = %s", (student_id,))
+            else:
+                cur.execute("UPDATE career_intent SET intent = %s WHERE student_id = %s",
+                            (before["intent"], student_id))
+        conn.commit()
+
+
+@requires_mysql
+def test_career_intent_rejects_unknown_value(client, db):
+    """非法目标 → 422，不落库。"""
+    conn, klass, stu = db
+    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    resp = client.put("/career/intent", json={"intent": "乱写"},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 422
+    assert "考公/考研/考编/就业" in resp.json()["detail"]
 
 
 if __name__ == "__main__":  # pragma: no cover

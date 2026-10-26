@@ -208,7 +208,8 @@ def real_rows():
 def test_seven_features_coverage_ge_95(real_rows):
     """验收：7 类新特征非空率均 ≥95%。"""
     cov = bpr.feature_coverage(real_rows)
-    assert len(real_rows) == 500
+    # seed_mock 500 人 + seed_freshman 的大一演示账号；不把它写死成 500
+    assert len(real_rows) >= 500
     low = {k: v for k, v in cov.items() if v < 0.95}
     assert not low, f"非空率不足的特征：{low}"
 

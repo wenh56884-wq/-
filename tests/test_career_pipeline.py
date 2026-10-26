@@ -161,8 +161,24 @@ def test_kaogong_grade_gate_uses_grade_label_not_year():
 # ================================================================
 # 三、画像解析：门槛与差距由引擎算，模型的数字一律被覆盖
 # ================================================================
-def test_parse_plan_ignores_model_gate_verdicts(fake_model):
+def test_parse_plan_ignores_model_gate_verdicts(fake_model, monkeypatch):
     """模型即使编了「门槛全满足」，差距仍以引擎判定为准。"""
+    # 用内存 facts 替代真实 MySQL，保证该用例在任何机器上都能离线跑
+    monkeypatch.setattr(
+        cx,
+        "fetch_student_facts",
+        lambda tid, sid: {
+            "student_no": "AI2022001",
+            "name": "测试学生",
+            "grade": "大四",
+            "major": "软件工程",
+            "college": "人工智能学院",
+            "degree": "本科",
+            "political_status": "共青团员",
+            "cet4_score": 425,
+            "fail_count": 0,
+        },
+    )
     fake_model.reply = json.dumps(
         {
             "目标类型": "考公务员",

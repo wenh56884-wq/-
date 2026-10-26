@@ -42,6 +42,11 @@ _KEY_MAJORS = [
 ]
 _KEY_PER_MAJOR = 32  # 8×32=256，其余 244 人分到其余 24 个专业
 
+# 每班人数上限：只作为「拆几个班」的上界，实际按学院人数均分
+_STUDENTS_PER_CLASS = 30
+# 每个学院固定班数（教师端班级概览按学院看，班数一致才好对比）
+_CLASSES_PER_COLLEGE = 5
+
 _TERMS = ["2025-2026-1", "2025-2026-2"]
 _COURSES_PER_TERM = 6
 _GRADES = [2022, 2023, 2024, 2025]
@@ -141,49 +146,154 @@ def main() -> None:
     catalog = _build_course_catalog()
     print(f"课程目录：{len(catalog)} 门（去重后）")
 
-    # 3. 分配 500 学生的专业
+    # 3. 分配 500 学生的**学院**
+    #
+    # 为什么先定学院、再定专业：分班是按「学院+年级」走的，如果先随机分专业
+    # 再由专业反推学院，各学院人数就会漂移 —— 物流工程学院只有 4 个专业、
+    # 抽样期望才 30 人/年级，实际跑出来 WL2301 只有 2 人，教师端出现「2 人班」。
+    # 所以这里改成**学院人数预算固定、专业在学院内二次分配**，保证每学院
+    # 每班人数落在可演示区间（≥8 人）。
+    #
+    # 预算依据：软件学院/讯飞人工智能学院各 3/5 个专业，是本校重点，
+    # 4 个重点专业（软工、大数据、信管、人工智能）落在这两家，给足人数。
+    _COLLEGE_BUDGET = {
+        "讯飞人工智能学院": 145,
+        "软件学院": 118,
+        "会计学院": 58,
+        "金融学院": 52,
+        "经济学院": 42,
+        "新媒体艺术学院": 34,
+        "公共管理学院": 28,
+        "物流工程学院（国际商学院）": 23,
+    }
+    assert sum(_COLLEGE_BUDGET.values()) == _TOTAL_STUDENTS, "学院人数预算必须正好 500"
+
+    # 每个专业的配额：重点专业先占，剩下的名额在学院内其余专业间轮转分配
+    college_majors: dict[str, list[str]] = {}
+    for m, (col, _, _) in school_cqufe.MAJORS.items():
+        college_majors.setdefault(col, []).append(m)
+
+    major_quota: dict[str, int] = {m: 0 for m in school_cqufe.MAJORS}
+    for col, budget in _COLLEGE_BUDGET.items():
+        mj = sorted(college_majors[col])
+        key_here = [m for m in _KEY_MAJORS if m in mj]
+        others = [m for m in mj if m not in _KEY_MAJORS]
+        # 重点专业保底 _KEY_PER_MAJOR，不够则整体均分
+        base = {m: _KEY_PER_MAJOR for m in key_here}
+        left = budget - sum(base.values())
+        if left < 0:  # 预算比保底还小，改成学院内均分
+            base = {}
+            left = budget
+        pool = others if others else mj
+        i = 0
+        while left > 0:
+            m = pool[i % len(pool)]
+            base[m] = base.get(m, 0) + 1
+            left -= 1
+            i += 1
+        for m, q in base.items():
+            major_quota[m] = q
+
+    assert sum(major_quota.values()) == _TOTAL_STUDENTS
     major_list: list[str] = []
-    for km in _KEY_MAJORS:
-        major_list.extend([km] * _KEY_PER_MAJOR)
-    # 其余 244 人分到非重点专业（24 个），均匀抽样
-    other_majors = [m for m in school_cqufe.MAJORS if m not in _KEY_MAJORS]
-    remaining = _TOTAL_STUDENTS - len(major_list)
-    for _ in range(remaining):
-        major_list.append(rng.choice(other_majors))
+    for m, q in major_quota.items():
+        major_list.extend([m] * q)
     rng.shuffle(major_list)
 
     # 4. 生成学生数据
+    # ----------------------------------------------------------------
+    # 分班规则：**同学院 + 同年级 编一（或若干）班，人数尽量均分**。
+    #
+    # 为什么按「学院+年级」而不是「学院+年级+专业」：
+    # 500 人摊到 32 专业 × 4 年级 = 117 个组合，平均每组才 4 人，
+    # 按专业分班必然出现「1 人班」，教师端班级概览、预警列表、班级差距
+    # 全都只有一条数据，等于没法演示。按学院+年级分班后每班 8-28 人，
+    # 班级内跨专业也很正常（真实院校的行政班也常是同学院多专业混合）。
+    # 每个学生的 major 字段仍然准确，专业维度统计不受影响。
+    # ----------------------------------------------------------------
     students: list[dict] = []
     hidden_risk_records: list[tuple[str, bool]] = []
-    # 学院→(年级→班序号)
-    class_seq: dict[str, dict[int, int]] = {}
-    # 学院→(年级→学号序号)
-    student_seq: dict[str, dict[int, int]] = {}
 
     n_risk = 0
     n_fail = 0
 
-    for i in range(_TOTAL_STUDENTS):
-        major = major_list[i]
-        college = school_cqufe.MAJORS[major][0]
+    # 年级按学院内轮转分配，而不是 rng.choice —— 随机抽样会让某个年级
+    # 偶然只剩 1-2 人（上一版 WL2301=2 人就是这么来的）。轮转 = 各年级人数
+    # 相差不超过 1，班级人数才对得上。
+    skeleton: list[dict] = []
+    by_college: dict[str, list[str]] = {}
+    for major in major_list:
+        by_college.setdefault(school_cqufe.MAJORS[major][0], []).append(major)
+    for college, majors in by_college.items():
+        # 学院内打散专业顺序，避免「同年级 = 同一批专业」的整齐感
+        rng.shuffle(majors)
+        for i, major in enumerate(majors):
+            skeleton.append({
+                "college": college,
+                "major": major,
+                "grade": _GRADES[i % len(_GRADES)],
+            })
+
+    # 分班：**每个学院固定 _CLASSES_PER_COLLEGE 个班**（8 学院 × 5 = 40 班）。
+    #
+    # 分法：整个学院的人按学院总人数均分成 5 份，每份一个行政班。
+    # 为什么不再按「学院+年级」切：一个学院每个年级才十几人，
+    # 按年级切每级只能凑出 1 个班（4 个年级 = 4 个班，永远到不了 5），
+    # 而且 RJ 这种大院子会冒出 8 个班。改成学院整体均分 5 份后，
+    # 每个学院都是 5 个班、人数接近，教师端下拉框整齐。
+    #
+    # 班号：`{学院缩写}{主力年级后两位}{01..05}`。主力年级 = 该班人最多的年级，
+    # 这样「RJ2401」能读出「软件学院 24 级 1 班」，符合真实习惯；
+    # 同一个学院 5 个班的主力年级不同时也不会撞号（见下方 _unique_class_name）。
+    def _split_sizes(n: int, k: int) -> list[int]:
+        """把 n 人尽量平均地拆成 k 个班。"""
+        if n <= 0:
+            return []
+        k = max(1, min(k, n))
+        base, extra = divmod(n, k)
+        return [base + (1 if i < extra else 0) for i in range(k)]
+
+    # 学号在同一学院内按年级连续编号（同学院多专业共享号段，符合真实学籍规则）
+    student_seq: dict[tuple[str, int], int] = {}
+    by_college_rows: dict[str, list[dict]] = {}
+    for row in skeleton:
+        by_college_rows.setdefault(row["college"], []).append(row)
+
+    for college in sorted(by_college_rows):
+        rows = by_college_rows[college]
         abbr = _COLLEGE_ABBR[college]
-        grade = rng.choice(_GRADES)
+        k = min(_CLASSES_PER_COLLEGE, len(rows))
+        sizes = _split_sizes(len(rows), k)
 
-        # 班号
-        if college not in class_seq:
-            class_seq[college] = {}
-        gs = class_seq[college]
-        gs[grade] = gs.get(grade, 0) + 1
-        class_no = gs[grade]
-        class_name = f"{abbr}{str(grade)[-2:]}{class_no:02d}"
+        # 先按年级排序再切，同一个年级的人会连续落在相邻班里 → 主力年级稳定，
+        # 班号读起来像「KJ2201 KJ2202 ... KJ2205」，而不是 2201/2505/2302 乱跳。
+        rows = sorted(rows, key=lambda r: (r["grade"], r["major"]))
 
-        # 学号
-        if college not in student_seq:
-            student_seq[college] = {}
-        ss = student_seq[college]
-        ss[grade] = ss.get(grade, 0) + 1
-        seq_no = ss[grade]
-        student_no = f"{abbr}{grade}{seq_no:03d}"
+        cursor = 0
+        used_names: set[str] = set()
+        for idx, size in enumerate(sizes, 1):
+            members = rows[cursor:cursor + size]
+            cursor += size
+            if not members:
+                continue
+            # 主力年级：该班出现次数最多的年级
+            main_grade = Counter(r["grade"] for r in members).most_common(1)[0][0]
+            yy = str(main_grade)[-2:]
+            class_name = f"{abbr}{yy}{idx:02d}"
+            # 同学院内避免重名（主力年级不同也可能撞号）
+            if class_name in used_names:
+                class_name = f"{abbr}{yy}{idx + 50:02d}"
+            used_names.add(class_name)
+
+            for r in members:
+                r["class_name"] = class_name
+                key = (college, r["grade"])
+                student_seq[key] = student_seq.get(key, 0) + 1
+                r["student_no"] = f"{abbr}{r['grade']}{student_seq[key]:03d}"
+
+    for row in skeleton:
+        college, major, grade = row["college"], row["major"], row["grade"]
+        student_no = row["student_no"]
 
         name = _gen_name(rng)
         enroll_year = grade
@@ -204,7 +314,7 @@ def main() -> None:
             "name": name,
             "college": college,
             "major": major,
-            "class_name": class_name,
+            "class_name": row["class_name"],
             "grade": str(grade),
             "enroll_year": enroll_year,
             "is_risk": is_risk,
@@ -233,7 +343,8 @@ def main() -> None:
         # 幂等：先关外键检查，TRUNCATE 子表，再恢复
         print("清空旧数据（TRUNCATE）...")
         cur.execute("SET FOREIGN_KEY_CHECKS=0")
-        for t in ["score", "attendance", "student", "course"]:
+        # career_intent 也按 student_id 关联；不清会让重灌后的新学号继承旧目标
+        for t in ["score", "attendance", "student", "course", "career_intent"]:
             cur.execute(f"TRUNCATE TABLE {t}")
         cur.execute("SET FOREIGN_KEY_CHECKS=1")
         # 重置 tenant 种子

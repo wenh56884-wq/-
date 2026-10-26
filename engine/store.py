@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import json
+import time
 from abc import ABC, abstractmethod
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -54,9 +56,30 @@ class DuckDBStore(Store):
         # 确保父目录存在
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _connect(self) -> duckdb.DuckDBPyConnection:
-        """打开 DuckDB 连接。"""
-        return duckdb.connect(str(self._db_path))
+    def _connect(self, *, readonly: bool = False) -> duckdb.DuckDBPyConnection:
+        """打开 DuckDB 连接。
+
+        调用方必须用 `closing(...)` 包住，不能用 `with conn:`。
+        DuckDB 的连接上下文管理器只做事务提交/回滚，**不关闭连接**，
+        批量写 500 次就会攒下 500 个未释放的句柄，最后
+        `IOException: Cannot open file ... 另一个程序正在使用此文件`。
+
+        DuckDB 的写锁是**整库独占**的：服务在跑时本机再执行 pytest /
+        build_profile_raw.py，后到的一方就会报「另一个程序正在使用此文件」。
+        所以这里分三步退让：读写 → 短暂重试 → 只读。
+        读接口拿不到写锁时降级为只读是安全的（只是不能写）；
+        写接口最终也拿不到锁才抛错，让调用方知道这次真没写进去。
+        """
+        attempts = [readonly, readonly, True]  # 第三次强制以只读方式兜底
+        last: Exception | None = None
+        for index, ro in enumerate(attempts):
+            try:
+                return duckdb.connect(str(self._db_path), read_only=ro)
+            except (duckdb.IOException, RuntimeError) as exc:
+                last = exc
+                if index < len(attempts) - 1:
+                    time.sleep(0.15 * (index + 1))
+        raise last if last is not None else RuntimeError(f"无法连接 {self._db_path}")
 
     def write_student_feature(self, feature: dict[str, Any]) -> int:
         """写入单条学生特征记录（upsert 语义）。"""
@@ -81,7 +104,7 @@ class DuckDBStore(Store):
                 values.append(json.dumps(v, ensure_ascii=False))
             else:
                 values.append(v)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(sql, values)
         return 1
 
@@ -96,7 +119,7 @@ class DuckDBStore(Store):
             "project_cnt, tags, calc_version, updated_at "
             "FROM student_feature WHERE student_no = ? AND term = ?"
         )
-        with self._connect() as conn:
+        with closing(self._connect(readonly=True)) as conn:
             row = conn.execute(sql, [student_no, term]).fetchone()
         if row is None:
             return None
@@ -140,14 +163,14 @@ class DuckDBStore(Store):
                 values.append(json.dumps(v, ensure_ascii=False))
             else:
                 values.append(v)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(sql, values)
         return 1
 
     def health_check(self) -> bool:
-        """健康检查：执行 SELECT 1。"""
+        """健康检查：执行 SELECT 1。只读即可，别去抢写锁。"""
         try:
-            with self._connect() as conn:
+            with closing(self._connect(readonly=True)) as conn:
                 conn.execute("SELECT 1").fetchone()
             return True
         except Exception:

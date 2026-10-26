@@ -104,13 +104,26 @@ def test_student_without_id_is_denied(audit_sink):
 # 2. 越权：跨租户 / 跨班级
 # ----------------------------------------------------------------
 def test_cross_tenant_class_is_denied(audit_sink, monkeypatch):
-    """班级不属于本租户 → 拒绝并写审计（不得返回空数据假装成功）。"""
-    _offline_query(monkeypatch, [{"cnt": 0}])  # 本租户查不到该班
+    """班级只在其他租户存在 → 拒绝并写审计（不得返回空数据假装成功）。"""
+    def fake_query(sql: str, params: tuple):
+        # 第一次查本租户（0 行），第二次查其他租户（存在）
+        return [{"cnt": 1}] if "tenant_id <> %s" in sql else [{"cnt": 0}]
+
+    monkeypatch.setattr(tools, "_query", fake_query)
     with pytest.raises(PermissionError) as exc:
         tools.class_overview(_teacher(tenant_id=1), "RJ9901", TERM)
-    assert "不属于当前租户" in str(exc.value)
+    assert "属于其他租户" in str(exc.value)
     assert audit_sink[-1]["action"] == "class_overview.denied"
     assert audit_sink[-1]["detail"]["reason"].startswith("班级 RJ9901")
+
+
+def test_unknown_class_is_value_error_not_permission(audit_sink, monkeypatch):
+    """输入了任何租户都不存在的班级 → 422 参数错误，不写越权审计。"""
+    _offline_query(monkeypatch, [{"cnt": 0}])
+    with pytest.raises(ValueError) as exc:
+        tools.class_overview(_teacher(tenant_id=1), "RJ9901", TERM)
+    assert "不存在" in str(exc.value)
+    assert audit_sink == [], "输错班级名不应被记成越权"
 
 
 def test_cross_tenant_student_is_denied(audit_sink, monkeypatch):

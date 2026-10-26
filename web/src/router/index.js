@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import ShellLayout from '../layout/ShellLayout.vue'
 import Login from '../views/Login.vue'
-import AgentChat from '../views/AgentChat.vue'
 import StudentHome from '../views/StudentHome.vue'
 import TeacherDashboard from '../views/TeacherDashboard.vue'
 import TeacherStudents from '../views/TeacherStudents.vue'
@@ -25,10 +24,10 @@ const routes = [
     meta: { role: 'student' },
     children: [{ path: '', name: 'student-home', component: StudentHome }]
   },
+  // 智能助手已改为右下角悬浮抽屉，这里保留旧地址做重定向，避免历史链接白屏
   {
     path: '/assistant',
-    component: ShellLayout,
-    children: [{ path: '', name: 'assistant', component: AgentChat }]
+    redirect: () => (localStorage.getItem('qh_role') === 'teacher' ? '/teacher' : '/student')
   }
 ]
 

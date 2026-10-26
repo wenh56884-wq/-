@@ -1,0 +1,568 @@
+<template>
+  <!-- AI 助手抽屉：从右侧滑出，移动端占满宽度 -->
+  <el-drawer
+    v-model="visible"
+    :size="drawerSize"
+    direction="rtl"
+    :with-header="false"
+    :modal="true"
+    class="chat-drawer"
+    @opened="scrollBottom"
+  >
+    <div class="chat-shell">
+      <header class="chat-head">
+        <div class="chat-title">
+          <span class="chat-logo">启</span>
+          <div class="chat-title-text">
+            <div class="chat-name">启航智能助手</div>
+            <div class="chat-sub">LangGraph 多智能体 · 数值经 Critic 回查</div>
+          </div>
+        </div>
+        <button class="icon-btn" type="button" aria-label="关闭助手" @click="close">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </header>
+
+      <div class="chat-alert">
+        数值只能来自确定性引擎；回查不过会降级为不含数值的安全话术。
+      </div>
+
+      <div ref="listRef" class="chat-body">
+        <div v-if="!messages.length" class="chat-empty">
+          <div class="chat-empty-title">有什么想问的？</div>
+          <div class="chat-empty-sub">直接点下面的示例问题，或在下方输入</div>
+          <button
+            v-for="q in examples"
+            :key="q"
+            class="example-btn"
+            type="button"
+            :disabled="sending"
+            @click="send(q)"
+          >{{ q }}</button>
+        </div>
+
+        <div v-for="msg in messages" :key="msg.id" class="msg-row" :class="msg.role">
+          <div class="avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
+          <div class="bubble">
+            <div class="bubble-text">{{ msg.text }}</div>
+            <div v-if="msg.role === 'assistant'" class="bubble-foot">
+              <span class="chip">trace {{ msg.trace_id }}</span>
+              <span class="chip">{{ msg.term }}</span>
+              <span class="chip">{{ msg.cost }} ms</span>
+              <span class="chip" :class="msg.degraded ? 'chip-warn' : 'chip-ok'">
+                {{ msg.degraded ? '降级话术（未通过回查）' : '数值已回查' }}
+              </span>
+            </div>
+            <div v-if="msg.error" class="bubble-err">{{ msg.error }}</div>
+          </div>
+        </div>
+
+        <div v-if="sending" class="msg-row assistant">
+          <div class="avatar">AI</div>
+          <div class="bubble typing">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-text">意图识别 → 工具取数 → 生成 → Critic 回查…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-foot">
+        <div v-if="messages.length" class="quick-row">
+          <button
+            v-for="q in examples.slice(0, 2)"
+            :key="q"
+            class="example-btn small"
+            type="button"
+            :disabled="sending"
+            @click="send(q)"
+          >{{ q }}</button>
+          <button class="clear-btn" type="button" :disabled="!messages.length" @click="clearChat">
+            清空会话
+          </button>
+        </div>
+
+        <div class="input-row">
+          <textarea
+            v-model="query"
+            class="chat-input"
+            rows="2"
+            maxlength="300"
+            placeholder="输入问题（Ctrl + Enter 发送）"
+            @keydown.ctrl.enter.prevent="send()"
+          />
+          <button class="send-btn" type="button" :disabled="sending || !query.trim()" @click="send()">
+            {{ sending ? '思考中' : '发送' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </el-drawer>
+</template>
+
+<script setup>
+import { computed, nextTick, ref, watch } from 'vue'
+
+import http from '../api/http'
+import { currentRole } from '../api/http'
+
+const props = defineProps({
+  modelValue: { type: Boolean, default: false }
+})
+const emit = defineEmits(['update:modelValue'])
+
+const EXAMPLES = {
+  teacher: [
+    '有哪些班级可以看？',
+    'RJ2201 班有哪些红色预警学生？',
+    '给我班级的整体学业情况',
+    '班级学生的岗位兴趣和需求差距在哪？'
+  ],
+  student: [
+    '我这学期的学业预警情况怎么样？',
+    '有哪些岗位适合我？为什么？',
+    '我和目标岗位之间差哪些能力？'
+  ]
+}
+
+const role = currentRole()
+const examples = computed(() => EXAMPLES[role] || EXAMPLES.student)
+
+const visible = ref(props.modelValue)
+watch(
+  () => props.modelValue,
+  (opened) => {
+    visible.value = opened
+  }
+)
+watch(visible, (opened) => {
+  emit('update:modelValue', opened)
+})
+
+// 抽屉宽度：桌面 420px（不挤主内容），窄屏占满
+const drawerSize = computed(() => (window.innerWidth < 768 ? '100%' : '420px'))
+
+const term = ref('2025-2026-2')
+const query = ref('')
+const sending = ref(false)
+const messages = ref([])
+const listRef = ref(null)
+let seq = 0
+
+function close() {
+  visible.value = false
+}
+
+function push(roleName, text, extra = {}) {
+  seq += 1
+  messages.value.push({ id: seq, role: roleName, text, ...extra })
+  scrollBottom()
+}
+
+async function scrollBottom() {
+  await nextTick()
+  if (listRef.value) {
+    listRef.value.scrollTop = listRef.value.scrollHeight
+  }
+}
+
+async function send(text) {
+  const content = String(text ?? query.value).trim()
+  if (!content || sending.value) return
+  push('user', content)
+  query.value = ''
+  sending.value = true
+  const started = performance.now()
+  try {
+    const { data } = await http.post('/chat', { query: content, term: term.value || null })
+    push('assistant', data?.answer || '（本次没有返回内容）', {
+      trace_id: data?.trace_id || '-',
+      term: data?.term || term.value,
+      degraded: Boolean(data?.degraded),
+      cost: Math.round(performance.now() - started)
+    })
+  } catch (err) {
+    // 仅 401 由拦截器统一跳登录；其余在气泡内给具体原因
+    if (err?.response?.status !== 401) {
+      const detail = err?.response?.data?.detail || err?.message || '请求失败'
+      push('assistant', '这次没能拿到回答。', {
+        trace_id: '-',
+        term: term.value,
+        degraded: false,
+        cost: Math.round(performance.now() - started),
+        error: typeof detail === 'string' ? detail : '请求失败'
+      })
+    }
+  } finally {
+    sending.value = false
+  }
+}
+
+function clearChat() {
+  messages.value = []
+}
+</script>
+
+<style scoped>
+.chat-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+}
+
+.chat-head {
+  flex: 0 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.chat-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chat-logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #18181b;
+}
+
+.chat-sub {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 150ms ease;
+}
+
+.icon-btn:hover {
+  background: #f4f4f5;
+}
+
+.ico {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #52525b;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.chat-alert {
+  flex: 0 0 auto;
+  margin: 12px 16px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #52525b;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+}
+
+.chat-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 16px;
+  scrollbar-width: thin;
+}
+
+.chat-empty {
+  padding: 24px 0;
+}
+
+.chat-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.chat-empty-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.example-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #52525b;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.example-btn:hover:not(:disabled) {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.example-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.example-btn.small {
+  width: auto;
+  margin-top: 0;
+}
+
+.msg-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.msg-row.user {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-row.user .avatar {
+  background: #52525b;
+}
+
+.bubble {
+  max-width: 80%;
+  background: #ffffff;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.msg-row.user .bubble {
+  background: #f4f4f5;
+}
+
+.bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble-foot {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 1px 6px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #52525b;
+  font-size: 11px;
+}
+
+.chip-ok {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.chip-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.bubble-err {
+  margin-top: 6px;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 8px;
+  background: #d4d4d8;
+  animation: typing-bounce 1s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.typing-text {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.chat-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid #e4e4e7;
+  background: #ffffff;
+  padding: 10px 16px 14px;
+}
+
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+
+.clear-btn {
+  margin-left: auto;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #52525b;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.clear-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.chat-input {
+  flex: 1 1 auto;
+  min-height: 52px;
+  max-height: 120px;
+  resize: none;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #f4f4f5;
+  color: #18181b;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: box-shadow 150ms ease;
+}
+
+.chat-input:focus {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.send-btn {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot {
+    animation: none;
+  }
+
+  .example-btn,
+  .icon-btn,
+  .clear-btn,
+  .send-btn,
+  .chat-input {
+    transition: none;
+  }
+}
+</style>

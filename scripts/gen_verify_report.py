@@ -341,7 +341,7 @@ def consistency_checks(students: list[tuple[str, int]], klass: str,
 
 
 def main() -> int:
-    """生成 docs\VERIFY.md；存在 FAIL 时返回 1。"""
+    """生成 docs\\VERIFY.md；存在 FAIL 时返回 1。"""
     emit("# 启航系统 · 验收报告（VERIFY.md）")
     emit()
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -388,8 +388,8 @@ def main() -> int:
     emit()
     emit("## 5. 已知问题与偏差")
     emit()
-    emit("- 演示数据里班级人数普遍为 1 人（seed_mock 给每人分配独立班级），班级概貌/预警名单可跑通，")
-    emit("  但群体画像的统计意义有限；若要看多人的班级视图，需要重新 seed 把学生归到若干固定班级。")
+    emit("- 演示数据按「学院 + 年级 + 专业」分班（每班约 30 人），班级概貌/预警名单已具备统计意义；")
+    emit("  大一演示账号由 `scripts\\seed_freshman.py` 单独补入，重灌 seed_mock 后需再执行一次。")
     emit("- 真实库中没有缺考勤的学生，因此「缺数据 → 灰档 unknown」分支只在单测层面验证，")
     emit("  演示环境看不到灰档；需要演示时得先构造无考勤记录的学生。")
     emit("- 推荐的质量受限于招聘站的 skill_tags 噪声（已剔除福利类词）与校内课名口径，")

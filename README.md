@@ -8,10 +8,10 @@
 启航是面向高校教育信息化的**生涯与岗位匹配系统**，用大数据与多智能体协同，
 为教师与学生提供差异化的智能服务。
 
-- **教师端**：学业预警、班级画像、职业差距分析——帮助教师及时发现学业风险学生、
-  掌握班级整体状况、针对性指导职业发展。
-- **学生端**：本人预警、岗位推荐——让学生了解自身学业风险与能力画像，
-  获得基于画像的内容推荐岗位。
+- **教师端**：学业预警、班级画像、职业差距分析、按学号直达学生档案——帮助教师及时发现
+  学业风险学生、掌握班级整体状况、针对性指导职业发展。
+- **学生端**：本人预警、岗位推荐、生涯规划——让学生了解自身学业风险与能力画像，
+  获得基于画像的内容推荐岗位；**大一先选考公/考研/考编/就业，大二/大三直接给出规划与方向**。
 
 核心设计原则（详见 [`AGENTS.md`](AGENTS.md)）：**计算确定性、表达生成性**——
 所有数值由 `engine\` 确定性引擎计算，大模型只负责把结果组织成自然语言；
@@ -27,6 +27,7 @@ python -m pip install -U pip
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 copy .env.example .env      # 然后填 DEEPSEEK_API_KEY / MYSQL_PASSWORD / JWT_SECRET
 python -m agents.llm        # 验证 DeepSeek 链路
+python scripts\seed_freshman.py  # 可选：补 4 个 2026 级大一演示账号（学号即口令）
 ```
 
 ## 目录结构
@@ -43,11 +44,10 @@ D:\qihang\
 │   ├── audit.py          # 调用审计日志
 │   ├── schemas.py        # Pydantic 请求/响应模型
 │   ├── config.py         # pydantic-settings 读取 .env
-│   ├── demo_streamlit.py # 兜底演示页（Vue 未就绪时的 Plan B）
-│   ├── routers\          # teacher.py / student.py
+│   ├── routers\          # teacher.py / student.py / career.py
 │   └── static\           # 静态资源
 ├── web\                  # Vue 3 + Vite + ECharts 前端（P10 生成）
-│   ├── src\views\        # Login / TeacherDashboard / StudentHome
+│   ├── src\views\        # Login / TeacherDashboard / TeacherStudents / StudentHome / AgentChat
 │   ├── src\api\http.js   # axios + JWT 拦截器
 │   └── dist\             # 构建产物（由 FastAPI 托管，不入 git）
 ├── agents\               # LangGraph 多智能体层（DeepSeek 驱动）
@@ -56,14 +56,18 @@ D:\qihang\
 │   ├── tools.py          # 工具层（入参只接受后端注入的 id）
 │   ├── teacher_agent.py  # 教师端 Agent
 │   ├── student_agent.py  # 学生端 Agent
-│   └── critic.py         # 数值回查 + 驳回 + 降级模板
+│   ├── critic.py         # 数值回查 + 驳回 + 降级模板
+│   └── career\           # 职业规划 5 节点（解析/匹配/周监控/通知/陪伴）
 ├── engine\               # 确定性引擎（大模型无权触碰数值）
 │   ├── store.py          # 存储抽象：DuckDBStore / ClickHouseStore
 │   ├── rules.py          # 预警规则与阈值（可按租户配置）
 │   ├── warning.py        # 预警引擎 V1（红/橙/黄三级）
 │   ├── profile.py        # 四维画像（学业/行为/兴趣/能力）
-│   └── recommend.py      # 规则打分 + 协同过滤 + 三段式理由
-├── db\                   # mysql_schema.sql / duckdb_schema.sql
+│   ├── recommend.py      # 规则打分 + 三段式理由（确定性、无随机数）
+│   ├── career_rules.py   # 职业规划规则引擎（career-v1）
+│   └── career_guide.py   # 年级分层生涯规划（大一选目标 / 大二大三给路径）
+├── rules\                # 业务规则库（考公/考研/就业 JSON 模板）
+├── db\                   # MySQL / DuckDB / 职业规划建表脚本
 ├── etl\                  # mask.py 脱敏与清洗
 ├── scripts\              # init_db.py / seed_mock.py / smoke_test.ps1 / gen_verify_report.py
 ├── tests\                # pytest 用例
@@ -95,6 +99,7 @@ D:\qihang\
 | 7 | Critic 防幻觉 | P7-1 |
 | 8 | 冒烟 12 项 + VERIFY.md | P8-1 |
 | 9 | Vue 3 + ECharts 前端 | P10-1 / P10-2 / P10-3 |
+| 10 | 职业规划模块（career-v1，5 节点） | P13-0 ~ P13-5 |
 | 二期 | Spark / 协同过滤 / 知识图谱 | P12 |
 
 ## 验收指标
@@ -110,7 +115,7 @@ D:\qihang\
 | V5 | 身份安全 | student_id / teacher_id 仅来自 JWT，前端伪造无效 | ☐ |
 | V6 | 多租户隔离 | 跨租户查询在数据层被拦截，返回空 | ☐ |
 | V7 | 防幻觉 | critic 回查数值不一致即驳回，超 2 次降级为模板 | ☐ |
-| V8 | 冒烟测试 | 10 项冒烟用例全部通过，VERIFY.md 出报告 | ☐ |
+| V8 | 冒烟测试 | 12 项冒烟用例全部通过，VERIFY.md 出报告 | ☐ |
 | V9 | 演示可用 | Vue 前端（构建后单服务托管）走通登录→教师看板→学生端全流程 | ☐ |
 | V10 | 文档完备 | 目录说明、答辩大纲、演示脚本齐备 | ☐ |
 
@@ -131,3 +136,13 @@ D:\qihang\
 - P2-续：实现 `scripts\seed_mock.py`——500 名学生模拟数据（校情自检 + 风险埋点 + hidden_risk.csv）。
 - P2-续：修正 `db\mysql_schema.sql` / `db\duckdb_schema.sql` 的 `term` 列为 VARCHAR(20)。
 - P2-ETL：实现 `etl\mask.py`（手机号/邮箱/微信号脱敏）、`etl\clean_jobs.py`（5 文件清洗统一 schema）、`scripts\load_jobs.py`（灌入 MySQL job + DuckDB job_feature）。
+
+### 2026-10-26（巡检）
+- P3–P13 已落地：预警 / 画像 / 推荐 / Critic / FastAPI / Vue 前端 / 职业规划模块（详见 `git log` 与 `docs\VERIFY.md`）。
+- 修复：`fetch_active_rule` 把 `hard_baseline`/`adjustable` 读成空列表；`recommend_log` 的 `hit_items`/`gap_items` 双重 JSON 编码。
+- 加固：MySQL 连接统一加 5 秒超时；库不可用时登录返回 401、工具层返回空结果而不是 500；`/chat` 改用已校验的 `get_current_ctx`。
+- 前端：403 不再清理登录态（只有 401 才跳登录），并保留错误原因展示。
+- 文档/依赖：冒烟项数统一为 12 项；`requirements.txt` 全部锁版本。
+- 新增学生生涯规划卡：大一先选考公/考研/考编/就业（`career_intent` 表），大二/大三直接给出确定性路径；教师端支持按学号直达学生档案。
+- `scripts/init_db.py` 现在会同时执行 `mysql_schema.sql` 与 `career_tables.sql`，新环境一次建表完成。
+- 新增 `scripts/seed_freshman.py`：幂等插入 4 个 2026 级大一演示账号（AI2026001 / RJ2026001 / KJ2026001 / JR2026001，初始口令=学号）。

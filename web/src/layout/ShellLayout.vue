@@ -102,6 +102,24 @@
         </router-view>
       </main>
     </div>
+
+    <!-- 悬浮助手：右下角小人按钮 → 右侧抽屉，不占侧栏导航位 -->
+    <button
+      class="assistant-fab"
+      type="button"
+      aria-label="打开智能助手"
+      title="打开智能助手"
+      :class="{ 'is-open': chatOpen }"
+      @click="chatOpen = true"
+    >
+      <svg viewBox="0 0 24 24" class="fab-icon" aria-hidden="true">
+        <circle cx="12" cy="8" r="3.6" />
+        <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+      </svg>
+      <span v-if="!chatOpen" class="fab-badge">AI</span>
+    </button>
+
+    <ChatDrawer v-model="chatOpen" />
   </div>
 </template>
 
@@ -110,6 +128,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { clearSession, currentRole } from '../api/http'
+import ChatDrawer from '../components/ChatDrawer.vue'
 import { useClock, useSystemStatus } from '../composables/useSystemStatus'
 
 // 24×24 stroke 图标（无外部图标库依赖）
@@ -131,21 +150,21 @@ const router = useRouter()
 const route = useRoute()
 const role = currentRole()
 
+// 智能助手改为右下角悬浮入口（抽屉），不再占用侧栏导航位
 const MENUS = {
   teacher: [
     { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
-    { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' },
-    { path: '/assistant', label: '智能助手', hint: '多智能体问答', icon: 'chat' }
+    { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' }
   ],
   student: [
-    { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
-    { path: '/assistant', label: '智能助手', hint: '多智能体问答', icon: 'chat' }
+    { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' }
   ]
 }
 
 const menus = computed(() => MENUS[role] || MENUS.student)
 const collapsed = ref(false)
 const drawer = ref(false)
+const chatOpen = ref(false)
 const isMobile = ref(false)
 let media = null
 
@@ -660,6 +679,69 @@ onBeforeUnmount(() => {
   background: rgba(24, 24, 27, 0.45);
 }
 
+/* ---------- 悬浮 AI 助手入口（右下角小人） ---------- */
+.assistant-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 45;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #2563eb;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(24, 24, 27, 0.08);
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.assistant-fab:hover {
+  transform: translateY(-2px);
+  background: #eff6ff;
+  box-shadow: 0 6px 16px rgba(24, 24, 27, 0.12);
+}
+
+.assistant-fab.is-open {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fab-icon {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 150ms ease;
+}
+
+.assistant-fab:hover .fab-icon {
+  transform: translateX(2px);
+}
+
+.fab-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* 抽屉本体：抹掉默认内边距，交给 ChatDrawer 自己排布 */
+.chat-drawer :deep(.el-drawer__body) {
+  padding: 0;
+}
+
 @media (max-width: 1023px) {
   .sidebar {
     transform: translateX(-100%);
@@ -685,6 +767,13 @@ onBeforeUnmount(() => {
 
   .pulse {
     display: none;
+  }
+
+  .assistant-fab {
+    right: 16px;
+    bottom: 16px;
+    width: 44px;
+    height: 44px;
   }
 }
 
