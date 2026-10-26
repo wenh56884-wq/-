@@ -26,3 +26,25 @@ body {
   color: #4e5969;
   margin-bottom: 8px;
 }
+
+/* 路由切换动画（ShellLayout 的 transition name="page-fade" 使用） */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* 侧栏菜单项：主标签右侧跟一句小字说明 */
+.el-menu-item {
+  height: 46px;
+  line-height: 46px;
+}

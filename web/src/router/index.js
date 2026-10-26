@@ -1,14 +1,35 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import ShellLayout from '../layout/ShellLayout.vue'
 import Login from '../views/Login.vue'
-import TeacherDashboard from '../views/TeacherDashboard.vue'
+import AgentChat from '../views/AgentChat.vue'
 import StudentHome from '../views/StudentHome.vue'
+import TeacherDashboard from '../views/TeacherDashboard.vue'
+import TeacherStudents from '../views/TeacherStudents.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: Login },
-  { path: '/teacher', name: 'teacher', component: TeacherDashboard, meta: { role: 'teacher' } },
-  { path: '/student', name: 'student', component: StudentHome, meta: { role: 'student' } }
+  {
+    path: '/teacher',
+    component: ShellLayout,
+    meta: { role: 'teacher' },
+    children: [
+      { path: '', name: 'teacher-overview', component: TeacherDashboard },
+      { path: 'students', name: 'teacher-students', component: TeacherStudents }
+    ]
+  },
+  {
+    path: '/student',
+    component: ShellLayout,
+    meta: { role: 'student' },
+    children: [{ path: '', name: 'student-home', component: StudentHome }]
+  },
+  {
+    path: '/assistant',
+    component: ShellLayout,
+    children: [{ path: '', name: 'assistant', component: AgentChat }]
+  }
 ]
 
 const router = createRouter({
@@ -20,14 +41,17 @@ const router = createRouter({
 router.beforeEach((to) => {
   const token = localStorage.getItem('qh_token')
   const role = localStorage.getItem('qh_role')
-  if (to.path !== '/login' && !token) {
-    return { path: '/login', query: { redirect: to.fullPath } }
+  const home = role === 'teacher' ? '/teacher' : '/student'
+  if (!token) {
+    return to.path === '/login' ? true : { path: '/login', query: { redirect: to.fullPath } }
   }
-  if (to.meta?.role && role && to.meta.role !== role) {
-    return { path: role === 'teacher' ? '/teacher' : '/student' }
+  if (to.path === '/login') {
+    return { path: home }
   }
-  if (to.path === '/login' && token) {
-    return { path: role === 'teacher' ? '/teacher' : '/student' }
+  // meta.role 写在父路由上，需用 matched 逐层检查
+  const need = to.matched.map((record) => record.meta?.role).find((value) => value)
+  if (need && role && need !== role) {
+    return { path: home }
   }
   return true
 })

@@ -20,9 +20,12 @@
         </el-form-item>
       </el-form>
       <div class="engine-line">
-        引擎版本：{{ warnings.engine_version || overview.engine_version || '-' }} ·
-        画像版本：{{ warnings.calc_version || overview.calc_version || '-' }}
+        <span>引擎版本：{{ warnings.engine_version || overview.engine_version || '-' }}</span>
+        <span>画像版本：{{ warnings.calc_version || overview.calc_version || '-' }}</span>
+        <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
         <span v-if="errorTip" class="err">{{ errorTip }}</span>
+        <el-switch v-model="autoRefresh" size="small" active-text="自动刷新" class="auto-switch" />
+        <router-link to="/teacher/students" class="to-files">看学生个人档案 →</router-link>
       </div>
     </el-card>
 
@@ -30,26 +33,27 @@
       <el-col :span="6">
         <el-card shadow="never" class="stat-card stat-red">
           <div class="stat-label">红色预警</div>
-          <div class="stat-value">{{ dist.red ?? '-' }}</div>
+          <div class="stat-value"><count-number :value="dist.red" /></div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="never" class="stat-card stat-orange">
           <div class="stat-label">橙色预警</div>
-          <div class="stat-value">{{ dist.orange ?? '-' }}</div>
+          <div class="stat-value"><count-number :value="dist.orange" /></div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="never" class="stat-card stat-yellow">
           <div class="stat-label">黄色预警</div>
-          <div class="stat-value">{{ dist.yellow ?? '-' }}</div>
+          <div class="stat-value"><count-number :value="dist.yellow" /></div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="never" class="stat-card stat-normal">
           <div class="stat-label">班级人数 / 均分</div>
           <div class="stat-value small">
-            {{ overview.headcount ?? '-' }} / {{ overview.avg_gpa ?? '-' }}
+            <count-number :value="overview.headcount" /> /
+            <count-number :value="overview.avg_gpa" :decimals="1" />
           </div>
         </el-card>
       </el-col>
@@ -154,6 +158,8 @@ import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
 import http from '../api/http'
+import CountNumber from '../components/CountNumber.vue'
+import { useClock } from '../composables/useSystemStatus'
 
 const LEVEL_TEXT = { red: '红色', orange: '橙色', yellow: '黄色', none: '正常', unknown: '数据不足' }
 const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 'success', unknown: 'info' }
@@ -164,6 +170,10 @@ const className = ref(localStorage.getItem('qh_last_class') || 'AI2201')
 const term = ref('2025-2026-2')
 const loading = ref(false)
 const errorTip = ref('')
+const autoRefresh = ref(false)
+const lastLoadAt = ref(null)
+let timer = null
+const clock = useClock()
 const overview = ref({})
 const warnings = ref({})
 const barRef = ref(null)
@@ -222,6 +232,7 @@ async function loadClass(reportError = true) {
     ])
     overview.value = ovRes.data || {}
     warnings.value = wnRes.data || {}
+    lastLoadAt.value = new Date()
     await nextTick()
     renderBar()
   } catch (err) {
@@ -251,6 +262,11 @@ function reset() {
   errorTip.value = ''
   renderBar()
 }
+
+watch(autoRefresh, (on) => {
+  if (timer) clearInterval(timer)
+  timer = on ? setInterval(loadClass, 30000) : null
+})
 
 function renderBar() {
   if (!barRef.value) return
@@ -413,6 +429,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (timer) clearInterval(timer)
   window.removeEventListener('resize', onResize)
   barChart?.dispose()
   radarChart?.dispose()
@@ -431,6 +448,20 @@ onBeforeUnmount(() => {
 .engine-line {
   font-size: 12px;
   color: #86909c;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.auto-switch {
+  margin-left: auto;
+}
+
+.to-files {
+  color: var(--qh-red);
+  text-decoration: none;
+  font-size: 12px;
 }
 
 .err {

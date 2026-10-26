@@ -3,6 +3,13 @@
     <el-alert class="trust-bar" type="success" :closable="false" show-icon
       title="所有数值来自确定性引擎，经 Critic 审核通过" />
 
+    <div class="live-bar">
+      <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
+      <el-switch v-model="autoRefresh" size="small" active-text="30 秒自动刷新" />
+      <el-button size="small" :loading="warningLoading || recLoading" @click="reloadAll">立即刷新</el-button>
+      <span class="live-tip">不想问？去「智能助手」直接提问</span>
+    </div>
+
     <el-card v-loading="warningLoading" shadow="never" class="info-card">
       <div class="card-title">本人信息</div>
       <el-descriptions :column="3" border size="small">
@@ -13,7 +20,7 @@
           <el-tag :type="levelType(warning.level)" effect="dark">{{ levelText(warning.level) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="风险分">
-          <span class="risk-score">{{ warning.risk_score ?? '-' }}</span>
+          <span class="risk-score"><count-number :value="warning.risk_score" /></span>
         </el-descriptions-item>
         <el-descriptions-item label="可用指标">
           {{ warning.coverage ?? '-' }} 项
@@ -80,13 +87,20 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import http from '../api/http'
+import CountNumber from '../components/CountNumber.vue'
+import { useClock } from '../composables/useSystemStatus'
 
 const LEVEL_TEXT = { red: '红色预警', orange: '橙色预警', yellow: '黄色预警', none: '正常', unknown: '数据不足' }
 const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 'success', unknown: 'info' }
+
+const autoRefresh = ref(false)
+const lastLoadAt = ref(null)
+let timer = null
+const clock = useClock()
 
 const term = ref('2025-2026-2')
 const topN = ref(5)
@@ -163,8 +177,22 @@ async function loadRecommendations() {
   }
 }
 
-onMounted(async () => {
+async function reloadAll() {
   await Promise.all([loadWarning(), loadRecommendations()])
+  lastLoadAt.value = new Date()
+}
+
+watch(autoRefresh, (on) => {
+  if (timer) clearInterval(timer)
+  timer = on ? setInterval(reloadAll, 30000) : null
+})
+
+onMounted(async () => {
+  await reloadAll()
+})
+
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer)
 })
 </script>
 
@@ -172,6 +200,23 @@ onMounted(async () => {
 .trust-bar {
   margin-bottom: 12px;
   font-weight: 600;
+}
+
+.live-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #86909c;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+.live-tip {
+  margin-left: auto;
 }
 
 .info-card {
