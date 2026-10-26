@@ -1,6 +1,6 @@
 # 启航系统 · 验收报告（VERIFY.md）
 
-> 生成脚本：`python scripts\gen_verify_report.py`　生成时间：2026-10-26 21:06:28
+> 生成脚本：`python scripts\gen_verify_report.py`　生成时间：2026-10-26 21:40:46
 
 ## 1. 环境水印
 
@@ -11,7 +11,7 @@
 
 - MySQL：学生 500 人 / 班级 500 个 / 成绩行 2918 条 / 岗位 2931 条
 - DuckDB student_feature：500 行，版本分布 v1.1=500
-- gpa_trend 值域：-36.99 ~ 21.06；recommend_log：108 条
+- gpa_trend 值域：-36.99 ~ 21.06；recommend_log：347 条
 - 抽查班级：AI2201（20 人在报告样本内）
 
 ## 3. 端到端 10 项结果
@@ -28,6 +28,8 @@
 | 8 | 学生查本人预警 | PASS | risk=100 level=red coverage=3 两端一致=True |
 | 9 | 学生查他人被拒 | PASS | HTTP 403（目标 AI2022002） |
 | 10 | 学生推荐接口 | PASS | version=v1.0 items=5 冷启动=False 候选池=400 |
+| 11 | 前端静态托管 | PASS | / 与 /teacher 均回落 web\dist\index.html |
+| 12 | 静态资源可加载 | PASS | assets/index-4LQPAafe.js HTTP 200 |
 
 ## 4. 数值一致性（20 人级抽查）
 
@@ -46,7 +48,12 @@
 - 推荐的质量受限于招聘站的 skill_tags 噪声（已剔除福利类词）与校内课名口径，
   生活服务类岗位的方向归类偏粗，后续可按专业 + 课程双通道细化。
 
+- 学生端工具 `my_warning` 只返回学号/姓名/学期与指标，不含专业与班级：个人信息卡
+  因此只展示接口真正返回的字段，未伪造；如需补齐属于后端改动，未擅自加。
+
 ## 6. 下一步
 
-- P10：Vue 前端（教师看板 / 学生端 / 静态托管）；P11：验收文档与汇报材料。
-- 预留：warning_threshold 覆盖、租户多院校横向扩展、LLM 摘要润色（须过 Critic）。
+- 交付文档已齐：`docs\VERIFY.md`（本报告）、`docs\答辩PPT大纲.md`（10 页，全用真实字段名）、
+  `docs\演示脚本.md`（5 分钟台词 + 三类兜底 + 演示前自检清单）。
+- 二期（11/18 之后）：PySpark 迁移 `engine\profile.py`（逐字段比对，一致率须 100%）、
+  推荐加协同过滤（`final = 0.7*A + 0.3*B`，冷启动跳过）、多院校租户横向扩展。

@@ -76,7 +76,7 @@ function Invoke-Check {
 }
 
 Write-Host "==============================================================" -ForegroundColor Cyan
-Write-Host " 启航系统 · 端到端冒烟（11 项）" -ForegroundColor Cyan
+Write-Host " 启航系统 · 端到端冒烟（12 项）" -ForegroundColor Cyan
 Write-Host " BaseUrl=$BaseUrl   Term=$Term" -ForegroundColor Cyan
 Write-Host "==============================================================" -ForegroundColor Cyan
 
@@ -272,6 +272,24 @@ Invoke-Check -Index "11" -Name "前端静态托管" -Action {
         return @{ Status = "PASS"; Detail = "/ 与 /teacher 均回落 index.html（$($rootPage.Content.Length) B）" }
     }
     return @{ Status = "FAIL"; Detail = "首页 HTTP $($rootPage.StatusCode) /teacher HTTP $($spa.StatusCode)" }
+}
+
+# ---- 12. 构建产物可加载（静态资源不被后端路由吞掉）----
+Invoke-Check -Index "12" -Name "静态资源可加载" -Action {
+    $distIndex = Join-Path $root "web\dist\index.html"
+    if (-not (Test-Path $distIndex)) {
+        return @{ Status = "SKIP"; Detail = "未构建前端产物（先跑 scripts\build_web.ps1）" }
+    }
+    $html = Get-Content $distIndex -Raw
+    $m = [regex]::Match($html, 'assets/[A-Za-z0-9._-]+\.js')
+    if (-not $m.Success) {
+        return @{ Status = "FAIL"; Detail = "index.html 里没有引用到 assets js" }
+    }
+    $asset = Invoke-WebRequest -Uri "$BaseUrl/$($m.Value)" -UseBasicParsing
+    if ($asset.StatusCode -eq 200 -and $asset.RawContentLength -gt 1000) {
+        return @{ Status = "PASS"; Detail = "$($m.Value) 200（$($asset.RawContentLength) B）" }
+    }
+    return @{ Status = "FAIL"; Detail = "$($m.Value) HTTP $($asset.StatusCode)" }
 }
 
 # ---- 汇总 ----

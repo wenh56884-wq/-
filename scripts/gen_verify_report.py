@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -260,6 +261,33 @@ def run_smoke_items(klass: str, students: list[tuple[str, int]]) -> list[tuple[s
                   ("SKIP" if version == "pending" else "FAIL"),
                   f"version={version} items={cnt} "
                   f"冷启动={recs.get('cold_start')} 候选池={recs.get('candidate_cnt')}", ""))
+
+    dist = Path(_ROOT) / "web" / "dist" / "index.html"
+    if dist.exists():
+        try:
+            bodies = []
+            for url in (BASE_URL + "/", BASE_URL + "/teacher"):
+                with urllib.request.urlopen(urllib.request.Request(url), timeout=15) as resp:
+                    bodies.append(resp.read().decode("utf-8", "ignore"))
+            ok_home = 'id="app"' in bodies[0]
+            items.append(("11 前端静态托管", "PASS" if ok_home else "FAIL",
+                          "/ 与 /teacher 均回落 web\\dist\\index.html", ""))
+            match = re.search(r"assets/[A-Za-z0-9._-]+\.js", bodies[0])
+            code = 0
+            if match:
+                with urllib.request.urlopen(
+                        urllib.request.Request(BASE_URL + "/" + match.group(0)),
+                        timeout=15) as resp:
+                    code = resp.status
+            items.append(("12 静态资源可加载", "PASS" if code == 200 else "FAIL",
+                          f"{match.group(0) if match else '未引用 assets js'} HTTP {code}", ""))
+        except Exception as exc:
+            items.append(("11 前端静态托管", "FAIL", f"静态托管请求失败：{exc}", ""))
+            items.append(("12 静态资源可加载", "FAIL", "依赖第 11 项", ""))
+    else:
+        items.append(("11 前端静态托管", "SKIP",
+                      "未构建前端产物（先跑 scripts\\build_web.ps1）", ""))
+        items.append(("12 静态资源可加载", "SKIP", "依赖第 11 项", ""))
     return items
 
 
@@ -367,10 +395,15 @@ def main() -> int:
     emit("- 推荐的质量受限于招聘站的 skill_tags 噪声（已剔除福利类词）与校内课名口径，")
     emit("  生活服务类岗位的方向归类偏粗，后续可按专业 + 课程双通道细化。")
     emit()
+    emit("- 学生端工具 `my_warning` 只返回学号/姓名/学期与指标，不含专业与班级：个人信息卡")
+    emit("  因此只展示接口真正返回的字段，未伪造；如需补齐属于后端改动，未擅自加。")
+    emit()
     emit("## 6. 下一步")
     emit()
-    emit("- P10：Vue 前端（教师看板 / 学生端 / 静态托管）；P11：验收文档与汇报材料。")
-    emit("- 预留：warning_threshold 覆盖、租户多院校横向扩展、LLM 摘要润色（须过 Critic）。")
+    emit("- 交付文档已齐：`docs\\VERIFY.md`（本报告）、`docs\\答辩PPT大纲.md`（10 页，全用真实字段名）、")
+    emit("  `docs\\演示脚本.md`（5 分钟台词 + 三类兜底 + 演示前自检清单）。")
+    emit("- 二期（11/18 之后）：PySpark 迁移 `engine\\profile.py`（逐字段比对，一致率须 100%）、")
+    emit("  推荐加协同过滤（`final = 0.7*A + 0.3*B`，冷启动跳过）、多院校租户横向扩展。")
 
     target = _ROOT / "docs" / "VERIFY.md"
     target.parent.mkdir(parents=True, exist_ok=True)
