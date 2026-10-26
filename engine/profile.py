@@ -14,7 +14,7 @@ from app.config import get_settings
 from engine.store import DuckDBStore, Store
 
 # 画像计算版本号，写入 DuckDB student_feature.calc_version
-CALC_VERSION = "v1.0"
+CALC_VERSION = "v1.1"
 
 # ----------------------------------------------------------------
 # 归一化常量表（min-max 固定上下界 / 次数饱和值）
@@ -22,7 +22,9 @@ CALC_VERSION = "v1.0"
 # 因此在 PySpark 里只要平移同一组常量即可逐行计算（map-only，无需 shuffle）。
 # ----------------------------------------------------------------
 GPA_MIN, GPA_MAX = 0.0, 100.0            # 均分区间
-TREND_MIN, TREND_MAX = -20.0, 20.0       # 两学期均分差值区间（负=退步）
+TREND_MIN, TREND_MAX = -40.0, 20.0       # 两学期均分差值区间（负=退步；v1.1 由 -20 放宽）
+# 极端退步阈值：<= 该值额外打标签，避免被 clamp 后与「无变化」混淆（口径字典第 2 节）
+EXTREME_DECLINE_AT = -30.0
 FAIL_CAP = 3.0                           # 挂科门次饱和值（≥3 门该项记 0）
 LIBRARY_CAP = 60.0                       # 到馆/借阅次数饱和值（raw 给次数时使用）
 PREF_CAP = 6.0                           # 选修方向门次饱和值
@@ -38,7 +40,7 @@ JOB_VIEW_DIRECTION_WEIGHT = 0.5
 # 维度内权重（缺失子指标不参与，剩余权重归一）
 # ----------------------------------------------------------------
 STUDY_WEIGHTS: dict[str, float] = {
-    "gpa": 0.40, "gpa_trend": 0.20, "fail_count": 0.20, "rank_pct": 0.20,
+    "gpa": 0.40, "gpa_trend": 0.20, "fail_count": 0.20, "major_rank_pct": 0.20,
 }
 BEHAVIOR_WEIGHTS: dict[str, float] = {
     "attendance_rate": 0.50, "library_activity": 0.30, "consumption_regularity": 0.20,
@@ -66,10 +68,11 @@ TAG_NO_STUDY = "学业数据不足"
 TAG_NO_ABILITY = "能力数据不足"
 TAG_NO_DIRECTION = "方向未明"
 TAG_ABILITY_OK = "能力履历完整"
+TAG_EXTREME_DECLINE = "学业急剧下滑"
 
 # 原始行里允许出现的业务字段（用于判定「空数据兜底」）
 _RAW_KEYS: tuple[str, ...] = (
-    "gpa", "gpa_trend", "fail_count", "rank_pct",
+    "gpa", "gpa_trend", "fail_count", "class_rank_pct", "major_rank_pct",
     "attendance_rate", "library_activity", "library_visit_cnt",
     "consumption_regularity", "course_pref", "job_view_cnt",
     "job_view_pref", "job_favorite_cnt",
@@ -171,7 +174,8 @@ def build_features(raw: Mapping[str, Any]) -> dict[str, Any]:
     """把一行原始宽表数据构建成四维画像特征（纯函数，缺失即 None）。
 
     raw 约定键（缺失的键表示该项无数据，不参与打分，也不写 0 冒充）：
-      学业：gpa / gpa_trend（本学期 − 上学期，正数为进步）/ fail_count / rank_pct
+      学业：gpa / gpa_trend（本学期 − 上学期，正数为进步）/ fail_count /
+           major_rank_pct（专业口径，0=专业第一）/ class_rank_pct（班级口径，仅透传）
       行为：attendance_rate / library_activity(0-1) 或 library_visit_cnt(次数) / consumption_regularity
       兴趣：course_pref{方向:门次} / job_view_cnt / job_view_pref{方向:次数} / job_favorite_cnt
       能力：cert_count / contest_count / project_cnt
@@ -183,14 +187,17 @@ def build_features(raw: Mapping[str, Any]) -> dict[str, Any]:
     gpa = _as_float(raw.get("gpa"))
     gpa_trend = _as_float(raw.get("gpa_trend"))
     fail_count = _as_int(raw.get("fail_count"))
-    rank_pct = _as_float(raw.get("rank_pct"))
+    major_rank_pct = _as_float(raw.get("major_rank_pct"))
+    class_rank_pct = _as_float(raw.get("class_rank_pct"))
+    extreme_decline = gpa_trend is not None and gpa_trend <= EXTREME_DECLINE_AT
     study_norm = {
         "gpa": _min_max(gpa, GPA_MIN, GPA_MAX),
         "gpa_trend": _min_max(gpa_trend, TREND_MIN, TREND_MAX),
         # 挂科越多分越低：0 门记 1.0，≥FAIL_CAP 门记 0.0
         "fail_count": (None if fail_count is None
                        else _clamp01(1.0 - min(1.0, max(0.0, fail_count) / FAIL_CAP))),
-        "rank_pct": (None if rank_pct is None else _clamp01(1.0 - rank_pct)),
+        "major_rank_pct": (None if major_rank_pct is None
+                           else _clamp01(1.0 - major_rank_pct)),
     }
 
     # --- 行为 ---
@@ -242,13 +249,20 @@ def build_features(raw: Mapping[str, Any]) -> dict[str, Any]:
             "gpa": None if gpa is None else round(gpa, 2),
             "gpa_trend": None if gpa_trend is None else round(gpa_trend, 2),
             "fail_count": fail_count,
-            "rank_pct": None if rank_pct is None else _clamp01(rank_pct),
+            "major_rank_pct": (None if major_rank_pct is None
+                               else _clamp01(major_rank_pct)),
+            # 仅透传：不参与打分、不影响标签（教师端看板用）
+            "class_rank_pct": (None if class_rank_pct is None
+                               else _clamp01(class_rank_pct)),
+            "extreme_decline": extreme_decline,
             "norm": study_norm,
         },
         "behavior": {
             "score": _weighted_mean(behavior_norm, BEHAVIOR_WEIGHTS),
             "attendance_rate": (None if attendance_rate is None
                                 else _clamp01(attendance_rate)),
+            "library_visit_cnt": (None if library_visit is None
+                                  else int(library_visit)),
             "library_activity": library_activity,
             "consumption_regularity": (None if consumption is None
                                        else _clamp01(consumption)),
@@ -282,7 +296,7 @@ def build_features(raw: Mapping[str, Any]) -> dict[str, Any]:
 # ----------------------------------------------------------------
 def _study_tag(features: Mapping[str, Any]) -> str:
     """学业档位标签：前 20% / 前 50% / 后 50%，无 ranking 数据单独兜底。"""
-    rank = features.get("study", {}).get("rank_pct")
+    rank = features.get("study", {}).get("major_rank_pct")
     if rank is None:
         return TAG_NO_STUDY
     if rank <= RANK_TOP20:
@@ -307,7 +321,10 @@ def _ability_tag(features: Mapping[str, Any]) -> str:
 
 
 def make_tags(features: Mapping[str, Any]) -> list[str]:
-    """合成三标签：[学业档位, 兴趣方向, 能力短板]；空数据返回 ["数据不足"]。"""
+    """合成三标签 [学业档位, 兴趣方向, 能力短板]；空数据返回 ["数据不足"]。
+
+    极端退步（gpa_trend <= -30）时**追加**第 4 个标签，原三标签的构成与顺序不动。
+    """
     if not features.get("has_data"):
         return [TAG_NO_DATA]
     direction = features.get("interest", {}).get("top_direction")
@@ -316,7 +333,10 @@ def make_tags(features: Mapping[str, Any]) -> list[str]:
         direction_tag = f"偏好{direction}{suffix}"
     else:
         direction_tag = TAG_NO_DIRECTION
-    return [_study_tag(features), direction_tag, _ability_tag(features)]
+    tags = [_study_tag(features), direction_tag, _ability_tag(features)]
+    if features.get("study", {}).get("extreme_decline"):
+        tags.append(TAG_EXTREME_DECLINE)
+    return tags
 
 
 # ----------------------------------------------------------------
@@ -325,23 +345,25 @@ def make_tags(features: Mapping[str, Any]) -> list[str]:
 def to_feature_row(features: Mapping[str, Any]) -> dict[str, Any]:
     """把画像特征转成 student_feature 表的一行（键与 store.write_student_feature 对齐）。
 
-    library_activity 列在 DuckDB 里是 INTEGER，而特征值口径是 0-1，
-    故按百分制写入（0.42 → 42），回读时除以 100 即可还原到 0.01 精度。
+    v1.1 起 library_activity 列改为 DECIMAL(5,4)，直接写 0-1 原值，不再 ×100 折中；
+    原始次数落在 library_visit_cnt（INTEGER）列。两个 rank 口径分列写入。
     """
     study = features.get("study", {})
     behavior = features.get("behavior", {})
     interest = features.get("interest", {})
     ability = features.get("ability", {})
-    library = behavior.get("library_activity")
     return {
         "student_no": features.get("student_no", ""),
         "term": features.get("term", ""),
         "gpa": study.get("gpa"),
         "gpa_trend": study.get("gpa_trend"),
+        "extreme_decline": study.get("extreme_decline"),
         "fail_count": study.get("fail_count"),
-        "rank_pct": study.get("rank_pct"),
+        "class_rank_pct": study.get("class_rank_pct"),
+        "major_rank_pct": study.get("major_rank_pct"),
         "attendance_rate": behavior.get("attendance_rate"),
-        "library_activity": None if library is None else int(round(library * 100)),
+        "library_visit_cnt": behavior.get("library_visit_cnt"),
+        "library_activity": behavior.get("library_activity"),
         "consumption_regularity": behavior.get("consumption_regularity"),
         "course_pref": dict(interest.get("course_pref") or {}),
         "job_view_cnt": interest.get("job_view_cnt"),
@@ -385,15 +407,16 @@ def _query(sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
 
 
 def _term_aggregate(tenant_id: int, term: str) -> list[dict[str, Any]]:
-    """取该租户某学期的学生均分、挂科数与所属专业。"""
+    """取该租户某学期的学生均分、挂科数与所属专业、班级。"""
     sql = (
         "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
+        "       s.class_name AS class_name, "
         "       AVG(sc.score) AS gpa, "
         "       SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_count "
         "FROM student s "
         "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
         "WHERE s.tenant_id = %s "
-        "GROUP BY s.student_no, s.name, s.major"
+        "GROUP BY s.student_no, s.name, s.major, s.class_name"
     )
     return _query(sql, (term, tenant_id))
 
@@ -422,10 +445,13 @@ def fetch_student_raw(tenant_id: int, term: str) -> list[dict[str, Any]]:
             for r in _term_aggregate(tenant_id, prev_term)
         }
 
-    # 专业内百分位：0=专业第一，1=专业末位
-    rank_pct = compute_rank_pct(
-        {str(r["student_no"]): float(r["gpa"]) for r in cur},
-        {str(r["student_no"]): str(r["major"]) for r in cur},
+    # 两种分组口径：班级（教师端看板用）/ 专业（画像打标签用）
+    gpa_of = {str(r["student_no"]): float(r["gpa"]) for r in cur}
+    major_rank_pct = compute_rank_pct(
+        gpa_of, {str(r["student_no"]): str(r["major"]) for r in cur},
+    )
+    class_rank_pct = compute_rank_pct(
+        gpa_of, {str(r["student_no"]): str(r["class_name"]) for r in cur},
     )
 
     att_sql = (
@@ -457,7 +483,8 @@ def fetch_student_raw(tenant_id: int, term: str) -> list[dict[str, Any]]:
             "gpa": gpa,
             "gpa_trend": round(gpa - prev, 2) if prev is not None else None,
             "fail_count": int(r["fail_count"] or 0),
-            "rank_pct": rank_pct.get(sno),
+            "major_rank_pct": major_rank_pct.get(sno),
+            "class_rank_pct": class_rank_pct.get(sno),
             "attendance_rate": attendance.get(sno),
         })
     return rows

@@ -76,7 +76,7 @@ def test_direction_dictionary_covers_ten():
         ("会计专员（核算）", "财务"),
         ("电商运营专员", "运营"),
         ("产品经理助理", "产品"),
-        ("司机随车配送员", "其他"),
+        ("司机随车配送员", "物流"),  # 词典 v2026.10 起新增「物流」方向
     ],
 )
 def test_classify_direction(title, expected):
@@ -132,9 +132,9 @@ def test_job_view_counts_and_pref(monkeypatch):
         {"student_no": "S1", "title": "Java 后端开发"},
         {"student_no": "S1", "title": "Java 后端开发"},
         {"student_no": "S1", "title": "数据分析师"},
-        {"student_no": "S1", "title": "司机"},
+        {"student_no": "S1", "title": "司机"},  # 词典 v2026.10 起归「物流」
     ])
-    assert bpr.load_job_view_pref(TENANT, TERM) == {"S1": {"后端": 2, "数据": 1, "其他": 1}}
+    assert bpr.load_job_view_pref(TENANT, TERM) == {"S1": {"后端": 2, "数据": 1, "物流": 1}}
 
 
 def test_assemble_rows_missing_source_omits_key(monkeypatch):
@@ -142,7 +142,7 @@ def test_assemble_rows_missing_source_omits_key(monkeypatch):
     # S1 全量数据 / S2 有证书但无项目、无考勤 / S3 新源表一律无记录
     monkeypatch.setattr(bpr, "load_study_base", lambda t, term: [
         {"student_no": s, "name": n, "term": term, "gpa": g, "gpa_trend": tr,
-         "fail_count": f, "rank_pct": r, "attendance_rate": a}
+         "fail_count": f, "major_rank_pct": r, "attendance_rate": a}
         for s, n, g, tr, f, r, a in (
             ("S1", "甲", 80.0, 2.0, 0, 0.10, 0.95),
             ("S2", "乙", 70.0, -5.0, 1, 0.50, None),
@@ -288,7 +288,11 @@ def test_end_to_end_batch_build_idempotent(real_rows, tmp_path):
         con.close()
     assert count == 60
     tags = json.loads(saved_tags)
-    assert len(tags) == 3 and tags != ["数据不足"]
+    # 三标签 +（极端退步时追加的）第 4 个「学业急剧下滑」
+    assert tags != ["数据不足"]
+    assert len(tags) in (3, 4)
+    if len(tags) == 4:
+        assert tags[3] == "学业急剧下滑"
 
 
 @requires_mysql

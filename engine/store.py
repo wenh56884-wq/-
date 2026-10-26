@@ -61,8 +61,9 @@ class DuckDBStore(Store):
     def write_student_feature(self, feature: dict[str, Any]) -> int:
         """写入单条学生特征记录（upsert 语义）。"""
         cols = [
-            "student_no", "term", "gpa", "gpa_trend", "fail_count",
-            "rank_pct", "attendance_rate", "library_activity",
+            "student_no", "term", "gpa", "gpa_trend", "extreme_decline", "fail_count",
+            "class_rank_pct", "major_rank_pct", "attendance_rate",
+            "library_visit_cnt", "library_activity",
             "consumption_regularity", "course_pref", "job_view_cnt",
             "job_favorite_cnt", "cert_count", "contest_count",
             "project_cnt", "tags", "calc_version",
@@ -87,8 +88,9 @@ class DuckDBStore(Store):
     def read_student_feature(self, student_no: str, term: str) -> dict[str, Any] | None:
         """读取单条学生特征记录。"""
         sql = (
-            "SELECT student_no, term, gpa, gpa_trend, fail_count, "
-            "rank_pct, attendance_rate, library_activity, "
+            "SELECT student_no, term, gpa, gpa_trend, extreme_decline, fail_count, "
+            "class_rank_pct, major_rank_pct, attendance_rate, "
+            "library_visit_cnt, library_activity, "
             "consumption_regularity, course_pref, job_view_cnt, "
             "job_favorite_cnt, cert_count, contest_count, "
             "project_cnt, tags, calc_version, updated_at "
@@ -99,8 +101,9 @@ class DuckDBStore(Store):
         if row is None:
             return None
         cols = [
-            "student_no", "term", "gpa", "gpa_trend", "fail_count",
-            "rank_pct", "attendance_rate", "library_activity",
+            "student_no", "term", "gpa", "gpa_trend", "extreme_decline", "fail_count",
+            "class_rank_pct", "major_rank_pct", "attendance_rate",
+            "library_visit_cnt", "library_activity",
             "consumption_regularity", "course_pref", "job_view_cnt",
             "job_favorite_cnt", "cert_count", "contest_count",
             "project_cnt", "tags", "calc_version", "updated_at",

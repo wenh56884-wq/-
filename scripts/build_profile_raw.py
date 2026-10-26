@@ -2,7 +2,8 @@
 # 职责：查齐「学业+出勤」与 7 类新源数据 → 组装完整 raw rows → 交给 engine.profile.batch_build
 # 依赖：pymysql / app.config / engine.profile（只调用，不修改引擎）
 # 说明：全部 SQL 带 WHERE s.tenant_id = %s；脚本不预归一，library_activity 由 build_features 从次数归一
-# 口径：gpa_trend = 本期 − 上期（正数=进步）；rank_pct 按专业分组（0=第一）；缺失即不写键
+# 口径：gpa_trend = 本期 − 上期（正数=进步）；major/class_rank_pct 分别按专业/班级分组（0=第一）；
+#      缺失即不写键；兴趣方向词典统一读 rules\direction_keywords.json（与 seed_elective.py 共用一份）
 
 from __future__ import annotations
 
@@ -35,22 +36,21 @@ FEATURE_KEYS: tuple[str, ...] = (
 _ACTIVITY_KEYS = {"cert": "cert_count", "contest": "contest_count", "project": "project_cnt"}
 
 # ----------------------------------------------------------------
-# 兴趣方向词典（顺序敏感：先匹配者优先）
-# 覆盖要求的数据/算法/后端/前端/测试/运维/金融/财务/运营/产品，匹配不上归「其他」
+# 兴趣方向词典：统一读 rules\direction_keywords.json，与 scripts\seed_elective.py 共用一份
+# 匹配顺序敏感：数组越靠前优先级越高，先匹配者胜；匹配不上归 fallback
 # ----------------------------------------------------------------
-DIRECTION_OTHER = "其他"
-DIRECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("算法", ("机器学习", "深度学习", "算法", "人工智能", "大模型", "视觉", "图像", "nlp", "自然语言处理")),
-    ("数据", ("数据分析", "大数据分析", "大数据", "数据仓库", "etl", "bi", "商业分析", "数据统计", "数据")),
-    ("前端", ("前端", "web", "h5", "小程序", "vue", "react", "安卓", "ios", "ui设计")),
-    ("后端", ("后端", "服务端", "java", "c++", "go开发", "php", ".net", "python", "全栈", "开发")),
-    ("测试", ("测试", "qa", "品质")),
-    ("运维", ("运维", "devops", "sre", "实施工程师", "网络管理", "系统工程师", "技术支持")),
-    ("产品", ("产品经理", "产品助理", "需求分析", "产品")),
-    ("运营", ("运营", "电商", "直播", "推广", "社群", "策划", "内容", "市场", "招商")),
-    ("金融", ("银行", "证券", "投资", "金融", "风控", "信贷", "基金", "保险", "理财", "柜员", "信托", "清算")),
-    ("财务", ("会计", "财务", "审计", "税务", "出纳", "核算", "预算", "报税")),
-)
+_DICT_PATH = _ROOT / "rules" / "direction_keywords.json"
+
+
+def _load_direction_dict() -> tuple[str, tuple[tuple[str, tuple[str, ...]], ...]]:
+    r"""从 rules\direction_keywords.json 加载 (fallback, 顺序敏感的方向词典)。"""
+    data = json.loads(_DICT_PATH.read_text(encoding="utf-8"))
+    directions = tuple((str(d["name"]), tuple(str(k) for k in d["keywords"]))
+                       for d in data["directions"])
+    return str(data.get("fallback", "其他")), directions
+
+
+DIRECTION_OTHER, DIRECTIONS = _load_direction_dict()
 
 
 def classify_direction(title: str) -> str:
@@ -96,16 +96,18 @@ def load_study_base(tenant_id: int, term: str) -> list[dict[str, Any]]:
     """学业四项 + 出勤（口径与 engine/profile.py: fetch_student_raw 一致）。
 
     每行：student_no / name / term / gpa / gpa_trend / fail_count /
-    rank_pct（专业分组，0=第一） / attendance_rate（无考勤记 None）。
+    major_rank_pct（专业分组，0=第一）/ class_rank_pct（班级分组） /
+    attendance_rate（无考勤记 None）。
     """
     cur_sql = (
         "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
+        "       s.class_name AS class_name, "
         "       AVG(sc.score) AS gpa, "
         "       SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_count "
         "FROM student s "
         "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
         "WHERE s.tenant_id = %s "
-        "GROUP BY s.student_no, s.name, s.major"
+        "GROUP BY s.student_no, s.name, s.major, s.class_name"
     )
     cur_rows = _query(cur_sql, (term, tenant_id))
 
@@ -131,8 +133,10 @@ def load_study_base(tenant_id: int, term: str) -> list[dict[str, Any]]:
                     for r in _query(prev_sql, (prev_term, tenant_id))}
 
     gpa_of = {str(r["student_no"]): float(r["gpa"]) for r in cur_rows}
-    group_of = {str(r["student_no"]): str(r["major"]) for r in cur_rows}
-    rank_pct = compute_rank_pct(gpa_of, group_of)
+    major_rank_pct = compute_rank_pct(
+        gpa_of, {str(r["student_no"]): str(r["major"]) for r in cur_rows})
+    class_rank_pct = compute_rank_pct(
+        gpa_of, {str(r["student_no"]): str(r["class_name"]) for r in cur_rows})
 
     att_sql = (
         "SELECT s.student_no AS student_no, "
@@ -163,11 +167,32 @@ def load_study_base(tenant_id: int, term: str) -> list[dict[str, Any]]:
             "gpa": gpa,
             "gpa_trend": round(gpa - prev, 2) if prev is not None else None,
             "fail_count": int(r["fail_count"] or 0),
-            "rank_pct": rank_pct.get(sno),
+            "major_rank_pct": major_rank_pct.get(sno),
+            "class_rank_pct": class_rank_pct.get(sno),
             # 口径字典：无考勤记 None，不得按 1.0 处理
             "attendance_rate": attendance.get(sno),
         })
     return rows
+
+
+def load_course_pref(tenant_id: int, term: str) -> dict[str, dict[str, int]]:
+    """选修方向偏好：elective_selection → {student_no: {方向: 门次}}。
+
+    方向已在表内 direction 列标注，此处只做聚合计数。
+    """
+    sql = (
+        "SELECT s.student_no AS student_no, e.direction AS direction, "
+        "       COUNT(1) AS cnt "
+        "FROM elective_selection e "
+        "JOIN student s ON s.id = e.student_id AND s.tenant_id = %s "
+        "WHERE e.term = %s "
+        "GROUP BY s.student_no, e.direction"
+    )
+    pref: dict[str, dict[str, int]] = {}
+    for r in _query(sql, (tenant_id, term)):
+        sno = str(r["student_no"])
+        pref.setdefault(sno, {})[str(r["direction"])] = int(r["cnt"])
+    return pref
 
 
 def load_library(tenant_id: int, term: str) -> dict[str, int]:
@@ -265,9 +290,14 @@ def assemble_rows(tenant_id: int, term: str) -> list[dict[str, Any]]:
     activity = load_activity_counts(tenant_id, term)
     views, favorites = load_job_view_counts(tenant_id, term)
     prefs = load_job_view_pref(tenant_id, term)
+    course_prefs = load_course_pref(tenant_id, term)
 
     for row in rows:
         sno = row["student_no"]
+        # 缺失语义：有选修记录才写 course_pref，没有就不写（禁止补 {}）
+        if sno in course_prefs:
+            row["course_pref"] = dict(sorted(course_prefs[sno].items(),
+                                             key=lambda kv: (-kv[1], kv[0])))
         if sno in library:
             row["library_visit_cnt"] = library[sno]
         if sno in consumption:
@@ -312,6 +342,14 @@ def main(argv: list[str] | None = None) -> int:
     print("7 类新特征非空率：")
     for key in FEATURE_KEYS:
         print(f"  {key:<24} {coverage[key] * 100:6.2f}%")
+    if rows:
+        hit = sum(1 for r in rows if r.get("course_pref"))
+        print(f"  {'course_pref（选修方向）':<24} {hit / len(rows) * 100:6.2f}%"
+              f"   有选修的人数 {hit}/{len(rows)}")
+    if rows and not any(r.get("course_pref") for r in rows):
+        print("  选修方向行校验失败：course_pref 全为空！")
+        print("  请按顺序执行：mysql -u root -p qihang < db\\elective_tables.sql")
+        print("               python scripts\\seed_elective.py --term \"2025-2026-1,2025-2026-2\"")
     if args.dry_run:
         print("[dry-run] 未写库，样例首行：")
         print(json.dumps(rows[0], ensure_ascii=False, indent=2) if rows else "  （无数据）")

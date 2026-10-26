@@ -36,7 +36,7 @@ _FULL_RAW: dict = {
     "gpa": 88.0,
     "gpa_trend": 3.0,
     "fail_count": 0,
-    "rank_pct": 0.15,
+    "major_rank_pct": 0.15,
     "attendance_rate": 0.95,
     "library_activity": 0.60,
     "consumption_regularity": 0.80,
@@ -87,7 +87,7 @@ def test_empty_raw_falls_back():
     assert features["has_data"] is False
     assert features["tags"] == ["数据不足"]
     assert make_tags(features) == ["数据不足"]
-    assert features["calc_version"] == CALC_VERSION == "v1.0"
+    assert features["calc_version"] == CALC_VERSION == "v1.1"
     for dim in ("study", "behavior", "interest", "ability"):
         assert features[dim]["score"] is None
         assert features["scores"][dim] is None
@@ -98,7 +98,8 @@ def test_three_tags_are_all_correct():
     """前20% + 算法岗偏好 + 无项目经历 → 三标签全对，四维分落在预期值上。"""
     features = build_features(_FULL_RAW)
     assert features["tags"] == ["专业前20%", "偏好算法岗", "缺乏项目经历"]
-    assert features["study"]["score"] == 0.837      # 0.4*0.88+0.2*0.575+0.2*1+0.2*0.85
+    # v1.1：TREND_MIN 由 -20 放宽到 -40 → gpa_trend=3 的归一值 0.575 → 0.7167
+    assert features["study"]["score"] == 0.8653      # 0.4*0.88+0.2*0.7167+0.2*1+0.2*0.85
     assert features["behavior"]["score"] == 0.815   # 0.5*0.95+0.3*0.6+0.2*0.8
     assert features["interest"]["score"] == 0.5967  # 0.4*(4/6)+0.3*0.6+0.3*0.5
     assert features["ability"]["score"] == 0.35     # 0.4*0+0.3*(2/3)+0.3*0.5
@@ -116,9 +117,11 @@ def test_batch_build_is_idempotent(tmp_path):
 
     saved = store.read_student_feature("RJ2022001", TERM)
     assert saved is not None
-    assert saved["calc_version"] == "v1.0"
+    assert saved["calc_version"] == "v1.1"
     assert saved["tags"] == ["专业前20%", "偏好算法岗", "缺乏项目经历"]
-    assert int(saved["library_activity"]) == 60  # 0.60 按百分制写入
+    # v1.1：library_activity 列改 DECIMAL(5,4)，直接写 0-1 原值（不再 ×100）
+    assert float(saved["library_activity"]) == pytest.approx(0.6)
+    assert float(saved["major_rank_pct"]) == pytest.approx(0.15)
     assert float(saved["gpa"]) == 88.0
     assert saved["course_pref"] == {"算法": 3, "前端": 1}
     # 项目数为 1 的另一行应得到「能力履历完整」
@@ -127,15 +130,15 @@ def test_batch_build_is_idempotent(tmp_path):
     assert other["tags"][2] == "能力履历完整"
 
 
-def test_rank_pct_boundaries():
-    """边界值：rank_pct=0 为前20%，=1 为后50%，门槛沿线取值也要正确。"""
-    base = {k: v for k, v in _FULL_RAW.items() if k != "rank_pct"}
-    assert build_features({**base, "rank_pct": 0.0})["tags"][0] == "专业前20%"
-    assert build_features({**base, "rank_pct": 1.0})["tags"][0] == "专业后50%"
-    assert build_features({**base, "rank_pct": 0.20})["tags"][0] == "专业前20%"
-    assert build_features({**base, "rank_pct": 0.21})["tags"][0] == "专业前50%"
-    assert build_features({**base, "rank_pct": 0.50})["tags"][0] == "专业前50%"
-    assert build_features({**base, "rank_pct": 0.51})["tags"][0] == "专业后50%"
+def test_major_rank_pct_boundaries():
+    """边界值：major_rank_pct=0 为前20%，=1 为后50%，门槛沿线取值也要正确。"""
+    base = {k: v for k, v in _FULL_RAW.items() if k != "major_rank_pct"}
+    assert build_features({**base, "major_rank_pct": 0.0})["tags"][0] == "专业前20%"
+    assert build_features({**base, "major_rank_pct": 1.0})["tags"][0] == "专业后50%"
+    assert build_features({**base, "major_rank_pct": 0.20})["tags"][0] == "专业前20%"
+    assert build_features({**base, "major_rank_pct": 0.21})["tags"][0] == "专业前50%"
+    assert build_features({**base, "major_rank_pct": 0.50})["tags"][0] == "专业前50%"
+    assert build_features({**base, "major_rank_pct": 0.51})["tags"][0] == "专业后50%"
 
 
 def test_missing_fields_do_not_fake_zero():
@@ -161,9 +164,61 @@ def test_normalization_is_clamped_and_deterministic():
     assert first["behavior"]["norm"]["attendance_rate"] == 1.0
 
     row = to_feature_row(build_features({**_FULL_RAW, "library_activity": 0.42}))
-    assert row["library_activity"] == 42
+    # v1.1 起 DECIMAL(5,4) 直存 0-1 原值：写 0.42 读回 0.42（指标口径字典第 4 条）
+    assert float(row["library_activity"]) == pytest.approx(0.42, abs=1e-4)
     assert row["term"] == TERM
-    assert row["calc_version"] == "v1.0"
+    assert row["calc_version"] == "v1.1"
+
+
+def test_library_activity_roundtrip(tmp_path):
+    """落库往返：写 0.42 → DuckDB → 读回仍是 0.42（误差 < 1e-4，字典第 4 节第 5 条）。"""
+    store, _ = _tmp_store(tmp_path)
+    row = to_feature_row({**build_features({**_FULL_RAW, "library_activity": 0.42}),
+                          "student_no": "LIB001", "term": TERM})
+    store.write_student_feature(row)
+    saved = store.read_student_feature("LIB001", TERM)
+    assert saved is not None
+    assert abs(float(saved["library_activity"]) - 0.42) < 1e-4
+    # 次数同步落 INTEGER 列
+    raw_row = to_feature_row({**build_features({**_FULL_RAW, "library_visit_cnt": 36}),
+                              "student_no": "LIB002", "term": TERM})
+    store.write_student_feature(raw_row)
+    saved2 = store.read_student_feature("LIB002", TERM)
+    assert int(saved2["library_visit_cnt"]) == 36
+    assert abs(float(saved2["library_activity"]) - 0.6) < 1e-4  # min(1, 36/60)
+
+
+def test_extreme_decline_tag():
+    """极端退步：gpa_trend <= -30 打 extreme_decline，标签在原 3 个之后追加第 4 个。"""
+    base = {k: v for k, v in _FULL_RAW.items() if k != "gpa_trend"}
+    features = build_features({**base, "gpa_trend": -35.0})
+    assert features["study"]["extreme_decline"] is True
+    # TREND_MIN=-40 → (-35 - (-40)) / (20 - (-40)) = 5/60
+    assert features["study"]["norm"]["gpa_trend"] == pytest.approx(0.0833, abs=1e-4)
+    assert features["study"]["gpa_trend"] == -35.0  # 原值保留，不再被 clamp 吞掉
+    assert features["tags"] == ["专业前20%", "偏好算法岗", "缺乏项目经历", "学业急剧下滑"]
+    # 行输出落 extreme_decline 列
+    assert to_feature_row(features)["extreme_decline"] is True
+
+    # 边界：-30 算极端，-29.99 不算
+    assert build_features({**base, "gpa_trend": -30.0})["study"]["extreme_decline"] is True
+    normal = build_features({**base, "gpa_trend": -29.99})
+    assert normal["study"]["extreme_decline"] is False
+    assert len(normal["tags"]) == 3
+
+
+def test_class_and_major_rank_are_independent():
+    """班级口径与专业口径分列：班级第一可以是专业中游，二者不得互相覆盖。"""
+    base = {k: v for k, v in _FULL_RAW.items() if k != "major_rank_pct"}
+    features = build_features({**base, "major_rank_pct": 0.45, "class_rank_pct": 0.0})
+    assert features["study"]["class_rank_pct"] == 0.0
+    assert features["study"]["major_rank_pct"] == 0.45
+    # 学业标签只认专业口径
+    assert features["tags"][0] == "专业前50%"
+
+    row = to_feature_row(features)
+    assert abs(float(row["class_rank_pct"]) - 0.0) < 1e-4
+    assert abs(float(row["major_rank_pct"]) - 0.45) < 1e-4
 
 
 def test_direction_tie_and_empty():

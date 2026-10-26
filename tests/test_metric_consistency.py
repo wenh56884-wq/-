@@ -96,17 +96,15 @@ def test_class_rank_and_major_rank_are_legally_different():
     assert all(0.0 <= v <= 1.0 for v in rank_major.values())
 
     # 两种口径各自都成立，画像标签只能读专业口径
-    tag = profile.build_features({"gpa": gpa_of["S3"], "rank_pct": rank_major["S3"]})["tags"][0]
+    tag = profile.build_features(
+        {"gpa": gpa_of["S3"], "major_rank_pct": rank_major["S3"]})["tags"][0]
     assert tag == "专业前50%", f"S3 专业口径标签应为「专业前50%」，实际 {tag}；违背字典第 1 节第 1.1 条第 2 点"
 
 
 # ----------------------------------------------------------------
 # 4. library_activity 存储约定（字典 §4：DECIMAL(5,4) 存 0-1）
+#    P4-3B-1 已还债：student_feature 该列改 DECIMAL(5,4)，不再 ×100
 # ----------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="待 P4-3B-1 修复：library_activity 仍按 ×100 写 INTEGER，字典第 4 节要求 DECIMAL(5,4) 直接存 0-1",
-    strict=False,
-)
 def test_library_activity_stored_as_zero_to_one():
     """to_feature_row 写 0.42，读回必须还是 0.42（误差 < 1e-4）。
 
@@ -156,11 +154,8 @@ def test_missing_attendance_reports_coverage_and_no_green_level():
 
 # ----------------------------------------------------------------
 # 6. 极端退步（字典 §2：TREND_MIN=-40 + extreme_decline 标签）
+#    P4-3B-1 已还债：TREND_MIN 放宽到 -40 并输出 extreme_decline
 # ----------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="待 P4-3B-1 放宽 TREND_MIN 并新增 extreme_decline",
-    strict=False,
-)
 def test_extreme_decline_is_flagged_and_tagged():
     """gpa_trend=-35 时 study["extreme_decline"] is True，且标签含「学业急剧下滑」。
 
@@ -170,7 +165,7 @@ def test_extreme_decline_is_flagged_and_tagged():
 
     features = profile.build_features({
         "student_no": "S006", "term": TERM,
-        "gpa": 45.0, "gpa_trend": -35.0, "fail_count": 3, "rank_pct": 0.9,
+        "gpa": 45.0, "gpa_trend": -35.0, "fail_count": 3, "major_rank_pct": 0.9,
     })
     assert features["study"].get("extreme_decline") is True, (
         f"extreme_decline 应为 True，实际 {features['study'].get('extreme_decline')}；违背字典第 2 节"
@@ -182,17 +177,15 @@ def test_extreme_decline_is_flagged_and_tagged():
 
 # ----------------------------------------------------------------
 # 7. rank 拆列（字典 §4：class_rank_pct / major_rank_pct 分列存储，不许共用一个 rank_pct）
+#    P4-3B-1 已还债：student_feature 两口径各占一列
 # ----------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="待 P4-3B-1 修复：student_feature 仍只有一个 rank_pct，班级/专业两口径共用一列",
-    strict=False,
-)
 def test_feature_row_has_split_rank_columns():
     """落库行必须同时给出专业口径与班级口径两列。
 
     违背了 docs\\指标口径字典.md 第 4 节「class_rank_pct 新增，major_rank_pct 由 profile 写入」。
     """
-    row = profile.to_feature_row(profile.build_features({"gpa": 80.0, "rank_pct": 0.3}))
+    row = profile.to_feature_row(
+        profile.build_features({"gpa": 80.0, "major_rank_pct": 0.3, "class_rank_pct": 0.1}))
 
     assert "major_rank_pct" in row, f"缺 major_rank_pct，现有列：{sorted(row)}；违背字典第 4 节"
     assert "class_rank_pct" in row, f"缺 class_rank_pct，现有列：{sorted(row)}；违背字典第 4 节"
@@ -201,11 +194,8 @@ def test_feature_row_has_split_rank_columns():
 
 # ----------------------------------------------------------------
 # 8. course_pref 真的被装配（字典 §1：兴趣方向不能只靠浏览记录）
+#    P4-3B-1 已还债：load_course_pref 查 elective_selection 并写进 raw rows
 # ----------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="待 P4-3B-1 修复：build_profile_raw.py 未装配 course_pref（elective_selection 已建表、未接管线）",
-    strict=False,
-)
 def test_course_pref_is_assembled_by_build_script():
     """管线必须真的去查选修方向；函数支持不算完成。
 

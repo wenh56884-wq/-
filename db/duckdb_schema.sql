@@ -11,11 +11,14 @@ CREATE TABLE IF NOT EXISTS student_feature (
     student_no            VARCHAR(40)   NOT NULL,
     term                  VARCHAR(20)   NOT NULL,
     gpa                   DECIMAL(5,2),
-    gpa_trend             DECIMAL(5,2),
+    gpa_trend             DECIMAL(5,2),  -- 本学期 − 上学期：正数 = 进步
+    extreme_decline       BOOLEAN,       -- gpa_trend <= -30：界面据此加红色警示
     fail_count            INTEGER,
-    rank_pct              DECIMAL(5,4),
+    class_rank_pct        DECIMAL(5,4),  -- 按 class_name 分组：0=班级第一，1=班级末位
+    major_rank_pct        DECIMAL(5,4),  -- 按 major 分组：0=专业第一，1=专业末位
     attendance_rate       DECIMAL(5,4),
-    library_activity      INTEGER,
+    library_visit_cnt     INTEGER,       -- 原始到馆/借阅次数
+    library_activity      DECIMAL(5,4),  -- 0-1 归一值 = min(1, cnt/60)
     consumption_regularity DECIMAL(5,4),
     course_pref           JSON,
     job_view_cnt          INTEGER,
