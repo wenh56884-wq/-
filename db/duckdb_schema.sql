@@ -9,7 +9,7 @@
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS student_feature (
     student_no            VARCHAR(40)   NOT NULL,
-    term                  VARCHAR(10)   NOT NULL,
+    term                  VARCHAR(20)   NOT NULL,
     gpa                   DECIMAL(5,2),
     gpa_trend             DECIMAL(5,2),
     fail_count            INTEGER,

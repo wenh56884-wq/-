@@ -122,3 +122,5 @@ D:\qihang\
 - P2：落地 `db\mysql_schema.sql`（9 表 + 外键索引 + 种子租户）与 `db\duckdb_schema.sql`（3 表）。
 - P2：实现 `engine\store.py`——Store 抽象接口 + DuckDBStore 实现 + ClickHouseStore 留空。
 - P2：实现 `scripts\init_db.py`——幂等执行两份 schema，逐表打印结果。
+- P2-续：实现 `scripts\seed_mock.py`——500 名学生模拟数据（校情自检 + 风险埋点 + hidden_risk.csv）。
+- P2-续：修正 `db\mysql_schema.sql` / `db\duckdb_schema.sql` 的 `term` 列为 VARCHAR(20)。

@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS score (
     id          BIGINT        NOT NULL AUTO_INCREMENT,
     student_id  BIGINT        NOT NULL,
     course_id   BIGINT        NOT NULL,
-    term        VARCHAR(10)   NOT NULL,
+    term        VARCHAR(20)   NOT NULL,
     score       DECIMAL(5,2)  NOT NULL,
     is_retake   TINYINT(1)    NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS score (
 CREATE TABLE IF NOT EXISTS attendance (
     id                BIGINT        NOT NULL AUTO_INCREMENT,
     student_id        BIGINT        NOT NULL,
-    term              VARCHAR(10)   NOT NULL,
+    term              VARCHAR(20)   NOT NULL,
     total_sessions    INT           NOT NULL,
     absent_sessions   INT           NOT NULL,
     attendance_rate   DECIMAL(5,4)  NOT NULL,
