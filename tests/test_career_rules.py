@@ -289,3 +289,31 @@ def test_rule_library_is_valid(name):
     for m in data["weekly_metrics"]:
         assert m["方向"] in (cr.DIR_UP, cr.DIR_DOWN)
         assert m["达标线"] > 0
+
+
+# ------------------------------------------------------------
+# 九、「要求」字段必须是中文人话
+# ------------------------------------------------------------
+@pytest.mark.parametrize(
+    "op,value,expect",
+    [
+        ("contains", "党员", "包含「党员」"),
+        ("in", ["本科", "硕士"], "属于「本科、硕士」"),
+        (">=", 425, "不低于 425"),
+        ("<=", 0, "不超过 0"),
+        ("==", "应届", "等于 应届"),
+    ],
+)
+def test_requirement_text_is_human_readable(op, value, expect):
+    """前端与模型都会读到「要求」，不能出现 contains / >= 这类内部运算符。"""
+    row = cr.check_hard_gates([{"key": "x", "label": "测试项", "op": op, "value": value}], {})[0]
+    assert row["要求"] == expect, f"实际 {row['要求']}"
+    for symbol in ("contains", ">=", "<=", " in ", "{", "["):
+        assert symbol not in row["要求"], f"要求里不该出现内部符号 {symbol}"
+
+
+def test_gap_text_never_leaks_operator():
+    """差距文案同样不能漏运算符——它是直接展示给学生的那句话。"""
+    gates = [{"key": "fail_count", "label": "无挂科记录", "op": "<=", "value": 0}]
+    gaps = cr.build_gaps(cr.check_hard_gates(gates, {"fail_count": 2}))
+    assert gaps == ["无挂科记录未达标（要求 不超过 0，超 2）"], gaps

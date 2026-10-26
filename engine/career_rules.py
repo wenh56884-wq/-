@@ -113,6 +113,40 @@ class Gate:
         )
 
 
+_OP_WORDS = {
+    ">=": "不低于", "≥": "不低于",
+    "<=": "不超过", "≤": "不超过",
+    ">": "高于", "＞": "高于",
+    "<": "低于", "＜": "低于",
+    "==": "等于", "=": "等于",
+    "in": "属于", "contains": "包含",
+}
+
+
+def _fmt_value(value: Any) -> str:
+    """把门槛值渲染成人话：列表用顿号连接，数字去掉多余小数。"""
+    if isinstance(value, (list, tuple, set)):
+        return "、".join(_fmt_value(v) for v in value)
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    num = _num(value)
+    if num is not None and not isinstance(value, str):
+        return f"{num:g}"
+    return str(value)
+
+
+def _describe_requirement(op: str, value: Any) -> str:
+    """把 "contains 党员" 这类内部口径翻成中文，避免前端直接吐出运算符。
+
+    模型和前端都会读到这个字段，出现英文运算符会显得像漏了实现的占位符。
+    """
+    word = _OP_WORDS.get(str(op))
+    text = _fmt_value(value)
+    if not word:
+        return text
+    return f"{word} {text}" if word not in {"属于", "包含"} else f"{word}「{text}」"
+
+
 def _compare(actual: Any, op: str, target: Any) -> bool | None:
     """返回 True/False；类型不匹配返回 None（视为无法判定）。"""
     if op == "in":
@@ -167,7 +201,7 @@ def check_hard_gates(
         row: dict[str, Any] = {
             "key": gate.key,
             "项目": gate.label or gate.key,
-            "要求": f"{gate.op} {gate.value}",
+            "要求": _describe_requirement(gate.op, gate.value),
             "当前状态": status,
             "hard": gate.hard,
         }

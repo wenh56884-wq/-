@@ -39,6 +39,7 @@ def connect() -> pymysql.connections.Connection:
         database=s.mysql_db,
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=5,
     )
 
 
@@ -328,8 +329,12 @@ def fetch_active_rule(tenant_id: int, student_id: int) -> dict[str, Any] | None:
         if not row:
             return None
         out = dict(row)
-        for key in ("gates", "phases", "metrics", "calendar", "hard_baseline", "adjustable"):
-            out[key] = _json_load(out.pop(f"{key}_json", None), [] if key != "calendar" else [])
+        # gates/phases/metrics/calendar 在表里是 *_json 列；hard_baseline/adjustable
+        # 是 JSON 类型的同名列（没有 _json 后缀），必须按各自列名解析，不能一起 pop。
+        for key in ("gates", "phases", "metrics", "calendar"):
+            out[key] = _json_load(out.pop(f"{key}_json", None), [])
+        for key in ("hard_baseline", "adjustable"):
+            out[key] = _json_load(out.get(key), [])
         out["created_at"] = _iso(out.get("created_at"))
         return out
     finally:

@@ -89,6 +89,49 @@ def test_weeks_left_uses_engine_not_model():
 # ================================================================
 # 二·补、年级推算（student.grade 是入学年份，不能直接比「大四」）
 # ================================================================
+def test_fetch_active_rule_parses_hard_baseline_and_adjustable(monkeypatch):
+    """hard_baseline / adjustable 是 JSON 同名列（不是 *_json），不能被读成空列表。"""
+    row = {
+        "id": 7,
+        "plan_id": 1,
+        "main_template": "考公",
+        "sub_template": None,
+        "main_weight": 1.0,
+        "gates_json": '[{"key": "degree", "current": "pass"}]',
+        "phases_json": '[{"阶段": "基础"}]',
+        "metrics_json": '[{"指标": "行测刷题量"}]',
+        "calendar_json": "[]",
+        "hard_baseline": '["本科", "应届"]',
+        "adjustable": '["目标城市"]',
+        "engine_version": "career-v1",
+        "created_at": None,
+    }
+
+    class FakeCursor:
+        def execute(self, sql, params=None):
+            self.sql = sql
+
+        def fetchone(self):
+            return row
+
+    class FakeConn:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cx, "connect", lambda: FakeConn())
+    rule = cx.fetch_active_rule(1, 1)
+
+    assert rule is not None
+    assert rule["hard_baseline"] == ["本科", "应届"]
+    assert rule["adjustable"] == ["目标城市"]
+    assert rule["gates"] == [{"key": "degree", "current": "pass"}]
+    assert rule["phases"] == [{"阶段": "基础"}]
+    assert rule["metrics"] == [{"指标": "行测刷题量"}]
+
+
 def test_grade_label_from_enroll_year():
     """入学年份 → 真实年级标签；这是确定性推算，不允许模型参与。"""
     today = date(2026, 10, 26)
