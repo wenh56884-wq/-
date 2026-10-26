@@ -27,6 +27,7 @@ from app.auth import (
     get_current_ctx_payload,
 )
 from app.config import get_settings
+from app.routers import career as career_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
 from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
 
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
+    app.include_router(career_router.router)
 
     @app.middleware("http")
     async def audit_middleware(request: Request, call_next):
