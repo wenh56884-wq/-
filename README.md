@@ -118,3 +118,4 @@ D:\qihang\
 - P1-1：实现 `app\config.py`（pydantic-settings `Settings` 单例）。
 - P1-1：写 `requirements.txt`（依赖锁版本）。
 - P1-1：`docs\目录说明.md` 追加 P1-1 已落地文件清单。
+- P1-2：实现 `agents\llm.py`——DeepSeek 客户端封装（工厂函数 + SYSTEM_RULES + smoke）。
