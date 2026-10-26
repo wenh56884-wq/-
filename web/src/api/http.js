@@ -40,14 +40,15 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-// 响应拦截：401/403 清登录态并跳回 /login，其余错误给中文提示
+// 响应拦截：只有 401（token 失效）才清登录态并回 /login；
+// 403 是“已登录但无权访问该数据”（如跨租户/角色不符），应保留登录态并提示具体原因。
 http.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status
     const detail = error?.response?.data?.detail || error?.message || '请求失败'
-    if (status === 401 || status === 403) {
-      ElMessage.error(status === 403 ? '没有权限访问该数据，请重新登录' : '登录已失效，请重新登录')
+    if (status === 401) {
+      ElMessage.error('登录已失效，请重新登录')
       clearSession()
       router.push('/login')
       return Promise.reject(error)

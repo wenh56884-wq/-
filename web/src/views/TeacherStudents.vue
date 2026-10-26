@@ -265,6 +265,10 @@ function clearFilter() {
   rows.value = []
   detail.value = {}
   activeNo.value = ''
+  overview.value = {}
+  warnings.value = {}
+  gap.value = {}
+  classmates.value = 0
 }
 
 async function loadDetail(studentNo) {

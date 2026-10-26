@@ -132,6 +132,12 @@ def build_ground_truth(tool_result: Any) -> list[float]:
         if number is not None:
             values.append(number)
             return
+        # 字符串叶子里的数字同样要收：reason 归因文案是引擎产物
+        # （如 ["本学期挂科6门"] 这种 list[str] 里的 6），漏收会把合法直引判成编造
+        if isinstance(node, (str, bytes)):
+            for claim in extract_numbers(str(node)):
+                values.append(claim.value)
+            return
         if isinstance(node, Mapping):
             for key, value in node.items():
                 if isinstance(value, (str, bytes)):

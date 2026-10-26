@@ -138,8 +138,8 @@ async function send(text) {
   } catch (err) {
     const status = err?.response?.status
     const detail = err?.response?.data?.detail || err?.message || '请求失败'
-    // 401/403 已由拦截器统一跳登录，这里不再重复提示
-    if (status !== 401 && status !== 403) {
+    // 仅 401 由拦截器统一跳登录；403（无权限/跨租户）应在气泡内展示具体原因
+    if (status !== 401) {
       push('assistant', '这次没能拿到回答。', {
         trace_id: '-',
         term: term.value,
