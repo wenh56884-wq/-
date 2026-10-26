@@ -117,6 +117,15 @@ def test_cold_start_only_uses_major_and_gpa():
     assert result["engine_version"] == RECOMMEND_ENGINE_VERSION
 
 
+def test_stride_sample_edge_cases():
+    """候选池抽样边界：配额 0 返回空（相关岗位已占满配额的场景，曾经除零崩溃）。"""
+    jobs = [{"id": 1}, {"id": 2}, {"id": 3}]
+    assert rec._stride_sample(jobs, 0) == []
+    assert rec._stride_sample([], 5) == []
+    assert rec._stride_sample(jobs, 3) == jobs
+    assert rec._stride_sample(jobs, 2) == [{"id": 1}, {"id": 3}]  # 步长 2 稳定抽样
+
+
 def test_missing_gpa_reports_gap_not_zero():
     """成绩缺失 → gpa_gate 记 0 且写缺口话术，不得按满额算。"""
     score, hit, gap, _delta = gpa_gate_of(None, 66.0)

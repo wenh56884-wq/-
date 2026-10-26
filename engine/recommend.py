@@ -374,6 +374,8 @@ def load_jobs(directions: Sequence[str], limit: int = MAX_CANDIDATES) -> list[di
 def _stride_sample(jobs: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     """确定性抽样：按固定步长抽取，覆盖全表 id 区间。"""
     limit = max(0, int(limit))
+    if limit == 0:
+        return []
     if len(jobs) <= limit:
         return jobs
     stride = math.ceil(len(jobs) / limit)
