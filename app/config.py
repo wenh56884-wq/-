@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     jwt_expire_minutes: int = 120
 
+    # --- 前端静态托管（P10-3）---
+    # 空串 = 纯 API 不托管；填了路径且目录存在时才挂载 web\dist
+    frontend_dist: str = "web/dist"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -49,6 +53,17 @@ class Settings(BaseSettings):
     def mysql_dsn(self) -> str:
         """返回 PyMySQL 连接所需的 dsn 片段（不暴露密码）。"""
         return f"mysql://{self.mysql_user}@{self.mysql_host}:{self.mysql_port}/{self.mysql_db}"
+
+    @property
+    def frontend_dist_obj(self) -> Path | None:
+        """前端构建目录：配置为空或目录不存在时返回 None（不托管静态页）。"""
+        raw = str(self.frontend_dist or "").strip()
+        if not raw:
+            return None
+        path = Path(raw)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        return path if path.is_dir() else None
 
 
 @lru_cache(maxsize=1)

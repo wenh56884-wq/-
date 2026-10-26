@@ -12,7 +12,9 @@ from typing import Any
 import pymysql
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarsHTTPException
 
 from agents.tools import ToolContext
 from app.audit import audit_event
@@ -197,6 +199,18 @@ def create_app() -> FastAPI:
                             "degraded": degraded})
         return ChatOut(answer=answer, trace_id=trace_id, term=body.term,
                        degraded=degraded)
+
+    # --- 静态托管（P10-3）：构建产物存在才挂，已注册路由与 /api 不受影响 ---
+    dist = get_settings().frontend_dist_obj
+    if dist is not None:
+        app.mount("/", StaticFiles(directory=str(dist), html=True), name="frontend")
+
+        @app.exception_handler(StarsHTTPException)
+        async def _spa_fallback(request: Request, exc: StarsHTTPException):
+            """未命中的前端路由（如 /teacher）回落到 index.html，交给 Vue Router 接管。"""
+            if exc.status_code == 404 and not request.url.path.startswith("/api"):
+                return FileResponse(dist / "index.html")
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     return app
 

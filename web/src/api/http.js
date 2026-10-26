@@ -3,9 +3,10 @@ import { ElMessage } from 'element-plus'
 
 import router from '../router'
 
-// axios 实例：统一走 /api 前缀（vite proxy 会 rewrite 到后端根路径）
+// axios 实例：开发态走 /api（Vite proxy rewrite 到后端根路径）；
+// 生产构建由 FastAPI 同源托管，后端路由没有 /api 前缀，故直接走根路径
 const http = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.DEV ? '/api' : '/',
   timeout: 30000
 })
 

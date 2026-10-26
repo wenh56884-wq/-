@@ -13,7 +13,7 @@ param(
 
 $ErrorActionPreference = "Continue"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 $py = Join-Path $root ".venv\Scripts\python.exe"
@@ -47,9 +47,13 @@ function Invoke-Api {
     $params = @{ Uri = $uri; Method = $Method; Headers = $Headers; UseBasicParsing = $true }
     if ($null -ne $Body) {
         $params.ContentType = "application/json"
-        $params.Body = ($Body | ConvertTo-Json -Compress)
+        $params.Body = ([System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Compress)))
     }
-    return Invoke-RestMethod @params
+    # 不用 Invoke-RestMethod：它按 GBK 解 JSON，中文要点会变乱码；这里取字节按 UTF-8 解码
+    $res = Invoke-WebRequest @params
+    $text = [System.Text.Encoding]::UTF8.GetString($res.RawContentStream.ToArray())
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    return ($text | ConvertFrom-Json)
 }
 
 function Invoke-Check {
@@ -72,7 +76,7 @@ function Invoke-Check {
 }
 
 Write-Host "==============================================================" -ForegroundColor Cyan
-Write-Host " 启航系统 · 端到端冒烟（10 项）" -ForegroundColor Cyan
+Write-Host " 启航系统 · 端到端冒烟（11 项）" -ForegroundColor Cyan
 Write-Host " BaseUrl=$BaseUrl   Term=$Term" -ForegroundColor Cyan
 Write-Host "==============================================================" -ForegroundColor Cyan
 
@@ -254,6 +258,20 @@ Invoke-Check -Index "10" -Name "学生推荐接口" -Action {
         return @{ Status = "SKIP"; Detail = "待 P9 实现，当前返回占位结构（字段已留全）" }
     }
     return @{ Status = "PASS"; Detail = "count=$(@($rec.items).Count) version=$($rec.recommend_version)" }
+}
+
+# ---- 11. 前端静态托管（P10-3）：有构建产物才检查，没构建就 SKIP ----
+Invoke-Check -Index "11" -Name "前端静态托管" -Action {
+    $distIndex = Join-Path $root "web\dist\index.html"
+    if (-not (Test-Path $distIndex)) {
+        return @{ Status = "SKIP"; Detail = "未构建前端产物（先跑 scripts\build_web.ps1）" }
+    }
+    $rootPage = Invoke-WebRequest -Uri "$BaseUrl/" -UseBasicParsing
+    $spa = Invoke-WebRequest -Uri "$BaseUrl/teacher" -UseBasicParsing
+    if ($rootPage.StatusCode -eq 200 -and $spa.StatusCode -eq 200 -and $spa.Content -match 'id="app"') {
+        return @{ Status = "PASS"; Detail = "/ 与 /teacher 均回落 index.html（$($rootPage.Content.Length) B）" }
+    }
+    return @{ Status = "FAIL"; Detail = "首页 HTTP $($rootPage.StatusCode) /teacher HTTP $($spa.StatusCode)" }
 }
 
 # ---- 汇总 ----
