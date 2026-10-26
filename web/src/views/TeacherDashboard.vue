@@ -136,6 +136,12 @@
             <el-tag v-for="t in profile.tags || []" :key="t" class="tag-item">{{ t }}</el-tag>
           </div>
           <div ref="radarRef" class="chart-box radar-box"></div>
+          <div class="card-title">职业差距（目标方向：{{ gap.target_direction || '—' }}）</div>
+          <el-empty v-if="!gapLoading && !(gap.gaps || []).length" description="暂无职业差距数据" />
+          <template v-else>
+            <div ref="gapRef" class="chart-box"></div>
+            <div class="gap-note">口径：需求侧关键词出现率 − 班级具备率；≥30% 红档、≥10% 橙档</div>
+          </template>
         </template>
       </div>
     </el-drawer>
@@ -170,6 +176,10 @@ const dist = computed(() => warnings.value.distribution || {})
 const drawer = ref(false)
 const profileLoading = ref(false)
 const profile = ref({})
+const gapLoading = ref(false)
+const gap = ref({})
+const gapRef = ref(null)
+let gapChart = null
 
 function levelText(level) {
   return LEVEL_TEXT[level] || level || '-'
@@ -274,6 +284,7 @@ async function openProfile(row) {
   profileLoading.value = true
   profile.value = { student_no: row?.student_no, name: row?.name }
   renderRadar({})
+  loadGap()
   try {
     const { data } = await http.get(`/teacher/student/${encodeURIComponent(row.student_no)}`, {
       params: { term: term.value }
@@ -321,9 +332,69 @@ function renderRadar(data) {
   )
 }
 
+async function loadGap() {
+  const klass = String(className.value || '').trim()
+  if (!klass) return
+  gapLoading.value = true
+  try {
+    const { data } = await http.get('/teacher/career-gap', {
+      params: { class_name: klass, term: term.value }
+    })
+    gap.value = data || {}
+    await nextTick()
+    renderGap(gap.value)
+  } catch (err) {
+    gap.value = {}
+    ElMessage.error(err?.response?.data?.detail || '职业差距加载失败')
+  } finally {
+    gapLoading.value = false
+  }
+}
+
+function renderGap(data) {
+  if (!gapRef.value) return
+  gapChart = gapChart || echarts.init(gapRef.value)
+  const rows = (data?.gaps || []).slice().reverse() // ECharts Y 轴自下而上，反转后顺序与接口一致
+  gapChart.setOption(
+    {
+      grid: { left: 80, right: 24, top: 28, bottom: 28 },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { data: ['班级具备率', '岗位需求率'], textStyle: { color: '#4e5969' } },
+      xAxis: { type: 'value', max: 1, splitLine: { lineStyle: { color: '#e5e6eb' } } },
+      yAxis: {
+        type: 'category',
+        data: rows.map((row) => row.dimension),
+        axisLabel: { color: '#4e5969' }
+      },
+      series: [
+        {
+          name: '班级具备率',
+          type: 'bar',
+          data: rows.map((row) => row.class_rate ?? 0),
+          itemStyle: { color: '#4cb971', borderRadius: [0, 4, 4, 0] }
+        },
+        {
+          name: '岗位需求率',
+          type: 'bar',
+          data: rows.map((row) => row.demand_rate ?? 0),
+          itemStyle: {
+            color: (params) => {
+              const level = rows[params.dataIndex]?.level
+              return level === 'red' ? '#e5484d' : level === 'orange' ? '#f5a623' : '#86909c'
+            },
+            borderRadius: [0, 4, 4, 0]
+          }
+        }
+      ]
+    },
+    true
+  )
+}
+
 function onResize() {
   barChart?.resize()
   radarChart?.resize()
+  gapChart?.resize()
 }
 
 watch(
@@ -345,8 +416,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   barChart?.dispose()
   radarChart?.dispose()
+  gapChart?.dispose()
   barChart = null
   radarChart = null
+  gapChart = null
 })
 </script>
 
@@ -456,6 +529,12 @@ onBeforeUnmount(() => {
   margin-left: auto;
   font-weight: 600;
   color: var(--qh-red);
+}
+
+.gap-note {
+  font-size: 12px;
+  color: #86909c;
+  margin-top: 6px;
 }
 
 .tag-line {
