@@ -14,8 +14,9 @@ from typing import Any, Mapping, Sequence
 
 import pymysql
 
+from agents.career import context as career_context
 from app.config import Settings, get_settings
-from engine import profile, recommend, warning
+from engine import career_guide, job_search, profile, recommend, warning
 from engine.career_rules import CAREER_ENGINE_VERSION
 from engine.rules import LEVELS
 from engine.store import DuckDBStore
@@ -215,7 +216,8 @@ def _fetch_student(ctx: ToolContext, student_no: str, action: str) -> dict[str, 
     """按学号取学生档案（带 tenant_id）；查不到即视为跨租户。"""
     rows = _query(
         "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
-        "       s.class_name AS class_name, s.id AS student_id "
+        "       s.class_name AS class_name, s.id AS student_id, s.college AS college, "
+        "       s.enroll_year AS enroll_year "
         "FROM student s WHERE s.tenant_id = %s AND s.student_no = %s",
         (ctx.tenant_id, student_no),
     )
@@ -231,7 +233,7 @@ def _resolve_self(ctx: ToolContext, action: str) -> dict[str, Any]:
     """学生端：把 ctx.student_id 解析成本人学号（带 tenant_id 兜底校验）。"""
     rows = _query(
         "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
-        "       s.class_name AS class_name "
+        "       s.class_name AS class_name, s.enroll_year AS enroll_year "
         "FROM student s WHERE s.tenant_id = %s AND s.id = %s",
         (ctx.tenant_id, ctx.student_id),
     )
@@ -330,6 +332,64 @@ def read_features(term: str, student_nos: Sequence[str]) -> list[dict[str, Any]]
 # ----------------------------------------------------------------
 # 教师端工具
 # ----------------------------------------------------------------
+def class_list(ctx: ToolContext) -> dict[str, Any]:
+    """教师端班级/学院目录：本租户 student 表按 学院 → 班级 → 专业 分组的名册。
+
+    权限说明：teacher 表没有「任教班级」绑定关系，所以可见范围 = 本租户全部班级，
+    与其余教师端工具一致地只做 tenant_id 隔离；更细的任教授权待有绑定表后再加。
+    """
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "class_list", "all")
+    rows = _query(
+        "SELECT s.college AS college, s.class_name AS class_name, s.major AS major, "
+        "       COUNT(DISTINCT s.id) AS headcount "
+        "FROM student s WHERE s.tenant_id = %s "
+        "GROUP BY s.college, s.class_name, s.major "
+        "ORDER BY s.college, s.class_name, s.major",
+        (ctx.tenant_id,),
+    )
+
+    classes: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        name = str(row.get("class_name") or "")
+        item = classes.setdefault(
+            name,
+            {"class_name": name, "college": str(row.get("college") or ""),
+             "majors": [], "headcount": 0},
+        )
+        item["headcount"] += int(row.get("headcount") or 0)
+        major = str(row.get("major") or "")
+        if major and major not in item["majors"]:
+            item["majors"].append(major)
+
+    class_rows = [classes[key] for key in sorted(classes)]
+    colleges: dict[str, dict[str, Any]] = {}
+    for item in class_rows:
+        entry = colleges.setdefault(
+            item["college"] or "未分配学院",
+            {"college": item["college"] or "未分配学院", "class_cnt": 0,
+             "student_cnt": 0, "majors": []},
+        )
+        entry["class_cnt"] += 1
+        entry["student_cnt"] += int(item["headcount"])
+        for major in item["majors"]:
+            if major not in entry["majors"]:
+                entry["majors"].append(major)
+
+    _audit_call(ctx, "class_list", "all",
+                {"class_cnt": len(class_rows), "college_cnt": len(colleges)})
+    return {
+        "tenant_id": int(ctx.tenant_id),
+        "source": "mysql.student",
+        "class_cnt": len(class_rows),
+        "student_cnt": sum(int(item["headcount"]) for item in class_rows),
+        "classes": class_rows,
+        "colleges": [colleges[key] for key in sorted(colleges)],
+        "note": "班级范围 = 本租户全部班级（teacher 表暂无任教班级绑定，未做更细授权）",
+        "tools_version": TOOLS_VERSION,
+    }
+
+
 def class_overview(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
     """班级概貌：人数 / 均分 / 挂科率 / 预警分布 / 就业意向分布。"""
     ctx = _check_ctx(ctx)
@@ -433,8 +493,10 @@ def student_profile(ctx: ToolContext, student_no: str, term: str) -> dict[str, A
     return {
         "student_no": str(student_no),
         "name": str(stu.get("name") or ""),
+        "college": str(stu.get("college") or ""),
         "major": str(stu.get("major") or ""),
         "class_name": str(stu.get("class_name") or ""),
+        "grade": career_guide.grade_label(stu.get("enroll_year")),
         "term": term,
         "has_data": bool(stored),
         "tags": stored.get("tags") or [],
@@ -736,8 +798,248 @@ def my_recommendations(ctx: ToolContext, term: str | None = None,
     }
 
 
+# ================================================================
+# 生涯规划（按年级分层：大一先选目标，大二/大三直接给路径）
+# ================================================================
+def my_career_guide(ctx: ToolContext, term: str | None = None) -> dict[str, Any]:
+    """本人年级 + 职业目标 + 确定性规划路径（不调模型）。
+
+    大一且未选目标时返回 needs_intent=True，前端必须先让学选择；
+    大二/大三未选目标也会返回探索型规划，不强制补选。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "career_guide", "self")
+    term = _resolve_term(ctx, term)
+    me = _resolve_self(ctx, "career_guide")
+
+    grade = career_guide.grade_label(me.get("enroll_year"))
+    intent = career_context.fetch_intent(ctx.tenant_id, int(ctx.student_id or 0))
+
+    stored_rows = read_features(term, [me["student_no"]])
+    stored = stored_rows[0] if stored_rows else {}
+    features = _rebuild_features(stored)
+    direction = None
+    if features:
+        direction = (features.get("interest") or {}).get("top_direction")
+
+    guide = career_guide.build_guide(
+        grade=grade, intent=intent, direction=direction, major=me.get("major"),
+    )
+    _audit_call(
+        ctx, "career_guide", f"{me['student_no']}/{term}",
+        {"grade": grade, "intent": intent, "needs_intent": guide["needs_intent"]},
+    )
+    return {
+        **guide,
+        "student_no": me["student_no"],
+        "name": str(me.get("name") or ""),
+        "class_name": str(me.get("class_name") or ""),
+        "term": term,
+        "source": "duckdb.student_feature" if stored else "none",
+        "calc_version": profile.CALC_VERSION,
+        "tools_version": TOOLS_VERSION,
+    }
+
+
+def save_career_intent(ctx: ToolContext, intent: str) -> dict[str, Any]:
+    """保存本人职业目标；只接受 考公/考研/考编/就业 四个值。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "save_career_intent", "self")
+    value = career_guide.normalize_intent(intent)
+    if value is None:
+        raise ValueError("职业目标必须是 考公/考研/考编/就业 之一")
+    saved = career_context.save_intent(
+        ctx.tenant_id, int(ctx.student_id or 0), value,
+    )
+    _audit_call(ctx, "save_career_intent", str(ctx.student_id), {"intent": value})
+    return {
+        "intent": value,
+        "saved": bool(saved),
+        "options": [dict(option) for option in career_guide.INTENT_OPTIONS],
+        "engine_version": career_guide.GUIDE_ENGINE_VERSION,
+        "tools_version": TOOLS_VERSION,
+    }
+
+
+# ================================================================
+# 岗位搜索（与 my_recommendations 是两套逻辑，互不污染）
+# ================================================================
+# 搜索要扫全表（当前 2931 条），不能用 recommend 的 400 条抽样上限。
+SEARCH_SCAN_LIMIT = 5000
+
+
+def _load_jobs_for_search(limit: int = SEARCH_SCAN_LIMIT) -> list[dict[str, Any]]:
+    """取搜索用岗位池。job_search 是纯函数，取数全部在这一层完成。"""
+    rows = _query(
+        "SELECT id, title, company, industry, company_size, city, district, "
+        "       salary_min, salary_max, salary_unit, salary_months, "
+        "       exp_min, exp_max, education, skill_tags, benefits, description, source "
+        "FROM job ORDER BY id LIMIT %s",
+        (int(limit),),
+    )
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        # JSON 列在 MySQL 里可能以 str 返回，统一成 list（前端要直接渲染）
+        for key in ("skill_tags", "benefits"):
+            raw = item.get(key)
+            if isinstance(raw, str):
+                try:
+                    item[key] = json.loads(raw)
+                except ValueError:
+                    item[key] = []
+            elif raw is None:
+                item[key] = []
+        for key in ("salary_min", "salary_max"):
+            if item.get(key) is not None:
+                item[key] = float(item[key])
+        # 搜索不需要 JD 全文回传给前端（太大），但打分要用 → 保留在内部字段
+        out.append(item)
+    return out
+
+
+def _job_brief(job: Mapping[str, Any], *, with_desc: bool = False) -> dict[str, Any]:
+    """岗位对外字段：默认不带 JD 全文（列表里用不上，徒增体积）。"""
+    item = {
+        "id": job.get("id"),
+        "title": job.get("title"),
+        "company": job.get("company"),
+        "industry": job.get("industry"),
+        "company_size": job.get("company_size"),
+        "city": job.get("city"),
+        "district": job.get("district"),
+        "salary_min": job.get("salary_min"),
+        "salary_max": job.get("salary_max"),
+        "salary_unit": job.get("salary_unit"),
+        "salary_months": job.get("salary_months"),
+        "exp_min": job.get("exp_min"),
+        "exp_max": job.get("exp_max"),
+        "education": job.get("education"),
+        "skill_tags": list(job.get("skill_tags") or []),
+        "source": job.get("source"),
+    }
+    if with_desc:
+        item["description"] = job.get("description") or ""
+        item["benefits"] = list(job.get("benefits") or [])
+    return item
+
+
+def search_jobs(ctx: ToolContext, query: str = "", *,
+                cities: Sequence[str] | None = None,
+                educations: Sequence[str] | None = None,
+                salary_min_gte: float | None = None,
+                exp_max_lte: float | None = None,
+                limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    """关键词搜索岗位。**不带个人画像**——搜索是检索，推荐才是个性化。
+
+    没命中时不硬凑：返回空 items + suggestions（该方向下更可能命中的词）。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "job_search", "self")
+
+    filters: dict[str, Any] = {}
+    if cities:
+        filters["cities"] = list(cities)
+    if educations:
+        filters["educations"] = list(educations)
+    if salary_min_gte is not None:
+        filters["salary_min_gte"] = float(salary_min_gte)
+    if exp_max_lte is not None:
+        filters["exp_max_lte"] = float(exp_max_lte)
+
+    pool = _load_jobs_for_search()
+    raw = job_search.search_jobs(pool, query, filters=filters or None,
+                                 limit=limit, offset=offset)
+
+    items = [_job_brief(j) | {
+        "relevance_score": j.get("relevance_score"),
+        "relevance_level": j.get("relevance_level"),
+        "matched_keywords": list(j.get("matched_keywords") or []),
+        "matched_fields": [
+            job_search.FIELD_LABELS.get(f, f) for f in (j.get("matched_fields") or [])
+        ],
+    } for j in raw.get("items") or []]
+
+    result: dict[str, Any] = {
+        "query": str(query or ""),
+        "keywords": list(raw.get("keywords") or []),
+        "total": int(raw.get("total") or 0),
+        "items": items,
+        "page": raw.get("page") or {},
+        "filters": filters,
+        "pool_size": len(pool),
+        "engine_version": job_search.JOB_SEARCH_VERSION,
+    }
+
+    # 没命中时给「是不是想找」，绝不返回不相关岗位充数
+    if int(raw.get("total") or 0) == 0 and (query or "").strip():
+        result["suggestions"] = job_search.suggest_keywords(query)
+        result["note"] = ("没有找到同时满足关键词与筛选条件的岗位。"
+                          "可以换个说法，或放宽筛选条件。")
+    elif int(raw.get("total") or 0) == 0:
+        result["suggestions"] = []
+        result["note"] = "当前筛选条件下没有岗位，试着放宽条件。"
+
+    _audit_call(ctx, "job_search", str(query or "")[:60],
+                {"query": str(query or ""), "filters": filters,
+                 "total": result["total"]})
+    return result
+
+
+def job_detail(ctx: ToolContext, job_id: int) -> dict[str, Any]:
+    """岗位详情（含 JD 全文与福利）。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "job_detail", str(job_id))
+
+    try:
+        job_id = int(job_id)
+    except (TypeError, ValueError):
+        raise ValueError("岗位 id 必须是整数")
+
+    rows = _query(
+        "SELECT id, title, company, industry, company_size, city, district, "
+        "       salary_min, salary_max, salary_unit, salary_months, "
+        "       exp_min, exp_max, education, skill_tags, benefits, description, source "
+        "FROM job WHERE id = %s",
+        (job_id,),
+    )
+    if not rows:
+        raise ValueError(f"岗位不存在：{job_id}")
+
+    row = dict(rows[0])
+    for key in ("skill_tags", "benefits"):
+        raw = row.get(key)
+        if isinstance(raw, str):
+            try:
+                row[key] = json.loads(raw)
+            except ValueError:
+                row[key] = []
+        elif raw is None:
+            row[key] = []
+    for key in ("salary_min", "salary_max"):
+        if row.get(key) is not None:
+            row[key] = float(row[key])
+
+    _audit_call(ctx, "job_detail", str(job_id), {"job_id": job_id})
+    return {"job": _job_brief(row, with_desc=True)}
+
+
+def job_facets(ctx: ToolContext) -> dict[str, Any]:
+    """筛选器下拉选项（城市 / 学历及其岗位数），供前端渲染。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "job_facets", "all")
+    pool = _load_jobs_for_search()
+    out = job_search.build_facets(pool)
+    _audit_call(ctx, "job_facets", "all", {"pool_size": len(pool)})
+    out["pool_size"] = len(pool)
+    return out
+
+
 # 对外工具清单：便于 FastAPI / LangGraph 统一注册与自检
 TEACHER_TOOLS: tuple[str, ...] = (
     "class_overview", "student_profile", "warning_list", "career_gap",
 )
-STUDENT_TOOLS: tuple[str, ...] = ("my_warning", "my_recommendations")
+STUDENT_TOOLS: tuple[str, ...] = (
+    "my_warning", "my_recommendations", "job_search",
+    "career_guide", "save_career_intent",
+)

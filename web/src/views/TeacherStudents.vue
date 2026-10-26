@@ -2,14 +2,41 @@
   <div class="page">
     <el-card shadow="never" class="filter-bar">
       <el-form inline @submit.prevent>
-        <el-form-item label="班级">
-          <el-autocomplete
-            v-model="className"
-            :fetch-suggestions="suggestClass"
-            placeholder="如 AI2201"
+        <el-form-item label="学院">
+          <el-select
+            v-model="college"
+            clearable
+            filterable
+            placeholder="全部学院"
             style="width: 180px"
-            @keyup.enter="loadClass"
-          />
+            @change="onCollegeChange"
+          >
+            <el-option v-for="c in colleges" :key="c.college" :label="c.college" :value="c.college">
+              <span>{{ c.college }}</span>
+              <span class="option-note">{{ c.class_cnt }} 班 / {{ c.student_cnt }} 人</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="班级">
+          <el-select
+            v-model="className"
+            filterable
+            :placeholder="classes.length ? '请选择班级' : '加载中…'"
+            style="width: 180px"
+            @change="onClassChange"
+          >
+            <el-option v-for="k in filteredClasses" :key="k.class_name" :label="k.class_name" :value="k.class_name">
+              <span>{{ k.class_name }}</span>
+              <span class="option-note">{{ k.headcount }} 人</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="学号直达">
+          <el-input v-model="studentNo" placeholder="如 AI2022001" style="width: 160px"
+            @keyup.enter="searchStudent" />
+          <el-button type="primary" plain :loading="studentSearchLoading" @click="searchStudent">
+            查个人
+          </el-button>
         </el-form-item>
         <el-form-item label="学期">
           <el-input v-model="term" placeholder="如 2025-2026-2" style="width: 150px" />
@@ -66,7 +93,7 @@
 
       <el-col :span="15">
         <el-card shadow="never">
-          <el-empty v-if="!activeNo" description="先在左侧点一名学生，查看他/她的个人档案" />
+          <el-empty v-if="!activeNo" description="先在左侧点一名学生，或在顶部输入学号直接查询" />
           <el-skeleton :rows="10" animated v-else-if="detailLoading" />
           <template v-else-if="detail.student_no">
             <div class="detail-head">
@@ -86,8 +113,10 @@
             </div>
 
             <el-descriptions :column="3" border size="small" class="detail-desc">
+              <el-descriptions-item label="学院">{{ detail.college || '-' }}</el-descriptions-item>
               <el-descriptions-item label="专业">{{ detail.major || '-' }}</el-descriptions-item>
               <el-descriptions-item label="班级">{{ detail.class_name || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="年级">{{ detail.grade || '-' }}</el-descriptions-item>
               <el-descriptions-item label="学期">{{ detail.term || '-' }}</el-descriptions-item>
               <el-descriptions-item label="可用指标">{{ activeRow?.coverage ?? '-' }} 项</el-descriptions-item>
               <el-descriptions-item label="缺失项">
@@ -97,6 +126,8 @@
               <el-descriptions-item label="班内对比">
                 班均 {{ overview.avg_gpa ?? '-' }} · 本人 {{ stored.gpa ?? '-' }}
               </el-descriptions-item>
+              <el-descriptions-item label="数据源">{{ detail.source || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="画像版本">{{ detail.calc_version || '-' }}</el-descriptions-item>
             </el-descriptions>
 
             <div class="card-title" style="margin-top: 12px">预警归因</div>
@@ -168,8 +199,12 @@ const LEVELS = [
 ]
 const HISTORY_KEY = 'qh_class_history'
 
-const className = ref(localStorage.getItem('qh_last_class') || 'AI2201')
+const className = ref(localStorage.getItem('qh_last_class') || '')
+const studentNo = ref('')
 const term = ref('2025-2026-2')
+const colleges = ref([])
+const classes = ref([])
+const college = ref('')
 const level = ref('')
 const rows = ref([])
 const classmates = ref(0)
@@ -177,6 +212,7 @@ const overview = ref({})
 const warnings = ref({})
 const gap = ref({})
 const listLoading = ref(false)
+const studentSearchLoading = ref(false)
 const firstLoading = ref(false)
 const detailLoading = ref(false)
 const detail = ref({})
@@ -209,23 +245,49 @@ function pct(v) {
   return v === null || v === undefined ? '-' : `${(Number(v) * 100).toFixed(1)}%`
 }
 
-function suggestClass(query, cb) {
-  const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-  const keyword = String(query || '').trim()
-  cb(history.filter((name) => !keyword || name.includes(keyword)).map((value) => ({ value })))
-}
-
 function rememberClass(name) {
+  if (!name) return
   const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
   const next = [name, ...history.filter((item) => item !== name)].slice(0, 10)
   localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
   localStorage.setItem('qh_last_class', name)
 }
 
+const filteredClasses = computed(() =>
+  college.value ? classes.value.filter((item) => item.college === college.value) : classes.value
+)
+
+async function loadDirectory() {
+  try {
+    const { data } = await http.get('/teacher/classes')
+    classes.value = data?.classes || []
+    colleges.value = data?.colleges || []
+    if (!className.value) {
+      const remembered = localStorage.getItem('qh_last_class')
+      const hit = classes.value.find((item) => item.class_name === remembered)
+      className.value = hit ? hit.class_name : (classes.value[0]?.class_name || '')
+      if (hit) {
+        college.value = hit.college
+      }
+    }
+  } catch (err) {
+    ElMessage.error(err?.response?.data?.detail || '班级目录加载失败')
+  }
+}
+
+function onCollegeChange(value) {
+  const list = value ? filteredClasses.value : classes.value
+  if (!list.some((item) => item.class_name === className.value)) {
+    className.value = list[0]?.class_name || ''
+    rememberClass(className.value)
+    loadClass()
+  }
+}
+
 async function loadClass() {
   const klass = String(className.value || '').trim()
   if (!klass) {
-    ElMessage.warning('请先填写班级名')
+    ElMessage.warning('请先选择班级')
     return
   }
   rememberClass(klass)
@@ -260,15 +322,23 @@ async function loadClass() {
 }
 
 function clearFilter() {
+  college.value = ''
+  className.value = classes.value[0]?.class_name || ''
   level.value = ''
   term.value = '2025-2026-2'
   rows.value = []
+  studentNo.value = ''
   detail.value = {}
   activeNo.value = ''
   overview.value = {}
   warnings.value = {}
   gap.value = {}
   classmates.value = 0
+}
+
+function onClassChange() {
+  rememberClass(className.value)
+  loadClass()
 }
 
 async function loadDetail(studentNo) {
@@ -286,6 +356,43 @@ async function loadDetail(studentNo) {
     detail.value = {}
   } finally {
     detailLoading.value = false
+  }
+}
+
+async function searchStudent() {
+  const no = String(studentNo.value || '').trim()
+  if (!no) {
+    ElMessage.warning('请输入学号')
+    return
+  }
+  studentSearchLoading.value = true
+  try {
+    const { data } = await http.get(`/teacher/student/${encodeURIComponent(no)}`, {
+      params: { term: term.value }
+    })
+    const klass = String(data?.class_name || '').trim()
+    if (klass) {
+      className.value = klass
+      const hit = classes.value.find((item) => item.class_name === klass)
+      if (hit) college.value = hit.college
+    }
+    if (data?.term) term.value = data.term
+    level.value = ''
+    activeNo.value = ''
+    detail.value = {}
+    await loadClass()
+    activeNo.value = String(data?.student_no || no)
+    detail.value = data || {}
+    await nextTick()
+    renderRadar(detail.value)
+    renderTrend(detail.value)
+    ElMessage.success(`已定位 ${detail.value.name || no}`)
+  } catch (err) {
+    ElMessage.error(err?.response?.data?.detail || `未找到学号 ${no}`)
+    detail.value = {}
+    activeNo.value = ''
+  } finally {
+    studentSearchLoading.value = false
   }
 }
 
@@ -357,9 +464,10 @@ watch(autoRefresh, (on) => {
   timer = on ? setInterval(loadClass, 30000) : null
 })
 
-onMounted(() => {
+onMounted(async () => {
   firstLoading.value = true
-  loadClass()
+  await loadDirectory()
+  await loadClass()
   window.addEventListener('resize', onResize)
 })
 
@@ -376,6 +484,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .filter-bar {
   margin-bottom: 12px;
+}
+
+.option-note {
+  float: right;
+  margin-left: 12px;
+  font-size: 12px;
+  color: #a9aeb8;
 }
 
 .refresh-tip {

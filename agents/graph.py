@@ -51,7 +51,9 @@ def plan_node(state: AgentState) -> dict[str, Any]:
         return {"plan": {"tool": tool_name}, "tool_name": tool_name}
 
     tool_name = "class_overview"
-    if any(k in query for k in ("预警", "风险", "名单", "挂科")):
+    if any(k in query for k in ("班级列表", "班级目录", "有哪些班", "哪些班级", "学院", "院系")):
+        tool_name = "class_list"
+    elif any(k in query for k in ("预警", "风险", "名单", "挂科")):
         tool_name = "warning_list"
     elif any(k in query for k in ("画像", "标签", "个人", "四维")):
         tool_name = "student_profile"
@@ -119,7 +121,9 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     name = str(plan.get("tool") or "")
     args: Mapping[str, Any] = plan.get("args") or {}
     try:
-        if name == "warning_list":
+        if name == "class_list":
+            result = tools.class_list(ctx)
+        elif name == "warning_list":
             result = tools.warning_list(ctx, args.get("class_name", ""), args.get("term", ""))
         elif name == "student_profile":
             result = tools.student_profile(ctx, args.get("student_no", ""), args.get("term", ""))
@@ -146,6 +150,19 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
     if "error" in result:
         return "该数据你没有访问权限，请确认班级/学号是否属于本租户。"
     parts: list[str] = []
+    if "classes" in result:
+        parts.append(
+            f"本租户共 {result.get('class_cnt')} 个班、{result.get('student_cnt')} 名学生。"
+        )
+        colleges: dict[str, list[Any]] = {}
+        for row in (result.get("classes") or []):
+            colleges.setdefault(str(row.get("college") or "未分配学院"), []).append(row)
+        for college, rows in colleges.items():
+            names = "、".join(str(row.get("class_name") or "") for row in rows)
+            parts.append(f"{college}：{names} 共 {len(rows)} 个班。")
+        parts.append("各班人数：" + "、".join(
+            f"{row.get('class_name')} {row.get('headcount')} 人"
+            for row in (result.get("classes") or [])) + "。")
     if "headcount" in result:
         parts.append(
             f"班级 {result.get('class_name')} 在 {result.get('term')} 学期共 "

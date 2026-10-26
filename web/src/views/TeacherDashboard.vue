@@ -2,14 +2,34 @@
   <div class="page">
     <el-card shadow="never" class="filter-bar">
       <el-form inline @submit.prevent>
+        <el-form-item label="学院">
+          <el-select
+            v-model="college"
+            clearable
+            filterable
+            placeholder="全部学院"
+            style="width: 180px"
+            @change="onCollegeChange"
+          >
+            <el-option v-for="c in colleges" :key="c.college" :label="c.college" :value="c.college">
+              <span>{{ c.college }}</span>
+              <span class="option-note">{{ c.class_cnt }} 班 / {{ c.student_cnt }} 人</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="班级">
-          <el-autocomplete
+          <el-select
             v-model="className"
-            :fetch-suggestions="suggestClass"
-            placeholder="如 AI2201"
+            filterable
+            :placeholder="classes.length ? '请选择班级' : '加载中…'"
             style="width: 200px"
-            @keyup.enter="loadAll"
-          />
+            @change="onClassChange"
+          >
+            <el-option v-for="k in filteredClasses" :key="k.class_name" :label="k.class_name" :value="k.class_name">
+              <span>{{ k.class_name }}</span>
+              <span class="option-note">{{ k.headcount }} 人</span>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="学期">
           <el-input v-model="term" placeholder="如 2025-2026-2" style="width: 160px" />
@@ -71,7 +91,9 @@
           <div class="card-title">班级概貌</div>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="班级">{{ overview.class_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="学院">{{ currentCollege || '-' }}</el-descriptions-item>
             <el-descriptions-item label="学期">{{ overview.term || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="专业">{{ currentMajors || '-' }}</el-descriptions-item>
             <el-descriptions-item label="挂科人数">{{ overview.fail_students ?? '-' }}</el-descriptions-item>
             <el-descriptions-item label="挂科率">{{ fmtRate(overview.fail_rate) }}</el-descriptions-item>
           </el-descriptions>
@@ -131,6 +153,7 @@
         <el-empty v-if="!profile.student_no && !profileLoading" description="未加载到画像" />
         <template v-else>
           <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="学院">{{ profile.college || '-' }}</el-descriptions-item>
             <el-descriptions-item label="专业">{{ profile.major || '-' }}</el-descriptions-item>
             <el-descriptions-item label="班级">{{ profile.class_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="数据源">{{ profile.source || '-' }}</el-descriptions-item>
@@ -166,8 +189,11 @@ const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 
 const COLORS = ['#e5484d', '#f5a623', '#f0c808', '#4cb971', '#86909c']
 
 const HISTORY_KEY = 'qh_class_history'
-const className = ref(localStorage.getItem('qh_last_class') || 'AI2201')
+const className = ref(localStorage.getItem('qh_last_class') || '')
 const term = ref('2025-2026-2')
+const colleges = ref([])
+const classes = ref([])
+const college = ref('')
 const loading = ref(false)
 const errorTip = ref('')
 const autoRefresh = ref(false)
@@ -203,24 +229,57 @@ function fmtRate(v) {
   return v === null || v === undefined ? '-' : `${(Number(v) * 100).toFixed(1)}%`
 }
 
-function suggestClass(query, cb) {
-  const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-  const keyword = String(query || '').trim()
-  const hits = history.filter((name) => !keyword || name.includes(keyword))
-  cb(hits.map((name) => ({ value: name })))
-}
-
 function rememberClass(name) {
+  if (!name) return
   const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
   const next = [name, ...history.filter((item) => item !== name)].slice(0, 10)
   localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
   localStorage.setItem('qh_last_class', name)
 }
 
+const filteredClasses = computed(() =>
+  college.value ? classes.value.filter((item) => item.college === college.value) : classes.value
+)
+
+// 学院/专业取自己那份班级目录（同源数据），不依赖任何前端推断
+const currentClassMeta = computed(() =>
+  classes.value.find((item) => item.class_name === className.value) || null
+)
+const currentCollege = computed(() => currentClassMeta.value?.college || '')
+const currentMajors = computed(() => (currentClassMeta.value?.majors || []).join('、') || '-')
+
+// 班级目录来自后端（本租户可见范围），前端不做任何推断
+async function loadDirectory() {
+  try {
+    const { data } = await http.get('/teacher/classes')
+    classes.value = data?.classes || []
+    colleges.value = data?.colleges || []
+    if (!className.value) {
+      const remembered = localStorage.getItem('qh_last_class')
+      const hit = classes.value.find((item) => item.class_name === remembered)
+      className.value = hit ? hit.class_name : (classes.value[0]?.class_name || '')
+      if (hit) {
+        college.value = hit.college
+      }
+    }
+  } catch (err) {
+    ElMessage.error(err?.response?.data?.detail || '班级目录加载失败')
+  }
+}
+
+function onCollegeChange(value) {
+  const list = value ? filteredClasses.value : classes.value
+  if (!list.some((item) => item.class_name === className.value)) {
+    className.value = list[0]?.class_name || ''
+    rememberClass(className.value)
+    loadClass()
+  }
+}
+
 async function loadClass(reportError = true) {
   const klass = String(className.value || '').trim()
   if (!klass) {
-    ElMessage.warning('请先填写班级名')
+    ElMessage.warning('请先选择班级')
     return
   }
   rememberClass(klass)
@@ -255,7 +314,8 @@ async function loadAll() {
 }
 
 function reset() {
-  className.value = ''
+  college.value = ''
+  className.value = classes.value[0]?.class_name || ''
   term.value = '2025-2026-2'
   overview.value = {}
   warnings.value = {}
@@ -267,6 +327,11 @@ watch(autoRefresh, (on) => {
   if (timer) clearInterval(timer)
   timer = on ? setInterval(loadClass, 30000) : null
 })
+
+function onClassChange() {
+  rememberClass(className.value)
+  loadClass()
+}
 
 function renderBar() {
   if (!barRef.value) return
@@ -423,8 +488,9 @@ watch(
   }
 )
 
-onMounted(() => {
-  loadAll()
+onMounted(async () => {
+  await loadDirectory()
+  await loadAll()
   window.addEventListener('resize', onResize)
 })
 
@@ -462,6 +528,13 @@ onBeforeUnmount(() => {
   color: var(--qh-red);
   text-decoration: none;
   font-size: 12px;
+}
+
+.option-note {
+  float: right;
+  margin-left: 12px;
+  font-size: 12px;
+  color: #a9aeb8;
 }
 
 .err {

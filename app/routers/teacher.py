@@ -34,6 +34,12 @@ def _guard(ctx: ToolContext, action: str, target: str, call) -> dict[str, Any]:
     return result
 
 
+@router.get("/classes")
+def classes(ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
+    """教师端班级/学院目录：学院 → 班级（含专业与人数的名册），供前端下拉选择。"""
+    return _guard(ctx, "class_list", "all", lambda: tools.class_list(ctx))
+
+
 @router.get("/class-overview")
 def class_overview(
     class_name: str = Query(description="班级名，必须属于本租户"),
