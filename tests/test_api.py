@@ -330,6 +330,17 @@ def test_career_intent_roundtrip_and_restore(client, db):
         assert guide["intent"] == "考研"
         assert guide["needs_intent"] is False
         assert guide["steps"]
+
+        # 教师端班级概览必须能看到刚保存的目标
+        teacher_token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
+        ov = client.get(
+            "/teacher/class-overview",
+            params={"class_name": klass, "term": TERM},
+            headers={"Authorization": f"Bearer {teacher_token}"},
+        ).json()
+        intent_info = ov["career_intent"]
+        assert intent_info["distribution"]["考研"] >= 1
+        assert intent_info["filled"] >= 1
     finally:
         with conn.cursor() as cur:
             if before is None:
@@ -338,6 +349,25 @@ def test_career_intent_roundtrip_and_restore(client, db):
                 cur.execute("UPDATE career_intent SET intent = %s WHERE student_id = %s",
                             (before["intent"], student_id))
         conn.commit()
+
+
+@requires_mysql
+def test_class_overview_reports_career_intent_distribution(client, db):
+    """教师班级概览：考公/考研/考编/就业 + 未填写，人数之和等于在册人数。"""
+    conn, klass, stu = db
+    token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
+    resp = client.get(
+        "/teacher/class-overview",
+        params={"class_name": klass, "term": TERM},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    info = body["career_intent"]
+    assert set(info["distribution"]) == {"考公", "考研", "考编", "就业", "未填写"}
+    assert sum(info["distribution"].values()) == body["roster_count"]
+    assert info["filled"] + info["unfilled"] == info["total"]
+    assert info["total"] == body["roster_count"]
 
 
 @requires_mysql

@@ -110,6 +110,28 @@
       </el-col>
     </el-row>
 
+    <el-card shadow="never" v-loading="loading" class="intent-card">
+      <div class="intent-head">
+        <span class="card-title" style="margin: 0">职业目标分布</span>
+        <el-tag size="small" effect="plain">
+          已填写 {{ overview.career_intent?.filled ?? 0 }} / {{ overview.career_intent?.total ?? 0 }} 人
+        </el-tag>
+      </div>
+      <el-empty v-if="!(overview.career_intent?.total)" description="暂无学生数据" />
+      <div v-else class="intent-grid">
+        <div
+          v-for="item in intentItems"
+          :key="item.key"
+          class="intent-item"
+          :style="{ '--intent-color': item.color }"
+        >
+          <div class="intent-label">{{ item.label }}</div>
+          <div class="intent-value"><count-number :value="item.value" /></div>
+          <div class="intent-rate">{{ item.rate }}</div>
+        </div>
+      </div>
+    </el-card>
+
     <el-card shadow="never" class="table-card">
       <div class="card-title">预警名单（点击行看四维画像）</div>
       <el-table
@@ -208,6 +230,29 @@ let barChart = null
 let radarChart = null
 
 const dist = computed(() => warnings.value.distribution || {})
+
+const INTENT_META = [
+  { key: '考公', label: '考公', color: '#dc2626' },
+  { key: '考研', label: '考研', color: '#d97706' },
+  { key: '考编', label: '考编', color: '#16a34a' },
+  { key: '就业', label: '就业', color: '#2563eb' },
+  { key: '未填写', label: '未填写', color: '#a1a1aa' }
+]
+
+// 职业目标人数全部来自 /teacher/class-overview，前端只做展示，不做任何推断
+const intentItems = computed(() => {
+  const info = overview.value?.career_intent || {}
+  const distMap = info.distribution || {}
+  const total = Number(info.total || 0)
+  return INTENT_META.map((item) => {
+    const value = Number(distMap[item.key] || 0)
+    return {
+      ...item,
+      value,
+      rate: total ? `${((value / total) * 100).toFixed(1)}%` : '-'
+    }
+  })
+})
 
 const drawer = ref(false)
 const profileLoading = ref(false)
@@ -597,6 +642,57 @@ onBeforeUnmount(() => {
 .stat-value.small {
   font-size: 20px;
   color: var(--qh-text);
+}
+
+.intent-card {
+  margin-top: 12px;
+}
+
+.intent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.intent-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.intent-item {
+  border: 1px solid var(--qh-border);
+  border-top: 3px solid var(--intent-color);
+  border-radius: var(--qh-radius-lg);
+  background: var(--qh-surface);
+  padding: 10px 12px;
+}
+
+.intent-label {
+  font-size: 13px;
+  color: var(--qh-text-sub);
+}
+
+.intent-value {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--intent-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.intent-rate {
+  font-size: 12px;
+  color: var(--qh-text-mute);
+}
+
+@media (max-width: 900px) {
+  .intent-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .chart-box {

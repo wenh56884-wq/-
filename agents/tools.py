@@ -522,9 +522,44 @@ def class_overview(ctx: ToolContext, class_name: str, term: str) -> dict[str, An
         "warning_distribution": distribution,
         "top_risk_students": top5,
         "employment_intent": _employment_intent(ctx, class_name, term),
+        "career_intent": _career_intent_distribution(ctx, class_name),
         "engine_version": warning.ENGINE_VERSION,
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,
+    }
+
+
+def _career_intent_distribution(ctx: ToolContext, class_name: str) -> dict[str, Any]:
+    """本班学生职业目标分布：考公/考研/考编/就业 + 未填写（按学生数，不按成绩行）。
+
+    口径：以 student 表在册人数为分母；没有选择目标的学生计入「未填写」，
+    不用 0 冒充，也不把未填写从分母里剔除。
+    """
+    rows = _query(
+        "SELECT COALESCE(ci.intent, '未填写') AS intent, COUNT(*) AS cnt "
+        "FROM student s "
+        "LEFT JOIN career_intent ci "
+        "       ON ci.student_id = s.id AND ci.tenant_id = s.tenant_id "
+        "WHERE s.tenant_id = %s AND s.class_name = %s "
+        "GROUP BY COALESCE(ci.intent, '未填写')",
+        (ctx.tenant_id, class_name),
+    )
+    distribution = {intent: 0 for intent in career_guide.INTENTS}
+    distribution["未填写"] = 0
+    for row in rows:
+        key = str(row.get("intent") or "未填写")
+        if key not in distribution:
+            key = "未填写"  # 脏数据不新增未知档位
+        distribution[key] += int(row.get("cnt") or 0)
+
+    total = sum(distribution.values())
+    filled = total - distribution["未填写"]
+    return {
+        "distribution": distribution,
+        "total": total,
+        "filled": filled,
+        "unfilled": distribution["未填写"],
+        "fill_rate": round(filled / total, 4) if total else None,
     }
 
 

@@ -103,20 +103,17 @@
       </main>
     </div>
 
-    <!-- 悬浮助手：右下角小人按钮 → 右侧抽屉，不占侧栏导航位 -->
+    <!-- 悬浮助手：右下角「摸鱼」形象按钮 → 右侧抽屉，不占侧栏导航位 -->
     <button
       class="assistant-fab"
       type="button"
       aria-label="打开智能助手"
-      title="打开智能助手"
+      title="不想摸鱼了？来问我"
       :class="{ 'is-open': chatOpen }"
       @click="chatOpen = true"
     >
-      <svg viewBox="0 0 24 24" class="fab-icon" aria-hidden="true">
-        <circle cx="12" cy="8" r="3.6" />
-        <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-      </svg>
-      <span v-if="!chatOpen" class="fab-badge">AI</span>
+      <img class="fab-img" :src="moyuImg" alt="智能助手" />
+      <span class="fab-badge">AI</span>
     </button>
 
     <ChatDrawer v-model="chatOpen" />
@@ -130,6 +127,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { clearSession, currentRole } from '../api/http'
 import ChatDrawer from '../components/ChatDrawer.vue'
 import { useClock, useSystemStatus } from '../composables/useSystemStatus'
+import moyuImg from '../assets/deepseek-mo-yu.webp'
 
 // 24×24 stroke 图标（无外部图标库依赖）
 const ICONS = {
