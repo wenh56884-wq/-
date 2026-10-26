@@ -17,6 +17,22 @@
             </el-option>
           </el-select>
         </el-form-item>
+        <el-form-item label="专业">
+          <el-select
+            v-model="major"
+            clearable
+            filterable
+            :placeholder="college ? '全部专业' : '请先选学院'"
+            :disabled="!college"
+            style="width: 200px"
+            @change="onMajorChange"
+          >
+            <el-option v-for="m in majorOptions" :key="m.college + '/' + m.major" :label="m.major" :value="m.major">
+              <span>{{ m.major }}</span>
+              <span class="option-note">{{ m.class_cnt }} 班 / {{ m.student_cnt }} 人</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="班级">
           <el-select
             v-model="className"
@@ -27,7 +43,7 @@
           >
             <el-option v-for="k in filteredClasses" :key="k.class_name" :label="k.class_name" :value="k.class_name">
               <span>{{ k.class_name }}</span>
-              <span class="option-note">{{ k.headcount }} 人</span>
+              <span class="option-note">{{ k.headcount }} 人 · {{ majorLabel(k) }}</span>
             </el-option>
           </el-select>
         </el-form-item>
@@ -37,6 +53,7 @@
         <el-form-item>
           <el-button type="primary" :loading="loading" @click="loadAll">查询</el-button>
           <el-button @click="reset">重置</el-button>
+          <el-button @click="openThresholds">预警阈值</el-button>
         </el-form-item>
       </el-form>
       <div class="engine-line">
@@ -170,6 +187,64 @@
       <el-empty v-if="!loading && !(warnings.items || []).length" description="该班级暂无预警数据" />
     </el-card>
 
+    <el-dialog v-model="thresholdDialog" title="班级预警阈值" width="760px">
+      <div class="threshold-head">
+        <span>班级：<b>{{ className || '-' }}</b></span>
+        <span class="muted">留空 = 回退租户默认 / 引擎默认</span>
+      </div>
+      <el-table v-loading="thresholdLoading" :data="thresholdRows" border size="small">
+        <el-table-column prop="label" label="指标" width="110" />
+        <el-table-column label="权重" width="115">
+          <template #default="{ row }">
+            <el-input-number
+              v-if="row.metric !== 'level' && row.metric !== 'gpa_drop_slope'"
+              v-model="row.weight" :min="0" :max="10" :step="0.1" size="small"
+              controls-position="right" :value-on-clear="null"
+            />
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="黄色阈值" width="125">
+          <template #default="{ row }">
+            <el-input-number
+              v-model="row.yellow_value" :min="0" :step="1" size="small"
+              controls-position="right" :value-on-clear="null"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="橙色阈值" width="125">
+          <template #default="{ row }">
+            <el-input-number
+              v-if="row.metric !== 'gpa_drop_slope'"
+              v-model="row.orange_value" :min="0" :step="1" size="small"
+              controls-position="right" :value-on-clear="null"
+            />
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="红色阈值" width="125">
+          <template #default="{ row }">
+            <el-input-number
+              v-if="row.metric !== 'gpa_drop_slope'"
+              v-model="row.red_value" :min="0" :step="1" size="small"
+              controls-position="right" :value-on-clear="null"
+            />
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ thresholdSourceText(row.source) }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="threshold-tip">{{ thresholdTip }}</div>
+      <template #footer>
+        <el-button @click="thresholdDialog = false">取消</el-button>
+        <el-button type="primary" :loading="thresholdSaving" @click="saveThresholds">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="drawer" :title="`${profile.name || ''}（${profile.student_no || ''}）画像`" size="45%">
       <div v-loading="profileLoading">
         <el-empty v-if="!profile.student_no && !profileLoading" description="未加载到画像" />
@@ -215,7 +290,9 @@ const className = ref(localStorage.getItem('qh_last_class') || '')
 const term = ref('2025-2026-2')
 const colleges = ref([])
 const classes = ref([])
+const majors = ref([])
 const college = ref('')
+const major = ref('')
 const loading = ref(false)
 const errorTip = ref('')
 const autoRefresh = ref(false)
@@ -254,6 +331,12 @@ const intentItems = computed(() => {
   })
 })
 
+const thresholdDialog = ref(false)
+const thresholdLoading = ref(false)
+const thresholdSaving = ref(false)
+const thresholdRows = ref([])
+const thresholdTip = ref('')
+
 const drawer = ref(false)
 const profileLoading = ref(false)
 const profile = ref({})
@@ -282,9 +365,18 @@ function rememberClass(name) {
   localStorage.setItem('qh_last_class', name)
 }
 
-const filteredClasses = computed(() =>
-  college.value ? classes.value.filter((item) => item.college === college.value) : classes.value
+// 三级级联：学院 → 专业 → 班级
+const majorOptions = computed(() =>
+  college.value ? majors.value.filter((item) => item.college === college.value) : []
 )
+
+const filteredClasses = computed(() => {
+  let list = classes.value
+  if (college.value) list = list.filter((item) => item.college === college.value)
+  // 一个班可能挂多个专业，只要包含所选专业就算命中
+  if (major.value) list = list.filter((item) => (item.majors || []).includes(major.value))
+  return list
+})
 
 // 学院/专业取自己那份班级目录（同源数据），不依赖任何前端推断
 const currentClassMeta = computed(() =>
@@ -299,12 +391,14 @@ async function loadDirectory() {
     const { data } = await http.get('/teacher/classes')
     classes.value = data?.classes || []
     colleges.value = data?.colleges || []
+    majors.value = data?.majors || []
     if (!className.value) {
       const remembered = localStorage.getItem('qh_last_class')
       const hit = classes.value.find((item) => item.class_name === remembered)
       className.value = hit ? hit.class_name : (classes.value[0]?.class_name || '')
       if (hit) {
         college.value = hit.college
+        major.value = (hit.majors || [])[0] || ''
       }
     }
   } catch (err) {
@@ -312,8 +406,27 @@ async function loadDirectory() {
   }
 }
 
+// 班级选项里的专业标注：单专业直接显示，多专业显示数量
+function majorLabel(item) {
+  const list = item?.majors || []
+  if (!list.length) return '专业未填'
+  return list.length === 1 ? list[0] : `${list.length} 个专业`
+}
+
+// 换学院：专业清空，班级落到该学院第一个班
 function onCollegeChange(value) {
+  major.value = ''
   const list = value ? filteredClasses.value : classes.value
+  if (!list.some((item) => item.class_name === className.value)) {
+    className.value = list[0]?.class_name || ''
+    rememberClass(className.value)
+    loadClass()
+  }
+}
+
+// 换专业：班级落到该专业第一个班
+function onMajorChange() {
+  const list = filteredClasses.value
   if (!list.some((item) => item.class_name === className.value)) {
     className.value = list[0]?.class_name || ''
     rememberClass(className.value)
@@ -360,6 +473,7 @@ async function loadAll() {
 
 function reset() {
   college.value = ''
+  major.value = ''
   className.value = classes.value[0]?.class_name || ''
   term.value = '2025-2026-2'
   overview.value = {}
@@ -374,6 +488,12 @@ watch(autoRefresh, (on) => {
 })
 
 function onClassChange() {
+  // 直接选班级时把上级两项补齐，保证三级筛选状态与当前班级一致
+  const meta = classes.value.find((item) => item.class_name === className.value)
+  if (meta) {
+    if (!college.value) college.value = meta.college || ''
+    if (!major.value) major.value = (meta.majors || [])[0] || ''
+  }
   rememberClass(className.value)
   loadClass()
 }
@@ -403,6 +523,60 @@ function renderBar() {
     },
     true
   )
+}
+
+function thresholdSourceText(source) {
+  const map = { class: '班级覆盖', tenant: '租户默认', default: '引擎默认' }
+  return map[source] || source || '-'
+}
+
+async function openThresholds() {
+  const klass = String(className.value || '').trim()
+  if (!klass) {
+    ElMessage.warning('请先选择班级')
+    return
+  }
+  thresholdDialog.value = true
+  thresholdLoading.value = true
+  thresholdTip.value = ''
+  try {
+    const { data } = await http.get('/teacher/warning-thresholds', {
+      params: { class_name: klass }
+    })
+    thresholdRows.value = (data?.thresholds || []).map((row) => ({ ...row }))
+  } catch (err) {
+    thresholdTip.value = err?.response?.data?.detail || '阈值加载失败'
+  } finally {
+    thresholdLoading.value = false
+  }
+}
+
+async function saveThresholds() {
+  const klass = String(className.value || '').trim()
+  if (!klass) return
+  thresholdSaving.value = true
+  thresholdTip.value = ''
+  try {
+    const payload = {
+      thresholds: thresholdRows.value.map((row) => ({
+        metric: row.metric,
+        weight: row.weight,
+        yellow_value: row.yellow_value,
+        orange_value: row.orange_value,
+        red_value: row.red_value
+      }))
+    }
+    await http.put('/teacher/warning-thresholds', payload, {
+      params: { class_name: klass }
+    })
+    ElMessage.success('阈值已保存，预警结果已按新口径重算')
+    thresholdDialog.value = false
+    await loadClass()
+  } catch (err) {
+    thresholdTip.value = err?.response?.data?.detail || '阈值保存失败'
+  } finally {
+    thresholdSaving.value = false
+  }
 }
 
 async function openProfile(row) {
@@ -642,6 +816,24 @@ onBeforeUnmount(() => {
 .stat-value.small {
   font-size: 20px;
   color: var(--qh-text);
+}
+
+.threshold-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--qh-text-sub);
+}
+
+.threshold-tip {
+  min-height: 18px;
+  margin-top: 8px;
+  color: var(--qh-red);
+  font-size: 12px;
 }
 
 .intent-card {

@@ -17,6 +17,22 @@
             </el-option>
           </el-select>
         </el-form-item>
+        <el-form-item label="专业">
+          <el-select
+            v-model="major"
+            clearable
+            filterable
+            :placeholder="college ? '全部专业' : '请先选学院'"
+            :disabled="!college"
+            style="width: 180px"
+            @change="onMajorChange"
+          >
+            <el-option v-for="m in majorOptions" :key="m.college + '/' + m.major" :label="m.major" :value="m.major">
+              <span>{{ m.major }}</span>
+              <span class="option-note">{{ m.class_cnt }} 班 / {{ m.student_cnt }} 人</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="班级">
           <el-select
             v-model="className"
@@ -27,7 +43,7 @@
           >
             <el-option v-for="k in filteredClasses" :key="k.class_name" :label="k.class_name" :value="k.class_name">
               <span>{{ k.class_name }}</span>
-              <span class="option-note">{{ k.headcount }} 人</span>
+              <span class="option-note">{{ k.headcount }} 人 · {{ majorLabel(k) }}</span>
             </el-option>
           </el-select>
         </el-form-item>
@@ -219,7 +235,9 @@ const studentNo = ref('')
 const term = ref('2025-2026-2')
 const colleges = ref([])
 const classes = ref([])
+const majors = ref([])
 const college = ref('')
+const major = ref('')
 const level = ref('')
 const rows = ref([])
 const classmates = ref(0)
@@ -281,21 +299,32 @@ function rememberClass(name) {
   localStorage.setItem('qh_last_class', name)
 }
 
-const filteredClasses = computed(() =>
-  college.value ? classes.value.filter((item) => item.college === college.value) : classes.value
+// 三级级联：学院 → 专业 → 班级
+const majorOptions = computed(() =>
+  college.value ? majors.value.filter((item) => item.college === college.value) : []
 )
+
+const filteredClasses = computed(() => {
+  let list = classes.value
+  if (college.value) list = list.filter((item) => item.college === college.value)
+  // 一个班可能挂多个专业，只要包含所选专业就算命中
+  if (major.value) list = list.filter((item) => (item.majors || []).includes(major.value))
+  return list
+})
 
 async function loadDirectory() {
   try {
     const { data } = await http.get('/teacher/classes')
     classes.value = data?.classes || []
     colleges.value = data?.colleges || []
+    majors.value = data?.majors || []
     if (!className.value) {
       const remembered = localStorage.getItem('qh_last_class')
       const hit = classes.value.find((item) => item.class_name === remembered)
       className.value = hit ? hit.class_name : (classes.value[0]?.class_name || '')
       if (hit) {
         college.value = hit.college
+        major.value = (hit.majors || [])[0] || ''
       }
     }
   } catch (err) {
@@ -303,8 +332,27 @@ async function loadDirectory() {
   }
 }
 
+// 班级选项里的专业标注：单专业直接显示，多专业显示数量
+function majorLabel(item) {
+  const list = item?.majors || []
+  if (!list.length) return '专业未填'
+  return list.length === 1 ? list[0] : `${list.length} 个专业`
+}
+
+// 换学院：专业清空，班级落到该学院第一个班
 function onCollegeChange(value) {
+  major.value = ''
   const list = value ? filteredClasses.value : classes.value
+  if (!list.some((item) => item.class_name === className.value)) {
+    className.value = list[0]?.class_name || ''
+    rememberClass(className.value)
+    loadClass()
+  }
+}
+
+// 换专业：班级落到该专业第一个班
+function onMajorChange() {
+  const list = filteredClasses.value
   if (!list.some((item) => item.class_name === className.value)) {
     className.value = list[0]?.class_name || ''
     rememberClass(className.value)
@@ -351,6 +399,7 @@ async function loadClass() {
 
 function clearFilter() {
   college.value = ''
+  major.value = ''
   className.value = classes.value[0]?.class_name || ''
   level.value = ''
   term.value = '2025-2026-2'
@@ -365,6 +414,12 @@ function clearFilter() {
 }
 
 function onClassChange() {
+  // 直接选班级时把上级两项补齐，保证三级筛选状态与当前班级一致
+  const meta = classes.value.find((item) => item.class_name === className.value)
+  if (meta) {
+    if (!college.value) college.value = meta.college || ''
+    if (!major.value) major.value = (meta.majors || [])[0] || ''
+  }
   rememberClass(className.value)
   loadClass()
 }

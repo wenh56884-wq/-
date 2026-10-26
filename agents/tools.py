@@ -485,8 +485,30 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
             if major not in entry["majors"]:
                 entry["majors"].append(major)
 
+    # 专业层（学院 → 专业 → 班级 三级级联用）：人数按 (学院, 专业) 精确求和，
+    # 班级名取自原始分组，不做任何推断
+    major_index: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        college_name = str(row.get("college") or "") or "未分配学院"
+        major_name = str(row.get("major") or "") or "未分配专业"
+        entry = major_index.setdefault(
+            (college_name, major_name),
+            {"college": college_name, "major": major_name, "class_cnt": 0,
+             "student_cnt": 0, "classes": []},
+        )
+        entry["student_cnt"] += int(row.get("headcount") or 0)
+        class_name = str(row.get("class_name") or "")
+        if class_name and class_name not in entry["classes"]:
+            entry["classes"].append(class_name)
+    for entry in major_index.values():
+        entry["classes"] = sorted(entry["classes"])
+        entry["class_cnt"] = len(entry["classes"])
+
+    major_rows = [major_index[key] for key in sorted(major_index)]
+
     _audit_call(ctx, "class_list", "all",
-                {"class_cnt": len(class_rows), "college_cnt": len(colleges)})
+                {"class_cnt": len(class_rows), "college_cnt": len(colleges),
+                 "major_cnt": len(major_rows)})
     return {
         "tenant_id": int(ctx.tenant_id),
         "source": "mysql.student",
@@ -494,6 +516,8 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
         "student_cnt": sum(int(item["headcount"]) for item in class_rows),
         "classes": class_rows,
         "colleges": [colleges[key] for key in sorted(colleges)],
+        "majors": major_rows,
+        "major_cnt": len(major_rows),
         "scope": "assigned" if scope is not None else "tenant",
         "assigned_class_cnt": len(scope) if scope is not None else 0,
         "note": ("班级范围 = 任教班级" if scope is not None
