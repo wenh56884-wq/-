@@ -7,6 +7,20 @@
       <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
       <el-switch v-model="autoRefresh" size="small" active-text="30 秒自动刷新" />
       <el-button size="small" :loading="warningLoading || recLoading" @click="reloadAll">立即刷新</el-button>
+      <button
+        class="bell-btn"
+        type="button"
+        :class="{ 'has-new': unreadCnt > 0 }"
+        :title="unreadCnt ? `${unreadCnt} 条新竞赛通知` : '暂无新竞赛通知'"
+        @click="openNotices"
+      >
+        <svg viewBox="0 0 24 24" class="bell-icon" aria-hidden="true">
+          <path d="M12 4a5 5 0 0 0-5 5v3l-1.5 2.5h13L17 12V9a5 5 0 0 0-5-5z" />
+          <path d="M10 17.5a2 2 0 0 0 4 0" />
+        </svg>
+        <span>竞赛通知</span>
+        <span v-if="unreadCnt" class="bell-badge">{{ unreadCnt > 99 ? '99+' : unreadCnt }}</span>
+      </button>
       <span class="live-tip">不想问？点右下角 AI 小人直接提问</span>
     </div>
 
@@ -127,13 +141,17 @@
       </template>
 
       <el-empty v-if="!recLoading && !items.length" :description="recTip || '暂无推荐结果'" />
-      <!-- 紧凑小格子：自适应列数 + 入场逐格浮现 -->
+      <!-- 紧凑小格子：自适应列数 + 入场逐格浮现；点开看详情与行动清单 -->
       <div class="rec-grid">
         <div
           v-for="(item, index) in items"
           :key="item.job_id"
           class="rec-cell"
+          role="button"
+          tabindex="0"
           :style="{ animationDelay: `${Math.min(index, 8) * 45}ms` }"
+          @click="openDetail(item)"
+          @keyup.enter="openDetail(item)"
         >
           <div class="cell-top">
             <span class="cell-index">{{ index + 1 }}</span>
@@ -167,6 +185,123 @@
         <span v-if="recs.note" class="err">{{ recs.note }}</span>
       </div>
     </el-card>
+
+    <!-- 岗位详情抽屉：完整打分 + 建议 + 需要做的 + 该参加的比赛 -->
+    <el-drawer v-model="detailOpen" :size="drawerSize" direction="rtl" :with-header="false">
+      <div v-if="active" class="detail-shell">
+        <header class="detail-head">
+          <div class="detail-head-text">
+            <div class="detail-title" :title="active.title">{{ active.title }}</div>
+            <div class="detail-sub">{{ active.company || '公司未填' }} · {{ active.city || '城市不限' }}</div>
+          </div>
+          <button class="icon-btn" type="button" aria-label="关闭详情" @click="detailOpen = false">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </header>
+
+        <div class="detail-body">
+          <div class="detail-kpis">
+            <div class="kpi">
+              <div class="kpi-label">综合匹配</div>
+              <div class="kpi-value">{{ fmtScore(active.final_score) }}</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">薪资区间</div>
+              <div class="kpi-value small">{{ salaryText(active) }} 元/月</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">成绩门槛</div>
+              <div class="kpi-value small">{{ active.min_gpa ?? '-' }} 分</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">岗位方向</div>
+              <div class="kpi-value small">{{ active.direction || '-' }}</div>
+            </div>
+          </div>
+
+          <div class="sec-title">四维打分</div>
+          <div class="dim-list">
+            <div v-for="(value, key) in active.dims || {}" :key="key" class="dim-row">
+              <span class="dim-name">{{ DIM_TEXT[key] || key }}</span>
+              <span class="dim-bar"><i :style="{ width: `${Math.round(Number(value || 0) * 100)}%` }" /></span>
+              <span class="dim-value">{{ fmtScore(value) }}</span>
+            </div>
+          </div>
+
+          <div class="sec-title">为什么推荐给你</div>
+          <ul class="ul-hit">
+            <li v-for="(t, i) in active.hit_items || []" :key="'h' + i">{{ t }}</li>
+            <li v-if="!(active.hit_items || []).length">暂无可归因的命中项</li>
+          </ul>
+
+          <div class="sec-title">还差什么</div>
+          <ul class="ul-gap">
+            <li v-for="(t, i) in active.gap_items || []" :key="'g' + i">{{ t }}</li>
+            <li v-if="!(active.gap_items || []).length">当前没有检测到明显缺口</li>
+          </ul>
+
+          <div class="sec-title">需要做的</div>
+          <ol class="ol-action">
+            <li v-for="(t, i) in active.action_items || []" :key="'a' + i">{{ t }}</li>
+            <li v-if="!(active.action_items || []).length">{{ active.advice || '保持当前节奏即可' }}</li>
+          </ol>
+
+          <div class="sec-title">
+            该参加的比赛
+            <el-radio-group v-model="track" size="small" class="track-switch" @change="loadCompetitions">
+              <el-radio-button value="就业">就业</el-radio-button>
+              <el-radio-button value="考公">考公</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div v-if="compLoading" class="comp-loading">正在按你的方向筛选官方竞赛…</div>
+          <div v-else-if="!(competitions.length)" class="comp-loading">暂无匹配的竞赛</div>
+          <div v-else class="comp-list">
+            <div v-for="c in competitions" :key="c.competition_id" class="comp-cell">
+              <div class="comp-top">
+                <span class="comp-cat" :class="'cat-' + String(c.category || '').toLowerCase()">
+                  {{ c.category }} 类
+                </span>
+                <span class="comp-name" :title="c.name">{{ c.name }}</span>
+              </div>
+              <div class="comp-org">{{ c.org_unit }}</div>
+              <div class="comp-why">{{ c.match_reason }}</div>
+              <div v-if="c.reward" class="comp-reward">认定/奖励：{{ c.reward }}</div>
+              <a class="comp-link" :href="c.source_url" target="_blank" rel="noopener">
+                查看官方通知 →
+              </a>
+            </div>
+          </div>
+          <div class="engine-line">
+            竞赛库 {{ comps.engine_version || '-' }} · 候选 {{ comps.candidate_cnt ?? '-' }} 项 ·
+            来源：重庆财经学院教务处
+          </div>
+        </div>
+      </div>
+    </el-drawer>
+
+    <!-- 竞赛通知中心：官方一发布即推送 -->
+    <el-drawer v-model="noticeOpen" :size="drawerSize" direction="rtl" :with-header="false">
+      <div class="detail-shell">
+        <header class="detail-head">
+          <div class="detail-head-text">
+            <div class="detail-title">竞赛通知</div>
+            <div class="detail-sub">重庆财经学院教务处发布，系统定期自动同步</div>
+          </div>
+          <button class="icon-btn" type="button" aria-label="关闭通知" @click="noticeOpen = false">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </header>
+        <div class="detail-body">
+          <el-empty v-if="!notices.length" description="暂无新通知" />
+          <div v-for="n in notices" :key="n.title" class="notice-cell">
+            <div class="notice-date">{{ n.published_at }}</div>
+            <div class="notice-title">{{ n.title }}</div>
+            <a class="comp-link" :href="n.url" target="_blank" rel="noopener">打开原文 →</a>
+          </div>
+          <div class="engine-line">已读水位：{{ lastReadAt || '未读' }}</div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -240,6 +375,84 @@ function salaryText(item) {
   if (min === null || min === undefined || max === null || max === undefined) return '薪资面议'
   return `${Math.round(Number(min))}-${Math.round(Number(max))}`
 }
+
+const DIM_TEXT = {
+  major_match: '专业匹配',
+  gpa_gate: '成绩门槛',
+  skill_cover: '技能覆盖',
+  interest_fit: '兴趣方向'
+}
+
+// ---- 岗位详情抽屉 ----
+const detailOpen = ref(false)
+const active = ref(null)
+const drawerSize = computed(() => (window.innerWidth < 768 ? '100%' : '480px'))
+const track = ref('就业')
+const compLoading = ref(false)
+const comps = ref({})
+const competitions = ref([])
+
+async function openDetail(item) {
+  active.value = item
+  detailOpen.value = true
+  await loadCompetitions()
+}
+
+async function loadCompetitions() {
+  const item = active.value
+  if (!item) return
+  compLoading.value = true
+  try {
+    const { data } = await http.get('/student/competitions', {
+      params: { track: track.value, direction: item.direction || '', job_title: item.title || '', limit: 6 }
+    })
+    comps.value = data || {}
+    competitions.value = data?.items || []
+  } catch (err) {
+    comps.value = {}
+    competitions.value = []
+    ElMessage.error(err?.response?.data?.detail || '竞赛推荐加载失败')
+  } finally {
+    compLoading.value = false
+  }
+}
+
+// ---- 竞赛通知推送 ----
+const noticeOpen = ref(false)
+const notices = ref([])
+const unreadCnt = ref(0)
+const lastReadAt = ref('')
+let noticeTimer = null
+
+async function loadNotices() {
+  try {
+    const { data } = await http.get('/student/notices', { params: { limit: 20 } })
+    unreadCnt.value = Number(data?.unread_cnt || 0)
+    lastReadAt.value = data?.last_read_at || ''
+    if (!noticeOpen.value) return
+    notices.value = data?.items || []
+  } catch {
+    unreadCnt.value = 0
+  }
+}
+
+async function openNotices() {
+  noticeOpen.value = true
+  await loadNotices()
+}
+
+watch(noticeOpen, async (opened) => {
+  if (opened) return
+  if (!unreadCnt.value) return
+  // 关闭通知即视为已读：把水位推到当前时间，之后的新通知才会再提醒
+  try {
+    await http.post('/student/notices/read')
+    unreadCnt.value = 0
+    await loadNotices()
+  } catch {
+    /* 标记失败不影响使用 */
+  }
+})
 
 async function loadGuide() {
   guideLoading.value = true
@@ -325,11 +538,14 @@ watch(autoRefresh, (on) => {
 })
 
 onMounted(async () => {
-  await Promise.all([reloadAll(), loadGuide()])
+  await Promise.all([reloadAll(), loadGuide(), loadNotices()])
+  // 每 60 秒查一次未读：官方发布新通知后，这里会自己亮红点
+  noticeTimer = setInterval(loadNotices, 60000)
 })
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
+  if (noticeTimer) clearInterval(noticeTimer)
 })
 </script>
 
@@ -621,9 +837,346 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+/* ---------- 竞赛通知铃铛 ---------- */
+.bell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--qh-border, #e4e4e7);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--qh-text-sub, #52525b);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.bell-btn:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.bell-btn.has-new {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.bell-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--qh-red, #dc2626);
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ---------- 详情 / 通知抽屉 ---------- */
+.detail-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+}
+
+.detail-head {
+  flex: 0 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--qh-border, #e4e4e7);
+}
+
+.detail-head-text {
+  min-width: 0;
+}
+
+.detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18181b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-sub {
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border: 1px solid var(--qh-border, #e4e4e7);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 150ms ease;
+}
+
+.icon-btn:hover {
+  background: #f4f4f5;
+}
+
+.ico {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #52525b;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.detail-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 16px 20px;
+}
+
+.detail-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kpi {
+  background: #ffffff;
+  border: 1px solid var(--qh-border, #e4e4e7);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.kpi-label {
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.kpi-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--qh-red, #dc2626);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-value.small {
+  font-size: 14px;
+  color: #18181b;
+}
+
+.sec-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.track-switch {
+  margin-left: auto;
+}
+
+.dim-list {
+  background: #ffffff;
+  border: 1px solid var(--qh-border, #e4e4e7);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.dim-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.dim-row + .dim-row {
+  margin-top: 8px;
+}
+
+.dim-name {
+  flex: 0 0 72px;
+  color: #52525b;
+}
+
+.dim-bar {
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 8px;
+  background: #f4f4f5;
+  overflow: hidden;
+}
+
+.dim-bar i {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+  border-radius: 8px;
+}
+
+.dim-value {
+  flex: 0 0 56px;
+  text-align: right;
+  color: #18181b;
+  font-variant-numeric: tabular-nums;
+}
+
+.ul-hit,
+.ul-gap {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.9;
+  color: #52525b;
+}
+
+.ul-gap {
+  color: #b45309;
+}
+
+.ol-action {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 2;
+  color: #18181b;
+}
+
+.comp-loading {
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.comp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comp-cell {
+  background: #ffffff;
+  border: 1px solid var(--qh-border, #e4e4e7);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.comp-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comp-cat {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.comp-cat.cat-a {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.comp-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #18181b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comp-org {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.comp-why {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #52525b;
+}
+
+.comp-reward {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.comp-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.comp-link:hover {
+  text-decoration: underline;
+}
+
+.notice-cell {
+  background: #ffffff;
+  border: 1px solid var(--qh-border, #e4e4e7);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.notice-date {
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.notice-title {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #18181b;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rec-cell {
     animation: none;
+    transition: none;
+  }
+
+  .bell-btn,
+  .icon-btn {
     transition: none;
   }
 }

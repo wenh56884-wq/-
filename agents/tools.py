@@ -16,7 +16,7 @@ import pymysql
 
 from agents.career import context as career_context
 from app.config import Settings, get_settings
-from engine import career_guide, job_search, profile, recommend, warning
+from engine import career_guide, competition, job_search, profile, recommend, warning
 from engine.career_rules import CAREER_ENGINE_VERSION
 from engine.rules import LEVELS
 from engine.store import DuckDBStore
@@ -211,6 +211,9 @@ def _nearby_classes(ctx: ToolContext, class_name: str, limit: int = 5) -> list[s
         (ctx.tenant_id,),
     )
     names = [str(r.get("class_name") or "") for r in rows if r.get("class_name")]
+    scope = _teacher_class_scope(ctx)
+    if scope is not None:
+        names = [name for name in names if name in scope]
     if not names:
         return []
     probe = str(class_name or "").strip().lower()
@@ -249,6 +252,23 @@ def _nearby_classes(ctx: ToolContext, class_name: str, limit: int = 5) -> list[s
     return picked[:limit]
 
 
+def _teacher_class_scope(ctx: ToolContext) -> set[str] | None:
+    """教师任教班级集合；未配置任何绑定返回 None（兼容旧演示：租户范围）。
+
+    为什么要 None 而不是空集合：空集合会让所有旧教师账号突然看不到任何班，
+    破坏演示；只有显式配置过 teacher_class 的教师才收窄范围。
+    """
+    if ctx.actor_type != ACTOR_TEACHER:
+        return None
+    rows = _query(
+        "SELECT class_name FROM teacher_class "
+        "WHERE tenant_id = %s AND teacher_id = %s ORDER BY class_name",
+        (ctx.tenant_id, int(ctx.teacher_id or 0)),
+    )
+    names = {str(row.get("class_name")) for row in rows if row.get("class_name")}
+    return names or None
+
+
 def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, Any]:
     """校验班级可访问。**三种情况分开处理**，不把「输错名字」当成越权。
 
@@ -266,6 +286,10 @@ def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, 
     )
     cnt = int(rows[0]["cnt"]) if rows else 0
     if cnt > 0:
+        scope = _teacher_class_scope(ctx)
+        if scope is not None and class_name not in scope:
+            _deny(ctx, action, str(class_name),
+                  f"班级 {class_name} 不在当前教师的任教范围内")
         return {"headcount": cnt}
 
     # 该班是否存在于其他租户？存在 → 真越权
@@ -302,6 +326,12 @@ def _fetch_student(ctx: ToolContext, student_no: str, action: str) -> dict[str, 
               f"学生 {student_no} 不属于当前租户")
     item = dict(rows[0])
     item["student_no"] = str(item["student_no"])
+    if ctx.actor_type == ACTOR_TEACHER:
+        scope = _teacher_class_scope(ctx)
+        class_name = str(item.get("class_name") or "")
+        if scope is not None and class_name not in scope:
+            _deny(ctx, action, str(student_no),
+                  f"学生 {student_no} 的班级不在当前教师的任教范围内")
     return item
 
 
@@ -416,6 +446,7 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
     """
     ctx = _check_ctx(ctx)
     _require_teacher(ctx, "class_list", "all")
+    scope = _teacher_class_scope(ctx)
     rows = _query(
         "SELECT s.college AS college, s.class_name AS class_name, s.major AS major, "
         "       COUNT(DISTINCT s.id) AS headcount "
@@ -424,6 +455,8 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
         "ORDER BY s.college, s.class_name, s.major",
         (ctx.tenant_id,),
     )
+    if scope is not None:
+        rows = [row for row in rows if str(row.get("class_name") or "") in scope]
 
     classes: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -461,9 +494,162 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
         "student_cnt": sum(int(item["headcount"]) for item in class_rows),
         "classes": class_rows,
         "colleges": [colleges[key] for key in sorted(colleges)],
-        "note": "班级范围 = 本租户全部班级（teacher 表暂无任教班级绑定，未做更细授权）",
+        "scope": "assigned" if scope is not None else "tenant",
+        "assigned_class_cnt": len(scope) if scope is not None else 0,
+        "note": ("班级范围 = 任教班级" if scope is not None
+                 else "未配置任教班级，回退本租户全部班级"),
         "tools_version": TOOLS_VERSION,
     }
+
+
+# ----------------------------------------------------------------
+# 班级级预警阈值（教师按班配置；未覆盖的指标回退租户默认）
+# ----------------------------------------------------------------
+THRESHOLD_METRICS: tuple[str, ...] = (
+    "fail_count", "gpa_drop", "gpa_drop_slope", "attendance_rate", "level",
+)
+
+
+def _threshold_snapshot(ctx: ToolContext, class_name: str) -> dict[str, Any]:
+    """把有效规则展开成前端可直接编辑的行。"""
+    rules = warning.get_rules(ctx.tenant_id, class_name)
+    tenant_metrics = {
+        str(row.get("metric")) for row in warning.fetch_threshold_rows(ctx.tenant_id)
+    }
+    class_metrics = {
+        str(row.get("metric"))
+        for row in warning.fetch_class_threshold_rows(ctx.tenant_id, class_name)
+    }
+
+    def source(metric: str) -> str:
+        if metric in class_metrics:
+            return "class"
+        if metric in tenant_metrics:
+            return "tenant"
+        return "default"
+
+    rows = [
+        {"metric": "fail_count", "label": "挂科门次",
+         "weight": rules.fail_count.weight,
+         "yellow_value": rules.fail_count.score_1,
+         "orange_value": rules.fail_count.score_2,
+         "red_value": rules.fail_count.score_3},
+        {"metric": "gpa_drop", "label": "均分下滑",
+         "weight": rules.gpa_drop.weight,
+         "yellow_value": rules.gpa_drop.start,
+         "orange_value": rules.gpa_drop.base,
+         "red_value": rules.gpa_drop.ceiling},
+        {"metric": "gpa_drop_slope", "label": "下滑斜率",
+         "weight": None,
+         "yellow_value": rules.gpa_drop.slope,
+         "orange_value": None,
+         "red_value": None},
+        {"metric": "attendance_rate", "label": "出勤率",
+         "weight": rules.attendance.weight,
+         "yellow_value": rules.attendance.start,
+         "orange_value": rules.attendance.floor,
+         "red_value": rules.attendance.ceiling},
+        {"metric": "level", "label": "分级门槛",
+         "weight": None,
+         "yellow_value": rules.level.yellow,
+         "orange_value": rules.level.orange,
+         "red_value": rules.level.red},
+    ]
+    for row in rows:
+        row["source"] = source(str(row["metric"]))
+    return {
+        "class_name": str(class_name),
+        "thresholds": rows,
+        "tenant_override_metrics": sorted(tenant_metrics),
+        "class_override_metrics": sorted(class_metrics),
+        "note": "班级覆盖 > 租户默认 > 引擎内置默认；留空表示回退上一级。",
+        "engine_version": warning.ENGINE_VERSION,
+        "tools_version": TOOLS_VERSION,
+    }
+
+
+def _replace_class_thresholds(
+    tenant_id: int,
+    class_name: str,
+    rows: Sequence[tuple[str, float | None, float | None, float | None, float | None]],
+) -> None:
+    """整体替换某班的阈值覆盖（先删后插，事务提交）。"""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM class_warning_threshold "
+                "WHERE tenant_id = %s AND class_name = %s",
+                (tenant_id, class_name),
+            )
+            for metric, weight, red, orange, yellow in rows:
+                cur.execute(
+                    "INSERT INTO class_warning_threshold "
+                    "(tenant_id, class_name, metric, weight, red_value, orange_value, yellow_value) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (tenant_id, class_name, metric, weight, red, orange, yellow),
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_warning_thresholds(ctx: ToolContext, class_name: str) -> dict[str, Any]:
+    """读取某班的有效阈值（含来源：class/tenant/default）。"""
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "get_warning_thresholds", str(class_name))
+    _require_class(ctx, class_name, "get_warning_thresholds")
+    snapshot = _threshold_snapshot(ctx, class_name)
+    _audit_call(ctx, "get_warning_thresholds", str(class_name))
+    return snapshot
+
+
+def save_warning_thresholds(
+    ctx: ToolContext,
+    class_name: str,
+    thresholds: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """整体替换某班阈值；只接受 THRESHOLD_METRICS，空值表示回退。"""
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "save_warning_thresholds", str(class_name))
+    _require_class(ctx, class_name, "save_warning_thresholds")
+
+    allowed = set(THRESHOLD_METRICS)
+    clean: dict[str, dict[str, float | None]] = {}
+    for item in thresholds:
+        metric = str(item.get("metric") or "").strip()
+        if metric not in allowed:
+            raise ValueError(f"非法阈值指标：{metric}，可选 {THRESHOLD_METRICS}")
+        values: dict[str, float | None] = {}
+        for key in ("weight", "yellow_value", "orange_value", "red_value"):
+            raw = item.get(key)
+            if raw is None or str(raw).strip() == "":
+                values[key] = None
+                continue
+            try:
+                number = float(raw)
+            except (TypeError, ValueError):
+                raise ValueError(f"{metric}.{key} 必须是数字")
+            if number < 0:
+                raise ValueError(f"{metric}.{key} 不能为负数")
+            values[key] = number
+        clean[metric] = values
+
+    rows: list[tuple[str, float | None, float | None, float | None, float | None]] = []
+    for metric, values in clean.items():
+        if all(values[key] is None for key in values):
+            continue
+        rows.append((
+            metric,
+            values["weight"],
+            values["red_value"],
+            values["orange_value"],
+            values["yellow_value"],
+        ))
+    _replace_class_thresholds(ctx.tenant_id, str(class_name), rows)
+    _audit_call(ctx, "save_warning_thresholds", str(class_name),
+                {"metrics": [row[0] for row in rows]})
+    return _threshold_snapshot(ctx, str(class_name))
 
 
 def class_overview(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
@@ -855,7 +1041,10 @@ def my_warning(ctx: ToolContext, term: str | None = None) -> dict[str, Any]:
     term = _resolve_term(ctx, term)
     me = _resolve_self(ctx, "my_warning")
 
-    result = warning.compute_student(ctx.tenant_id, me["student_no"], term)
+    result = warning.compute_student(
+        ctx.tenant_id, me["student_no"], term,
+        class_name=str(me.get("class_name") or ""),
+    )
     _audit_call(ctx, "my_warning", f"{me['student_no']}/{term}",
                 {"level": result.get("level"), "coverage": result.get("coverage")})
     return {
@@ -907,6 +1096,46 @@ def my_recommendations(ctx: ToolContext, term: str | None = None,
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,
     }
+
+
+# ================================================================
+# 竞赛推荐与通知推送（数据来自重庆财经学院教务处公布的官方名单/通知）
+# ================================================================
+def competition_guide(ctx: ToolContext, track: str = "就业", direction: str = "",
+                      job_title: str = "", gap_skills: Sequence[str] = (),
+                      limit: int = 8) -> dict[str, Any]:
+    """按去向（考公/就业）+ 岗位方向推荐该参加的比赛；纯规则，结果附官方来源链接。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "competition_guide", "self")
+    me = _resolve_self(ctx, "competition_guide")
+
+    result = competition.recommend_competitions(
+        track=track, direction=direction, job_title=job_title,
+        gap_skills=list(gap_skills or ()), limit=limit)
+    _audit_call(ctx, "competition_guide", f"{me['student_no']}/{track}",
+                {"returned": len(result.get("items") or [])})
+    return {
+        "student_no": me["student_no"],
+        **result,
+        "tools_version": TOOLS_VERSION,
+    }
+
+
+def my_notices(ctx: ToolContext, limit: int = 20) -> dict[str, Any]:
+    """本人未读的竞赛通知（官方新发布即推送，按已读水位判定）。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_notices", "self")
+    me = _resolve_self(ctx, "my_notices")
+    result = competition.unread_notices(me["student_no"], ctx.tenant_id, limit=limit)
+    return {**result, "tools_version": TOOLS_VERSION}
+
+
+def mark_notices_read(ctx: ToolContext) -> dict[str, Any]:
+    """把已读水位推到当前时间（之后发布的新通知才会再次提醒）。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "mark_notices_read", "self")
+    me = _resolve_self(ctx, "mark_notices_read")
+    return competition.mark_read(me["student_no"], ctx.tenant_id)
 
 
 # ================================================================

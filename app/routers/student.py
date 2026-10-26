@@ -55,6 +55,35 @@ def my_recommendations(
 
 
 # ================================================================
+# 竞赛推荐与通知推送（数据来自重庆财经学院教务处官方名单/通知）
+# ================================================================
+@router.get("/competitions")
+def my_competitions(
+    track: str = Query(default="就业", description="去向：考公 / 就业"),
+    direction: str = Query(default="", description="岗位方向，如 数据 / 财务 / 后端"),
+    job_title: str = Query(default="", max_length=200, description="目标岗位标题，用于相关性匹配"),
+    limit: int = Query(default=8, ge=1, le=30),
+    ctx: ToolContext = Depends(require_student),
+) -> dict[str, Any]:
+    """按目标岗位推荐该参加的比赛；官方名单内挑选，每条附来源通知链接。"""
+    return _guard(ctx, "competition_guide", track,
+                  lambda: tools.competition_guide(ctx, track, direction, job_title, [], limit))
+
+
+@router.get("/notices")
+def my_notices(limit: int = Query(default=20, ge=1, le=50),
+               ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """未读竞赛通知：官方一发布即入库，这里返回该生水位线之后的新通知。"""
+    return _guard(ctx, "my_notices", "self", lambda: tools.my_notices(ctx, limit))
+
+
+@router.post("/notices/read")
+def read_notices(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """把已读水位推到当前时间。"""
+    return _guard(ctx, "mark_notices_read", "self", lambda: tools.mark_notices_read(ctx))
+
+
+# ================================================================
 # 岗位搜索（与推荐是两套逻辑：搜索按相关性，推荐按画像）
 # ================================================================
 @router.get("/jobs/facets")

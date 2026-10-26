@@ -132,6 +132,34 @@ def interest_fit_of(directions: Iterable[str], job_direction: str) -> tuple[floa
     return 0.0, f"未选修/浏览过 {job_direction} 方向"
 
 
+def _action_items_of(gaps: Sequence[str], skill_gaps: Sequence[str],
+                     gpa_gap: str, min_gpa: float, gpa: float | None,
+                     cold_start: bool) -> list[str]:
+    """「需要做的」清单：每条都由缺口直接推导，不引入任何新数值与推断。
+
+    顺序：补技能 → 补成绩 → 补经历。没有缺口时给一条保底动作。
+    """
+    actions: list[str] = []
+    for skill in list(skill_gaps)[:3]:
+        course = ""
+        for key, value in SKILL_ADVICE_COURSE.items():
+            if _hit(skill, key):
+                course = value
+                break
+        # SKILL_ADVICE_COURSE 的值自带《》，这里不再重复包一层
+        actions.append(
+            f"补齐「{skill}」：选修{course}或完成一个用到它的实战项目"
+            if course else f"补齐「{skill}」：在课程或项目里做出可展示的成果"
+        )
+    if gpa_gap and gpa is not None:
+        actions.append(f"把本学期均分提到 {min_gpa} 以上（当前 {round(float(gpa), 2)}，{gpa_gap}）")
+    if not skill_gaps and not gpa_gap:
+        actions.append("保持当前水平，争取一次与目标岗位直接相关的实习或竞赛经历")
+    if cold_start:
+        actions.append("先填一次职业意向并选修方向课程，让推荐有依据可算")
+    return actions[:4]
+
+
 def _advice_of(gaps: Sequence[str]) -> str:
     """建议段：优先补齐最缺技能对应的课程；无技能缺口时给通用建议。"""
     for skill in list(gaps)[:2]:
@@ -203,6 +231,8 @@ def score_job(student: Mapping[str, Any], job: Mapping[str, Any]) -> dict[str, A
         "dims": {k: round(v, _SCORE_NDIGITS) for k, v in dims.items()},
         "hit_items": hit_items,
         "gap_items": gap_items,
+        "action_items": _action_items_of(gap_items, skill_gaps, gpa_gap, gate,
+                                         to_float(student.get("gpa")), cold_start),
         "advice": _advice_of(skill_gaps),
         "cold_start": cold_start,
     }

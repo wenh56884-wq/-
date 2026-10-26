@@ -217,6 +217,14 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
+# 后台定时同步：官方一发布新竞赛通知就自动入库，学生端随即看到未读推送
+try:
+    from app.competition_sync import start_background_sync
+
+    start_background_sync()
+except Exception:  # 同步模块异常不能拖垮接口服务
+    pass
+
 
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
