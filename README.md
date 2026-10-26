@@ -119,3 +119,6 @@ D:\qihang\
 - P1-1：写 `requirements.txt`（依赖锁版本）。
 - P1-1：`docs\目录说明.md` 追加 P1-1 已落地文件清单。
 - P1-2：实现 `agents\llm.py`——DeepSeek 客户端封装（工厂函数 + SYSTEM_RULES + smoke）。
+- P2：落地 `db\mysql_schema.sql`（9 表 + 外键索引 + 种子租户）与 `db\duckdb_schema.sql`（3 表）。
+- P2：实现 `engine\store.py`——Store 抽象接口 + DuckDBStore 实现 + ClickHouseStore 留空。
+- P2：实现 `scripts\init_db.py`——幂等执行两份 schema，逐表打印结果。
