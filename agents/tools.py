@@ -15,7 +15,7 @@ from typing import Any, Mapping, Sequence
 import pymysql
 
 from app.config import Settings, get_settings
-from engine import profile, warning
+from engine import profile, recommend, warning
 from engine.career_rules import CAREER_ENGINE_VERSION
 from engine.rules import LEVELS
 from engine.store import DuckDBStore
@@ -694,27 +694,34 @@ def my_warning(ctx: ToolContext, term: str | None = None) -> dict[str, Any]:
 
 def my_recommendations(ctx: ToolContext, term: str | None = None,
                        top_n: int = 10) -> dict[str, Any]:
-    """本人岗位推荐 + 三段式理由。
-
-    推荐引擎（P9）未实现前返回**占位结构**：字段留全、items 为空、标注 recommend_version。
-    """
+    """本人岗位推荐 + 三段式理由：调 engine.recommend（规则版，无大模型无随机数）。"""
     ctx = _check_ctx(ctx)
     _require_student(ctx, "my_recommendations", "self")
     term = _resolve_term(ctx, term)
     me = _resolve_self(ctx, "my_recommendations")
 
+    try:
+        result = recommend.recommend_for_student(
+            ctx.tenant_id, me["student_no"], term, top_n=top_n)
+        note = ""
+    except Exception as exc:  # 推荐失败不得让整个对话崩掉
+        result = {"items": [], "cold_start": False, "candidate_cnt": 0}
+        note = f"推荐引擎暂不可用：{exc}"
+
     _audit_call(ctx, "my_recommendations", f"{me['student_no']}/{term}",
-                {"top_n": top_n, "recommend_version": "pending"})
+                {"top_n": top_n, "recommend_version": recommend.RECOMMEND_ENGINE_VERSION})
     return {
         "student_no": me["student_no"],
         "name": str(me.get("name") or ""),
         "term": term,
         "top_n": int(top_n),
-        "recommend_version": "pending",
-        "items": [],
+        "recommend_version": recommend.RECOMMEND_ENGINE_VERSION,
+        "cold_start": bool(result.get("cold_start")),
+        "candidate_cnt": int(result.get("candidate_cnt") or 0),
+        "items": list(result.get("items") or []),
         "reasons_schema": {"knowledge": "", "skill": "", "potential": ""},
-        "note": "推荐引擎（P9）未实现，此处返回占位结构，字段已留全",
-        "engine_version": TOOLS_VERSION,
+        "note": note or str(result.get("note") or ""),
+        "engine_version": recommend.RECOMMEND_ENGINE_VERSION,
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,
     }

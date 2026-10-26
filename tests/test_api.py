@@ -180,8 +180,13 @@ def test_student_sees_only_self(client, db):
     recs = client.get("/student/recommendations", params={"term": TERM, "top_n": 3},
                       headers=headers)
     assert recs.status_code == 200
-    assert recs.json()["student_no"] == str(stu["student_no"])
-    assert recs.json()["recommend_version"] == "pending"
+    body_rec = recs.json()
+    assert body_rec["student_no"] == str(stu["student_no"])
+    # P9 已实现：返回真实推荐（v1.0），每条字段齐全
+    assert body_rec["recommend_version"] == "v1.0"
+    assert isinstance(body_rec["items"], list)
+    for item in body_rec["items"][:5]:
+        assert set(("job_id", "title", "final_score", "advice")) <= set(item)
 
 
 @requires_mysql
