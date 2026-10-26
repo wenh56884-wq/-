@@ -1,0 +1,25 @@
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# --- secrets / local ---
+.env
+.env.local
+
+# --- data & runtime ---
+data/*.duckdb
+data/*.duckdb.wal
+data/*.csv
+logs/
+*.log
+
+# --- ide / os ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
