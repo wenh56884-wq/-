@@ -11,6 +11,7 @@ from typing import Any
 
 import pymysql
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agents.tools import ToolContext
@@ -83,6 +84,16 @@ def create_app() -> FastAPI:
     """构造 FastAPI 应用（工厂函数，便于测试与托管）。"""
     app = FastAPI(title=APP_TITLE, version=APP_VERSION,
                   responses={401: {"model": None}, 403: {"model": None}})
+
+    # 开发期允许 Vue dev server 直连；演示托管模式下此策略无害（同源请求）
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
 
