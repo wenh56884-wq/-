@@ -1,4 +1,60 @@
 # app/schemas.py
-# 职责：Pydantic 请求/响应模型定义
+# 职责：Pydantic 请求/响应模型（对外契约）
 # 依赖：pydantic.BaseModel
-# TODO: P5/P7 阶段补全各接口 schema
+# 说明：所有字段中文释义写在 Field(description) 里，直接给前端与 Critic 看
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class LoginIn(BaseModel):
+    """登录入参：role + 账号 + 口令（tenant_id 可选，用于同账号多租户场景）。"""
+
+    role: str = Field(description="teacher / student")
+    account: str = Field(description="教师传工号 employee_no，学生传学号 student_no")
+    password: str = Field(description="明文口令，仅在内网 HTTPS 传输")
+    tenant_id: int | None = Field(default=None, description="可选：限定登录的租户")
+
+
+class LoginOut(BaseModel):
+    """登录出参：token + 身份摘要（不含任何口令信息）。"""
+
+    access_token: str
+    token_type: str = "bearer"
+    role: str
+    tenant_id: int
+    actor_id: int
+    student_no: str | None = None
+    expires_in: int = Field(description="token 有效秒数")
+
+
+class ChatIn(BaseModel):
+    """对话入参：query 必填，term 缺省时由引擎回落最新学期。"""
+
+    query: str = Field(min_length=1, description="用户提问")
+    term: str | None = None
+
+
+class ChatOut(BaseModel):
+    """对话出参：answer + trace_id（Critic 依赖 trace_id 回查原始工具结果）。"""
+
+    answer: str
+    trace_id: str
+    term: str | None = None
+    degraded: bool = Field(default=False, description="True 表示走了降级话术，不保证含数值")
+
+
+class HealthOut(BaseModel):
+    """健康检查：db / duckdb 真实连通，llm 只检查 key 是否配置。"""
+
+    status: str
+    db: str
+    duckdb: str
+    llm: str
+
+
+class ErrorOut(BaseModel):
+    """统一错误结构：只给中文 message，不外泄堆栈。"""
+
+    detail: str
