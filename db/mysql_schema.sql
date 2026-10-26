@@ -43,6 +43,25 @@ CREATE TABLE IF NOT EXISTS teacher (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------
+-- 2.1 teacher_class —— 教师任教班级（计划书“仅可访问负责班级”）
+--     未配置任何行的教师回退为本租户全部班级，兼容旧演示账号；
+--     一旦配置，工具层只允许访问这些班级。
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS teacher_class (
+    id          BIGINT      NOT NULL AUTO_INCREMENT,
+    tenant_id   BIGINT      NOT NULL,
+    teacher_id  BIGINT      NOT NULL,
+    class_name  VARCHAR(40) NOT NULL,
+    created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_teacher_class (teacher_id, class_name),
+    KEY idx_teacher_class_tenant (tenant_id, teacher_id),
+    CONSTRAINT fk_tc_teacher FOREIGN KEY (teacher_id) REFERENCES teacher(id) ON DELETE CASCADE,
+    CONSTRAINT fk_tc_tenant  FOREIGN KEY (tenant_id)  REFERENCES tenant(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='教师任教班级绑定（空 = 回退租户范围）';
+
+-- -----------------------------------------------------------
 -- 3. student —— 学生
 --    college / major 取值必须来自 etl\school_cqufe.py 的 COLLEGES / MAJORS
 -- -----------------------------------------------------------
@@ -157,6 +176,29 @@ CREATE TABLE IF NOT EXISTS warning_threshold (
     UNIQUE KEY uk_threshold_tenant_metric (tenant_id, metric),
     CONSTRAINT fk_threshold_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------
+-- 8.1 class_warning_threshold —— 班级级预警阈值覆盖
+--     warning_threshold 仍是租户默认；本表只存“某班的覆盖值”，
+--     未覆盖的指标回退租户默认，再回退 engine.rules 内置默认。
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS class_warning_threshold (
+    id            BIGINT        NOT NULL AUTO_INCREMENT,
+    tenant_id     BIGINT        NOT NULL,
+    class_name    VARCHAR(40)   NOT NULL,
+    metric        VARCHAR(60)   NOT NULL,
+    weight        DECIMAL(5,4)  NULL,
+    red_value     DECIMAL(8,2)  NULL,
+    orange_value  DECIMAL(8,2)  NULL,
+    yellow_value  DECIMAL(8,2)  NULL,
+    updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_class_threshold (tenant_id, class_name, metric),
+    KEY idx_class_threshold_class (tenant_id, class_name),
+    CONSTRAINT fk_ct_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='班级级预警阈值覆盖（NULL = 回退租户默认）';
 
 -- -----------------------------------------------------------
 -- 9. audit_log —— 审计日志

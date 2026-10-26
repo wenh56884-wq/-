@@ -126,6 +126,47 @@ def test_unknown_class_is_value_error_not_permission(audit_sink, monkeypatch):
     assert audit_sink == [], "输错班级名不应被记成越权"
 
 
+def test_teacher_scope_limits_class_list(audit_sink, monkeypatch):
+    """配置了 teacher_class 的教师，班级目录只返回任教班级。"""
+    def fake_query(sql: str, params: tuple):
+        if "FROM teacher_class" in sql:
+            return [{"class_name": CLASS}]
+        if "GROUP BY s.college" in sql:
+            return [
+                {"college": "软件学院", "class_name": CLASS,
+                 "major": "软件工程", "headcount": 30},
+                {"college": "软件学院", "class_name": "RJ2202",
+                 "major": "软件工程", "headcount": 30},
+            ]
+        return []
+
+    monkeypatch.setattr(tools, "_query", fake_query)
+    result = tools.class_list(_teacher())
+    assert [item["class_name"] for item in result["classes"]] == [CLASS]
+    assert result["scope"] == "assigned"
+    assert result["assigned_class_cnt"] == 1
+
+
+def test_teacher_scope_denies_student_outside_class(audit_sink, monkeypatch):
+    """教师只能查任教班级的学生；跨班学号按越权拒绝并写审计。"""
+    def fake_query(sql: str, params: tuple):
+        if "FROM teacher_class" in sql:
+            return [{"class_name": CLASS}]
+        if "FROM student s WHERE" in sql:
+            return [{
+                "student_no": OTHER_STUDENT_NO, "name": "别班学生",
+                "major": "软件工程", "class_name": "RJ2202",
+                "student_id": 9, "college": "软件学院", "enroll_year": 2022,
+            }]
+        return []
+
+    monkeypatch.setattr(tools, "_query", fake_query)
+    with pytest.raises(PermissionError) as exc:
+        tools._fetch_student(_teacher(), OTHER_STUDENT_NO, "student_profile")
+    assert "任教范围" in str(exc.value)
+    assert audit_sink[-1]["action"] == "student_profile.denied"
+
+
 def test_cross_tenant_student_is_denied(audit_sink, monkeypatch):
     """教师查别租户的学号 → 拒绝并写审计。"""
     _offline_query(monkeypatch, [])

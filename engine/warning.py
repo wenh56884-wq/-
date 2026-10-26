@@ -123,9 +123,25 @@ def fetch_threshold_rows(tenant_id: int) -> list[dict[str, Any]]:
     return _query(sql, (tenant_id,))
 
 
-def get_rules(tenant_id: int) -> WarningRules:
-    """该租户的预警规则：表空或库不可用时使用默认阈值与权重。"""
-    return build_rules(tenant_id, fetch_threshold_rows(tenant_id))
+def fetch_class_threshold_rows(tenant_id: int, class_name: str) -> list[dict[str, Any]]:
+    """读取某班级的阈值覆盖行；无覆盖返回空列表。"""
+    sql = (
+        "SELECT metric, weight, red_value, orange_value, yellow_value "
+        "FROM class_warning_threshold "
+        "WHERE tenant_id = %s AND class_name = %s ORDER BY metric"
+    )
+    return _query(sql, (tenant_id, class_name))
+
+
+def get_rules(tenant_id: int, class_name: str | None = None) -> WarningRules:
+    """该租户/班级的预警规则：班级覆盖 > 租户默认 > 引擎内置默认。
+
+    build_rules 按行顺序覆盖，因此把班级行放在租户行之后即可实现优先级。
+    """
+    rows = fetch_threshold_rows(tenant_id)
+    if class_name:
+        rows = rows + fetch_class_threshold_rows(tenant_id, class_name)
+    return build_rules(tenant_id, rows)
 
 
 def compute_rank_pct(gpa_of: Mapping[str, float]) -> dict[str, float]:
@@ -219,6 +235,7 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
         rows.append({
             "student_no": sno,
             "name": str(r["name"]) if r["name"] is not None else "",
+            "class_name": class_name,
             "fail_count": int(r["fail_count"] or 0),
             "gpa": gpa,
             "gpa_drop": gpa_drop,
@@ -367,6 +384,7 @@ def compute_student(
     student_no: str,
     term: str,
     *,
+    class_name: str | None = None,
     metrics: Mapping[str, Any] | None = None,
     rules: WarningRules | None = None,
     fetcher: MetricsFetcher | None = None,
@@ -376,13 +394,16 @@ def compute_student(
     tenant_id 为强制入参，MySQL 取数一律带 WHERE tenant_id=?。
     metrics 非空时跳过取数（便于单测与离线复算）；不然用 fetcher，
     fetcher 为空则走默认 MySQL 取数。
+    班级级阈值优先：class_name 可由调用方传入，也可从取数行里的 class_name 推导。
     """
-    used_rules = rules if rules is not None else get_rules(tenant_id)
     if metrics is None:
         if fetcher is not None:
             metrics = fetcher(tenant_id, student_no, term)
         else:
             metrics = fetch_student_row(tenant_id, student_no, term)
+
+    effective_class = class_name or str((metrics or {}).get("class_name") or "")
+    used_rules = rules if rules is not None else get_rules(tenant_id, effective_class or None)
     if metrics is None:
         return evaluate_student(student_no, {}, used_rules, name="")
     name = str(metrics.get("name") or "")
@@ -399,7 +420,7 @@ def compute_class(
     fetcher: RowsFetcher | None = None,
 ) -> list[dict[str, Any]]:
     """整班预警结果，按 risk_score 降序、student_no 升序排序。"""
-    used_rules = rules if rules is not None else get_rules(tenant_id)
+    used_rules = rules if rules is not None else get_rules(tenant_id, class_name)
     if rows is None:
         if fetcher is not None:
             rows = fetcher(tenant_id, class_name, term)

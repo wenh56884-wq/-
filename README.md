@@ -73,7 +73,7 @@ D:\qihang\
 ├── scripts\              # init_db.py / seed_mock.py / smoke_test.ps1 / gen_verify_report.py
 ├── tests\                # pytest 用例
 ├── data\                 # analytics.duckdb 与生成数据（不入库）
-├── docs\                 # 目录说明 / VERIFY.md / 演示脚本 / 答辩大纲
+├── docs\                 # 目录说明 / VERIFY.md / KPI.md / 演示脚本 / 答辩大纲
 └── logs\                 # critic 日志与运行日志（不入库）
 ```
 
@@ -149,3 +149,7 @@ D:\qihang\
 - 新增 `scripts/seed_freshman.py`：幂等插入 4 个 2026 级大一演示账号（AI2026001 / RJ2026001 / KJ2026001 / JR2026001，初始口令=学号）。
 - 教师端班级总览新增「职业目标分布」卡：考公 / 考研 / 考编 / 就业 / 未填写人数与占比。
 - 新增 `scripts/seed_intent_demo.py`：按学号哈希为演示学生补目标分布（`--reset` 可重建），不影响 2026 级大一先选流程。
+- 新增考核指标报告：`python scripts\gen_kpi_report.py` 生成 `docs\KPI.md`（预警准确率、Critic 通过率/幻觉率、接口 P95、推荐日志覆盖与计划书指标对照）。
+- 新增 `teacher_class` 教师任教班级绑定与 `class_warning_threshold` 班级级阈值：配置后教师只能访问任教班级；未配置时回退租户范围。
+- 教师端「班级总览」新增“预警阈值”弹窗，可按班覆盖挂科/均分下滑/出勤率/分级门槛。
+- 新增 `scripts/seed_teacher_scope.py`：`--classes AI2201,RJ2201` 配置任教范围，`--clear` 回退租户范围。

@@ -15,6 +15,7 @@ if str(_ROOT) not in sys.path:
 
 import pytest
 
+from engine import warning
 from engine.rules import LEVEL_RED, LEVEL_YELLOW, WarningRules, build_rules
 from engine.warning import (
     ENGINE_VERSION,
@@ -209,6 +210,34 @@ def test_case9_rank_pct_is_class_position():
     assert compute_rank_pct({"S001": 80.0}) == {"S001": 0.0}
     tied = {"S001": 90.0, "S002": 60.0, "S003": 60.0}
     assert compute_rank_pct(tied) == {"S001": 0.0, "S002": 0.5, "S003": 1.0}
+
+
+def test_class_threshold_overrides_tenant_default(monkeypatch):
+    """班级覆盖必须压过租户默认，且只影响对应班级。"""
+    monkeypatch.setattr(
+        warning, "fetch_threshold_rows",
+        lambda tenant_id: [
+            {"metric": "fail_count", "weight": 1.0,
+             "yellow_value": 15, "orange_value": 30, "red_value": 45},
+        ],
+    )
+    monkeypatch.setattr(
+        warning, "fetch_class_threshold_rows",
+        lambda tenant_id, class_name: [
+            {"metric": "fail_count", "weight": 1.5,
+             "yellow_value": 5, "orange_value": 10, "red_value": 20},
+        ] if class_name == CLASS else [],
+    )
+
+    class_rules = warning.get_rules(TENANT_A, CLASS)
+    assert class_rules.fail_count.weight == 1.5
+    assert class_rules.fail_count.score_1 == 5
+    assert class_rules.fail_count.score_2 == 10
+    assert class_rules.fail_count.score_3 == 20
+
+    other_rules = warning.get_rules(TENANT_A, "OTHER")
+    assert other_rules.fail_count.weight == 1.0
+    assert other_rules.fail_count.score_1 == 15
 
 
 def test_engine_has_no_llm_or_random():

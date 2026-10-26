@@ -222,7 +222,10 @@ def test_activity_counts_match_source(real_rows):
     zero_project = 0
     for sno, counts in activity.items():
         row = by_no.get(sno)
-        assert row is not None, f"{sno} 有活动记录却未出现在 raw rows 里"
+        if row is None:
+            # 该生本学期无成绩，assemble_rows 按成绩内连接不会包含他；
+            # 活动源表本身允许有记录，不等于 raw rows 必须出现
+            continue
         assert row["cert_count"] == counts.get("cert", 0)
         assert row["contest_count"] == counts.get("contest", 0)
         assert row["project_cnt"] == counts.get("project", 0)

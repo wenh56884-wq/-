@@ -381,5 +381,105 @@ def test_career_intent_rejects_unknown_value(client, db):
     assert "考公/考研/考编/就业" in resp.json()["detail"]
 
 
+# ----------------------------------------------------------------
+# 6. 教师-班级绑定 + 班级级阈值
+# ----------------------------------------------------------------
+@requires_mysql
+def test_teacher_scope_limits_class_directory_and_profile(client, db):
+    """配置任教班级后：目录只含该班，查别班返回 403，用例结束清理绑定。"""
+    conn, klass, stu = db
+    login = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()
+    teacher_id = int(login["actor_id"])
+    headers = {"Authorization": f"Bearer {login['access_token']}"}
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM teacher_class WHERE teacher_id = %s", (teacher_id,))
+        cur.execute(
+            "INSERT INTO teacher_class (tenant_id, teacher_id, class_name) VALUES (%s, %s, %s)",
+            (TENANT, teacher_id, klass),
+        )
+        cur.execute(
+            "SELECT class_name FROM student WHERE tenant_id = %s AND class_name <> %s "
+            "ORDER BY class_name LIMIT 1",
+            (TENANT, klass),
+        )
+        other = cur.fetchone()["class_name"]
+    conn.commit()
+
+    try:
+        directory = client.get("/teacher/classes", headers=headers).json()
+        assert directory["scope"] == "assigned"
+        assert [item["class_name"] for item in directory["classes"]] == [klass]
+
+        resp = client.get(
+            "/teacher/class-overview",
+            params={"class_name": other, "term": TERM},
+            headers=headers,
+        )
+        assert resp.status_code == 403
+        assert "任教范围" in resp.json()["detail"]
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM teacher_class WHERE teacher_id = %s", (teacher_id,))
+        conn.commit()
+
+
+@requires_mysql
+def test_class_warning_thresholds_roundtrip(client, db):
+    """班级阈值可读写；用例结束恢复原覆盖行。"""
+    conn, klass, stu = db
+    token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT metric, weight, red_value, orange_value, yellow_value "
+            "FROM class_warning_threshold WHERE tenant_id = %s AND class_name = %s",
+            (TENANT, klass),
+        )
+        before = [dict(row) for row in cur.fetchall()]
+
+    try:
+        got = client.get("/teacher/warning-thresholds",
+                         params={"class_name": klass}, headers=headers)
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert body["class_name"] == klass
+        assert len(body["thresholds"]) == 5
+        assert {row["metric"] for row in body["thresholds"]} == {
+            "fail_count", "gpa_drop", "gpa_drop_slope", "attendance_rate", "level",
+        }
+
+        payload = {
+            "thresholds": [
+                {"metric": "fail_count", "weight": 1.0,
+                 "yellow_value": 10, "orange_value": 20, "red_value": 30},
+            ]
+        }
+        saved = client.put("/teacher/warning-thresholds",
+                          params={"class_name": klass}, json=payload, headers=headers)
+        assert saved.status_code == 200, saved.text
+        saved_body = saved.json()
+        fail = next(row for row in saved_body["thresholds"]
+                    if row["metric"] == "fail_count")
+        assert fail["yellow_value"] == 10
+        assert fail["source"] == "class"
+    finally:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM class_warning_threshold WHERE tenant_id = %s AND class_name = %s",
+                (TENANT, klass),
+            )
+            for row in before:
+                cur.execute(
+                    "INSERT INTO class_warning_threshold "
+                    "(tenant_id, class_name, metric, weight, red_value, orange_value, yellow_value) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (TENANT, klass, row["metric"], row["weight"], row["red_value"],
+                     row["orange_value"], row["yellow_value"]),
+                )
+        conn.commit()
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))

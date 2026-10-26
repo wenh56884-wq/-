@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from agents import tools
 from agents.tools import ToolContext
@@ -16,6 +17,22 @@ from app.audit import audit_event
 from app.auth import require_teacher
 
 router = APIRouter(prefix="/teacher", tags=["教师端"])
+
+
+class ThresholdItem(BaseModel):
+    """一条指标阈值；留空/None 表示回退租户默认。"""
+
+    metric: str = Field(max_length=40)
+    weight: float | None = Field(default=None, ge=0)
+    yellow_value: float | None = Field(default=None, ge=0)
+    orange_value: float | None = Field(default=None, ge=0)
+    red_value: float | None = Field(default=None, ge=0)
+
+
+class ThresholdIn(BaseModel):
+    """某班的完整阈值覆盖列表（整体替换）。"""
+
+    thresholds: list[ThresholdItem] = Field(default_factory=list)
 
 
 def _guard(ctx: ToolContext, action: str, target: str, call) -> dict[str, Any]:
@@ -38,6 +55,28 @@ def _guard(ctx: ToolContext, action: str, target: str, call) -> dict[str, Any]:
 def classes(ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
     """教师端班级/学院目录：学院 → 班级（含专业与人数的名册），供前端下拉选择。"""
     return _guard(ctx, "class_list", "all", lambda: tools.class_list(ctx))
+
+
+@router.get("/warning-thresholds")
+def warning_thresholds(
+    class_name: str = Query(description="班级名，必须属于本租户/任教范围"),
+    ctx: ToolContext = Depends(require_teacher),
+) -> dict[str, Any]:
+    """读取某班的有效预警阈值（班级覆盖 > 租户默认 > 内置默认）。"""
+    return _guard(ctx, "get_warning_thresholds", class_name,
+                  lambda: tools.get_warning_thresholds(ctx, class_name))
+
+
+@router.put("/warning-thresholds")
+def put_warning_thresholds(
+    payload: ThresholdIn,
+    class_name: str = Query(description="班级名，必须属于本租户/任教范围"),
+    ctx: ToolContext = Depends(require_teacher),
+) -> dict[str, Any]:
+    """整体替换某班阈值；空值表示回退上一级。"""
+    rows = [item.model_dump() for item in payload.thresholds]
+    return _guard(ctx, "save_warning_thresholds", class_name,
+                  lambda: tools.save_warning_thresholds(ctx, class_name, rows))
 
 
 @router.get("/class-overview")
