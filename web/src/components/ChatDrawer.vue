@@ -171,12 +171,21 @@ async function scrollBottom() {
 async function send(text) {
   const content = String(text ?? query.value).trim()
   if (!content || sending.value) return
+  // 带上最近几轮，后端用于理解「为什么」「那他呢」这类追问
+  const history = messages.value.slice(-8).map(({ role, text: body }) => ({
+    role: role === 'user' ? 'user' : 'assistant',
+    text: body
+  }))
   push('user', content)
   query.value = ''
   sending.value = true
   const started = performance.now()
   try {
-    const { data } = await http.post('/chat', { query: content, term: term.value || null })
+    const { data } = await http.post('/chat', {
+      query: content,
+      term: term.value || null,
+      history
+    })
     push('assistant', data?.answer || '（本次没有返回内容）', {
       trace_id: data?.trace_id || '-',
       term: data?.term || term.value,

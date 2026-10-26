@@ -68,7 +68,9 @@ def _run_chat(ctx: ToolContext, body: ChatIn) -> tuple[str, bool]:
         return ("智能体编排尚未启用，暂无法回答该问题。"
                 "你可以先查看「预警列表」与「个人画像」中的结构化数据。", True)
     try:
-        result = run_chat(ctx, body.query, term=term)
+        result = run_chat(ctx, body.query, term=term,
+                          history=[{"role": turn.role, "text": turn.text}
+                                   for turn in (body.history or [])])
     except NotImplementedError:
         return ("智能体编排尚未启用，暂无法回答该问题。"
                 "你可以先查看「预警列表」与「个人画像」中的结构化数据。", True)

@@ -57,6 +57,36 @@ def get_student_llm() -> ChatOpenAI:
     return _build_llm(temperature=0.3)
 
 
+def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) -> str:
+    """按角色取对应 LLM 实例发一次对话；返回纯文本正文。"""
+    from app.audit import audit_event
+
+    llm = get_teacher_llm() if actor_type == "teacher" else get_student_llm()
+    started = time.perf_counter()
+    try:
+        resp = llm.invoke([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ])
+    except Exception as exc:  # Key 无效/限流/超时都归到这里，由调用方兜底
+        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
+                    target="", detail={"error": str(exc)[:200]})
+        raise
+    content = resp.content if isinstance(resp.content, str) else str(resp.content)
+    audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target="",
+                detail={"chars": len(content), "cost_ms": round((time.perf_counter() - started) * 1000)})
+    return str(content).strip()
+
+
+def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
+                   tag: str = "draft") -> str | None:
+    """生成一段回复；LLM 不可用时返回 None（让上层回退到模板，而不是给用户报错）。"""
+    try:
+        return _invoke(actor_type, system_prompt, user_prompt, tag=tag)
+    except Exception:
+        return None
+
+
 def smoke() -> None:
     """冒烟测试：发一句话，打印回复内容与耗时（毫秒）。"""
     llm = get_student_llm()

@@ -29,11 +29,20 @@ class LoginOut(BaseModel):
     expires_in: int = Field(description="token 有效秒数")
 
 
+class ChatTurn(BaseModel):
+    """一轮历史对话（前端回传，仅作语境，不参与鉴权）。"""
+
+    role: str = Field(pattern="^(user|assistant)$", description="user / assistant")
+    text: str = Field(max_length=1000, description="该轮正文")
+
+
 class ChatIn(BaseModel):
     """对话入参：query 必填，term 缺省时由引擎回落最新学期。"""
 
     query: str = Field(min_length=1, description="用户提问")
     term: str | None = None
+    history: list[ChatTurn] = Field(default_factory=list, max_length=8,
+                                    description="最近几轮对话，用于追问语境")
 
 
 class ChatOut(BaseModel):

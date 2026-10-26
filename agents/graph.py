@@ -6,28 +6,51 @@
 
 from __future__ import annotations
 
+import json
+import os
 import uuid
-from typing import Any, Callable, Mapping, TypedDict
+from typing import Any, Callable, Mapping, Sequence, TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from agents import llm as llm_client
 from agents import tools
-from agents.critic import MAX_RETRY, CRITIC_VERSION, Verdict, render_fallback, verify
+from agents.critic import (
+    MAX_RETRY,
+    CRITIC_VERSION,
+    Verdict,
+    extract_numbers,
+    render_fallback,
+    verify,
+)
 from agents.tools import ToolContext
 from app.audit import audit_event
 
-GRAPH_VERSION = "graph-v1"
+GRAPH_VERSION = "graph-v2"
+
+# AGENT_LLM_DRAFT=0 可关闭「大模型润色」，退回机械直引（演示/对比用）
+def _llm_draft_enabled() -> bool:
+    return str(os.getenv("AGENT_LLM_DRAFT", "1")).strip().lower() not in ("0", "false", "off", "no")
+
+
+# 寒暄 / 关于助手本身的提问：不该触发任何取数
+_CHITCHAT_KEYS: tuple[str, ...] = (
+    "你好", "您好", "hi", "hello", "早", "嗨", "谢谢", "感谢", "再见", "拜拜",
+    "你是谁", "你能做什么", "能干什么", "会什么", "功能是", "怎么用", "如何使用",
+)
 
 # Graph 状态
 class AgentState(TypedDict, total=False):
     ctx: ToolContext
     query: str
     term: str | None
+    history: list[dict[str, str]]
     plan: dict[str, Any]
     tool_result: dict[str, Any]
     tool_name: str
     draft_fn: Callable[..., str]
     draft: str
+    draft_mode: str
     feedback: str
     attempts: int
     verdict: dict[str, Any]
@@ -39,35 +62,64 @@ class AgentState(TypedDict, total=False):
 # ----------------------------------------------------------------
 # 1. 计划：根据角色与提问关键词选工具（学生端只能选本人工具）
 # ----------------------------------------------------------------
+def _intent_text(state: AgentState, query: str) -> str:
+    """意图判定的依据：追问（如「为什么」「那他呢」）要带上最近一轮用户原话，
+    否则「那些人怎么了」这类追问会因为没关键词而落到默认工具上。"""
+    last_user = ""
+    for turn in reversed(list(state.get("history") or [])):
+        if str(turn.get("role") or "") == "user":
+            last_user = str(turn.get("text") or "")
+            break
+    joined = f"{last_user} {query}".strip()
+    # 追问占全长一半以上时才拼上下文，避免长句被无关历史污染
+    if last_user and len(query) <= max(8, len(last_user) // 2):
+        return joined
+    return query
+
+
+def _is_chitchat(query: str) -> bool:
+    """寒暄 / 询问助手能力：不取数，直接对话。"""
+    text = query.strip().lower()
+    if len(text) <= 12 and any(key in text for key in _CHITCHAT_KEYS):
+        return True
+    return any(key in text for key in _CHITCHAT_KEYS) and len(text) <= 20
+
+
 def plan_node(state: AgentState) -> dict[str, Any]:
     """按提问关键词挑工具；学生端强制映射到本人工具，忽略一切学号提取结果。"""
     ctx: ToolContext = state["ctx"]
     query = str(state.get("query") or "")
     term = state.get("term")
 
+    if _is_chitchat(query):
+        return {"plan": {"tool": "chitchat", "args": {}}, "tool_name": "chitchat"}
+
     if ctx.actor_type == "student":
-        tool_name = "my_recommendations" if any(k in query for k in ("推荐", "岗位", "工作")) \
+        intent = _intent_text(state, query)
+        tool_name = "my_recommendations" if any(k in intent for k in ("推荐", "岗位", "工作")) \
             else "my_warning"
         return {"plan": {"tool": tool_name}, "tool_name": tool_name}
 
+    intent = _intent_text(state, query)
     tool_name = "class_overview"
-    if any(k in query for k in ("班级列表", "班级目录", "有哪些班", "哪些班级", "学院", "院系")):
+    if any(k in intent for k in ("班级列表", "班级目录", "有哪些班", "哪些班级", "学院", "院系")):
         tool_name = "class_list"
-    elif any(k in query for k in ("预警", "风险", "名单", "挂科")):
+    elif any(k in intent for k in ("预警", "风险", "名单", "挂科")):
         tool_name = "warning_list"
-    elif any(k in query for k in ("画像", "标签", "个人", "四维")):
+    elif any(k in intent for k in ("画像", "标签", "个人", "四维")):
         tool_name = "student_profile"
-    elif any(k in query for k in ("差距", "岗位", "能力", "就业")):
+    elif any(k in intent for k in ("差距", "岗位", "能力", "就业")):
         tool_name = "career_gap"
 
     args: dict[str, Any] = {"term": term or ""}
-    class_name = _extract_class_name(query)
+    # 班级名既能从本次提问抠，也能从历史追问里继承（「那这个班呢」）
+    class_name = _extract_class_name(query) or _extract_class_name(intent)
     if class_name:
         args["class_name"] = class_name
     if tool_name in ("class_overview", "warning_list", "career_gap") and not class_name:
         args["class_name"] = _default_class(ctx)
     if tool_name == "student_profile":
-        args["student_no"] = _extract_student_no(ctx, query)
+        args["student_no"] = _extract_student_no(ctx, query or intent)
     return {"plan": {"tool": tool_name, "args": args}, "tool_name": tool_name}
 
 
@@ -120,6 +172,9 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     plan = state.get("plan") or {}
     name = str(plan.get("tool") or "")
     args: Mapping[str, Any] = plan.get("args") or {}
+    if name == "chitchat":
+        # 纯对话：不碰任何数据
+        return {"tool_result": {"mode": "chitchat"}, "tool_name": "chitchat"}
     try:
         if name == "class_list":
             result = tools.class_list(ctx)
@@ -198,22 +253,143 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
     if not parts:
         parts.append("已获取结构化结果，详见对应列表。")
     draft = "\n".join(parts)
-    if feedback:
-        draft = f"（按核对意见修正）\n{draft}"
     return draft
 
 
+# ---- LLM 润色提示词：把「只能直引」讲成模型听得懂的话 ----
+_DRAFT_SYSTEM = (
+    "你是「启航 · 生涯与岗位匹配系统」的智能助手，面对高校师生做学业预警、岗位匹配类答疑。\n"
+    "你说话要像一个靠谱、干练的辅导员：先给结论，再补 1~2 句依据，必要时给一句可执行的建议。\n"
+    "中文口语表达，不用 Markdown 标题、不用项目符号堆砌、不要说「根据工具返回结果」。\n"
+    "\n"
+    "## 铁律（违反即回答作废）\n"
+    "1. 只能陈述给定事实里存在的内容，禁止补充任何数据、背景或推测。\n"
+    "2. 所有数值必须**原样照抄**「允许引用的数值」列表里的写法："
+    "不得换算单位、不得换算百分比、不得四舍五入、不得改写成中文数字（如「六门」「三成」）。\n"
+    "3. 不得出现「约 / 大概 / 估计 / 大约 / 差不多 / 左右 / 似乎」这类模糊词。\n"
+    "4. 不要臆造名单里没有的人名、班级名或岗位名。\n"
+    "5. 给建议时同样禁止出现任何数字（如「前 5 名」「重点盯 3 个人」），"
+    "改用「名单里风险最高的几位」这类不带数字的说法。\n"
+    "6. 正文控制在 200 字以内，句子短，别写公文腔。"
+)
+
+_CHAT_SYSTEM = (
+    "你是「启航 · 生涯与岗位匹配系统」的智能助手，面对高校师生做学业预警、岗位匹配类答疑。\n"
+    "当前是闲聊或关于你自身能力的提问，没有查询任何数据。\n"
+    "要求：中文口语、简短友好（100 字以内），可以说明你能做的事——"
+    "查班级概貌与预警名单、看某个学生的画像、分析班级与岗位的能力差距；"
+    "**本轮绝对禁止输出任何阿拉伯数字或中文数字**，不要编造任何数据，"
+    "也不要承诺做不到的事。结尾可以邀请对方提出具体问题。"
+)
+
+
+def _facts_blob(result: Mapping[str, Any], limit: int = 3000) -> str:
+    """工具结果原文（给模型看的事实来源）。"""
+    try:
+        blob = json.dumps(result, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        blob = str(result)
+    return blob[:limit]
+
+
+def _allowed_numbers(result: Mapping[str, Any]) -> list[str]:
+    """结果里出现过的数值原文清单：模型只能照抄这些写法。
+
+    注意走的是 Critic 同一套抽数方法——模型抄这里的值，核对必然命中。
+    """
+    blob = _facts_blob(result)
+    return sorted({claim.raw for claim in extract_numbers(blob)}, key=lambda s: (-len(s), s))
+
+
+def _history_text(state: AgentState, limit: int = 4) -> str:
+    """最近几轮对话，给模型做上下文（不参与任何授权判断）。"""
+    turns = list(state.get("history") or [])[-limit:]
+    lines: list[str] = []
+    for turn in turns:
+        role = "用户" if str(turn.get("role") or "") == "user" else "助手"
+        text = str(turn.get("text") or "").strip()
+        if text:
+            lines.append(f"{role}：{text[:300]}")
+    return "\n".join(lines)
+
+
+def _llm_draft(state: AgentState, result: Mapping[str, Any], feedback: str) -> str | None:
+    """让 LLM 把结构化结果说成人话；返回值仍需过 Critic，不可用时返回 None。"""
+    ctx: ToolContext = state["ctx"]
+    query = str(state.get("query") or "")
+    who = "教师" if ctx.actor_type == "teacher" else "学生"
+    tool_name = str(state.get("tool_name") or "")
+
+    parts = [f"【身份】{who}", f"【提问】{query}"]
+    history = _history_text(state)
+    if history:
+        parts.append(f"【前面对话】\n{history}")
+    parts.append(f"【工具】{tool_name}")
+    parts.append(f"【事实原文】\n{_facts_blob(result)}")
+    allowed = _allowed_numbers(result)
+    if allowed:
+        parts.append("【允许引用的数值（必须原样照抄，禁止任何改写）】\n" + "、".join(allowed))
+    if feedback:
+        parts.append(f"【上一稿被退回的原因，务必逐条改正】\n{feedback}")
+    parts.append("请直接输出回复正文，不要加任何前缀或说明。")
+
+    return llm_client.generate_reply(
+        ctx.actor_type,
+        system_prompt=_DRAFT_SYSTEM,
+        user_prompt="\n\n".join(parts),
+        tag="draft",
+    )
+
+
+def _llm_chitchat(state: AgentState) -> str | None:
+    """寒暄 / 能力提问：纯对话，不带任何数据。"""
+    ctx: ToolContext = state["ctx"]
+    parts = [f"【提问】{state.get('query') or ''}"]
+    history = _history_text(state)
+    if history:
+        parts.append(f"【前面对话】\n{history}")
+    return llm_client.generate_reply(
+        ctx.actor_type,
+        system_prompt=_CHAT_SYSTEM,
+        user_prompt="\n\n".join(parts),
+        tag="chitchat",
+    )
+
+
 def draft_node(state: AgentState) -> dict[str, Any]:
-    """生成草稿：优先用注入的 draft_fn（便于注入幻觉做拦截演示），否则模板直引。"""
+    """生成草稿：注入优先（演示幻觉拦截）→ LLM 润色 → 模板直引兜底。
+
+    生成顺序：第 1、2 稿用 LLM（第 2 稿带 Critic 退回意见做修正），
+    第 3 稿起回到模板直引保底——模板是原样引用、几乎必然通过审核，
+    即使大模型连续说错数字，用户拿到的也是有依据的版本，而不是无数值的降级话术。
+    """
     draft_fn = state.get("draft_fn")
     feedback = str(state.get("feedback") or "")
     attempts = int(state.get("attempts") or 0) + 1
     result = state.get("tool_result") or {}
+
+    mode = "template"
     if draft_fn is not None:
         draft = str(draft_fn(result, feedback, attempts))
-    else:
+        mode = "injected"
+    elif (result or {}).get("mode") == "chitchat":
+        fallback_text = (
+            "你好，我是启航智能助手。我可以帮你查班级概貌与预警名单、"
+            "看某个学生的四维画像，或者分析班级与岗位之间的能力差距。"
+            "比如直接问「查一下 RJ2201 班的预警名单」就行。"
+        )
+        draft = _llm_chitchat(state) or fallback_text
+        mode = "chitchat"
+    elif attempts >= 3 or not _llm_draft_enabled():
         draft = _template_draft(result, feedback)
-    return {"draft": draft, "attempts": attempts}
+        mode = "template"
+    else:
+        draft = _llm_draft(state, result, feedback) or _template_draft(result, feedback)
+        mode = "draft" if draft else "template"
+    if not draft:
+        draft = _template_draft(result, feedback)
+        mode = "template"
+    return {"draft": draft, "attempts": attempts, "draft_mode": mode}
 
 
 # ----------------------------------------------------------------
@@ -307,16 +483,25 @@ def run_chat(
     *,
     draft_fn: Callable[..., str] | None = None,
     tool_result: Mapping[str, Any] | None = None,
+    history: Sequence[Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """跑一次对话：返回 answer / trace_id / degraded / verdict / attempts。
 
-    draft_fn 可注入用于演示「幻觉被拦截」；tool_result 非空时跳过真实工具调用（离线测试用）。
+    draft_fn 可注入用于演示「幻觉被拦截」；tool_result 非空时跳过真实工具调用（离线测试用）；
+    history 是前端回传的最近几轮对话，只作为 LLM 上下文，不参与任何鉴权。
     """
     trace_id = uuid.uuid4().hex[:12]
+    turns: list[dict[str, str]] = []
+    for item in list(history or [])[-8:]:
+        role = str(item.get("role") or "")
+        text = str(item.get("text") or "").strip()
+        if role in ("user", "assistant") and text:
+            turns.append({"role": role, "text": text[:500]})
     state: AgentState = {
         "ctx": ctx,
         "query": str(query),
         "term": term,
+        "history": turns,
         "attempts": 0,
         "feedback": "",
         "trace_id": trace_id,
@@ -360,6 +545,7 @@ def run_chat(
             "term": term,
             "tool": state.get("tool_name"),
             "attempts": int(state.get("attempts") or 0),
+            "draft_mode": str(state.get("draft_mode") or ""),
             "passed": bool((state.get("verdict") or {}).get("passed")),
             "degraded": degraded,
             "graph_version": GRAPH_VERSION,

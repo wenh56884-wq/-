@@ -127,22 +127,40 @@
       </template>
 
       <el-empty v-if="!recLoading && !items.length" :description="recTip || '暂无推荐结果'" />
-      <div v-for="(item, index) in items" :key="item.job_id" class="rec-item">
-        <div class="rec-top">
-          <span class="rec-index">{{ index + 1 }}</span>
-          <span class="rec-title">{{ item.title }}</span>
-          <span class="rec-company">{{ item.company }}</span>
-          <span class="rec-city">{{ item.city || '城市不限' }}</span>
-          <span class="rec-salary">{{ salaryText(item) }}</span>
-          <span class="rec-score">匹配度 {{ fmtScore(item.final_score) }}</span>
+      <!-- 紧凑小格子：自适应列数 + 入场逐格浮现 -->
+      <div class="rec-grid">
+        <div
+          v-for="(item, index) in items"
+          :key="item.job_id"
+          class="rec-cell"
+          :style="{ animationDelay: `${Math.min(index, 8) * 45}ms` }"
+        >
+          <div class="cell-top">
+            <span class="cell-index">{{ index + 1 }}</span>
+            <span class="cell-score" :title="`匹配度 ${fmtScore(item.final_score)}`">
+              {{ fmtScore(item.final_score) }}
+            </span>
+          </div>
+          <div class="cell-title" :title="item.title">{{ item.title }}</div>
+          <div class="cell-meta" :title="`${item.company || ''} · ${item.city || '城市不限'}`">
+            {{ item.company || '公司未填' }} · {{ item.city || '城市不限' }}
+          </div>
+          <div class="cell-salary">{{ salaryText(item) }} 元/月</div>
+          <div class="cell-tags">
+            <span v-for="(t, i) in (item.hit_items || []).slice(0, 2)" :key="'h' + i" class="mini-tag hit">
+              ✓ {{ t }}
+            </span>
+            <span v-for="(t, i) in (item.gap_items || []).slice(0, 1)" :key="'g' + i" class="mini-tag gap">
+              △ {{ t }}
+            </span>
+            <span
+              v-if="(item.hit_items || []).length + (item.gap_items || []).length > 3"
+              class="mini-tag more"
+              :title="[...(item.hit_items || []), ...(item.gap_items || [])].join('、')"
+            >+{{ (item.hit_items || []).length + (item.gap_items || []).length - 3 }}</span>
+          </div>
+          <div class="cell-advice" :title="item.advice || ''">建议：{{ item.advice || '—' }}</div>
         </div>
-        <div class="rec-tags">
-          <el-tag type="success" size="small" effect="plain"
-            v-for="(t, i) in item.hit_items || []" :key="'h' + i">✓ {{ t }}</el-tag>
-          <el-tag type="warning" size="small" effect="plain"
-            v-for="(t, i) in item.gap_items || []" :key="'g' + i">△ {{ t }}</el-tag>
-        </div>
-        <div class="rec-advice">建议：{{ item.advice || '—' }}</div>
       </div>
       <div class="engine-line">
         推荐引擎 {{ recs.recommend_version || '-' }} · 候选池 {{ recs.candidate_cnt ?? '-' }} 条
@@ -472,63 +490,141 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
-.rec-item {
-  border: 1px solid #e5e6eb;
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  background: #fff;
-}
-
-.rec-top {
-  display: flex;
-  align-items: baseline;
+/* 推荐小格子：自适应列数，窄屏 1 列，中屏 2 列，宽屏 3 列 */
+.rec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 10px;
-  flex-wrap: wrap;
 }
 
-.rec-index {
-  width: 22px;
-  height: 22px;
-  line-height: 22px;
+.rec-cell {
+  border: 1px solid var(--qh-border);
+  border-radius: var(--qh-radius-lg);
+  padding: 10px 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  animation: cell-in 220ms ease-out both;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.rec-cell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(24, 24, 27, 0.08);
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cell-index {
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
   text-align: center;
   border-radius: 8px;
   background: var(--qh-red);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.rec-title {
-  font-weight: 600;
-}
-
-.rec-company,
-.rec-city {
-  color: #4e5969;
+.cell-score {
   font-size: 13px;
-}
-
-.rec-salary {
-  color: var(--qh-orange);
-  font-size: 13px;
-}
-
-.rec-score {
-  margin-left: auto;
   font-weight: 600;
   color: var(--qh-red);
+  font-variant-numeric: tabular-nums;
 }
 
-.rec-tags {
-  margin-top: 8px;
+.cell-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--qh-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell-meta {
+  font-size: 12px;
+  color: var(--qh-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell-salary {
+  font-size: 13px;
+  color: var(--qh-orange);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  min-height: 20px;
 }
 
-.rec-advice {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #4e5969;
+.mini-tag {
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--qh-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mini-tag.hit {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.mini-tag.gap {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.mini-tag.more {
+  background: #f4f4f5;
+  color: var(--qh-text-sub);
+  cursor: help;
+}
+
+.cell-advice {
+  font-size: 12px;
+  color: var(--qh-text-sub);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rec-cell {
+    animation: none;
+    transition: none;
+  }
 }
 </style>
