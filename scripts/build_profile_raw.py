@@ -181,12 +181,12 @@ def load_course_pref(tenant_id: int, term: str) -> dict[str, dict[str, int]]:
     方向已在表内 direction 列标注，此处只做聚合计数。
     """
     sql = (
-        "SELECT s.student_no AS student_no, e.direction AS direction, "
-        "       COUNT(1) AS cnt "
-        "FROM elective_selection e "
-        "JOIN student s ON s.id = e.student_id AND s.tenant_id = %s "
-        "WHERE e.term = %s "
-        "GROUP BY s.student_no, e.direction"
+        "SELECT s.student_no AS student_no, es.direction AS direction, "
+        "       COUNT(*) AS cnt "
+        "FROM elective_selection es "
+        "JOIN student s ON s.id = es.student_id "
+        "WHERE es.tenant_id = %s AND es.term = %s "
+        "GROUP BY s.student_no, es.direction"
     )
     pref: dict[str, dict[str, int]] = {}
     for r in _query(sql, (tenant_id, term)):
