@@ -43,9 +43,13 @@ D:\qihang\
 │   ├── audit.py          # 调用审计日志
 │   ├── schemas.py        # Pydantic 请求/响应模型
 │   ├── config.py         # pydantic-settings 读取 .env
-│   ├── demo_streamlit.py # 演示页（双 Tab）
+│   ├── demo_streamlit.py # 兜底演示页（Vue 未就绪时的 Plan B）
 │   ├── routers\          # teacher.py / student.py
-│   └── static\           # 演示页静态资源
+│   └── static\           # 静态资源
+├── web\                  # Vue 3 + Vite + ECharts 前端（P10 生成）
+│   ├── src\views\        # Login / TeacherDashboard / StudentHome
+│   ├── src\api\http.js   # axios + JWT 拦截器
+│   └── dist\             # 构建产物（由 FastAPI 托管，不入 git）
 ├── agents\               # LangGraph 多智能体层（DeepSeek 驱动）
 │   ├── llm.py            # ChatOpenAI(base_url=api.deepseek.com) 单例
 │   ├── graph.py          # router → teacher/student → critic 状态机
@@ -88,7 +92,7 @@ D:\qihang\
 | 6 | FastAPI + JWT + 越权防护 | P7 |
 | 7 | Critic 防幻觉 | P8 |
 | 8 | 冒烟 10 项 + VERIFY.md | P9 / P10 |
-| 9 | Streamlit 演示页 | P11 |
+| 9 | Vue 3 + ECharts 前端 | P10-1 / P10-2 / P10-3 |
 | 二期 | Spark / 协同过滤 / 知识图谱 | P12 |
 
 ## 验收指标
@@ -105,7 +109,7 @@ D:\qihang\
 | V6 | 多租户隔离 | 跨租户查询在数据层被拦截，返回空 | ☐ |
 | V7 | 防幻觉 | critic 回查数值不一致即驳回，超 2 次降级为模板 | ☐ |
 | V8 | 冒烟测试 | 10 项冒烟用例全部通过，VERIFY.md 出报告 | ☐ |
-| V9 | 演示可用 | Streamlit 双 Tab（教师/学生）可现场跑通核心流程 | ☐ |
+| V9 | 演示可用 | Vue 前端（构建后单服务托管）走通登录→教师看板→学生端全流程 | ☐ |
 | V10 | 文档完备 | 目录说明、答辩大纲、演示脚本齐备 | ☐ |
 
 ## 更新记录

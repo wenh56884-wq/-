@@ -1,4 +1,364 @@
 # engine/warning.py
-# 职责：预警引擎 V1——红/橙/黄三级分类，纯函数计算
-# 依赖：engine.rules / engine.store
-# TODO: P3 阶段实现预警分级逻辑
+# 职责：学业预警引擎——MySQL 取数（强制 tenant_id）+ 规则打分 + 分级 + 归因
+# 依赖：engine.rules / app.config / pymysql；禁止 import 任何 LLM 模块
+# 说明：全部数值确定性计算，无随机数；同输入必同输出
+
+from __future__ import annotations
+
+from typing import Any, Callable, Mapping, Sequence
+
+import pymysql
+
+from app.config import get_settings
+from engine.rules import (
+    LEVELS,
+    WarningRules,
+    build_rules,
+)
+
+# 引擎版本号，用于前端/审计溯源
+ENGINE_VERSION = "warning-v1"
+# 风险分裁剪区间
+SCORE_MIN = 0
+SCORE_MAX = 100
+# 缺考勤记录时的默认出勤率（不产生指标三得分）
+DEFAULT_ATTENDANCE_RATE = 1.0
+# metrics 字段统一保留位数
+_METRIC_NDIGITS = {"gpa": 2, "gpa_drop": 2, "attendance_rate": 4, "rank_pct": 4}
+
+MetricsFetcher = Callable[[int, str, str], Mapping[str, Any] | None]
+RowsFetcher = Callable[[int, str, str], Sequence[Mapping[str, Any]]]
+
+
+# ----------------------------------------------------------------
+# 数值工具
+# ----------------------------------------------------------------
+def _round_half_up(value: float) -> int:
+    """四舍五入（避免 Python round 的银行家舍入导致的不确定性）。"""
+    return int(float(value) + 0.5) if float(value) >= 0 else -int(-float(value) + 0.5)
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    """把数值裁剪到 [low, high]。"""
+    return max(low, min(high, float(value)))
+
+
+def _fmt(value: float) -> str:
+    """格式化数值：去掉无意义的小数尾零（11.60→"11.6"，12.0→"12"）。"""
+    v = round(float(value), 2)
+    if v == int(v):
+        return str(int(v))
+    return f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+def normalize_metrics(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """把原始行（MySQL Decimal / 手工 dict）统一转成标准 metrics 字典。
+
+    缺失字段取零值：fail_count=0、gpa=0.0、gpa_drop=0.0、rank_pct=0.0，
+    attendance_rate 缺失取 DEFAULT_ATTENDANCE_RATE（无考勤记录按全勤处理）。
+    """
+    def _f(key: str, default: float) -> float:
+        v = raw.get(key)
+        if v is None:
+            return default
+        return round(float(v), _METRIC_NDIGITS[key])
+
+    fail_count = raw.get("fail_count")
+    return {
+        "fail_count": int(fail_count) if fail_count is not None else 0,
+        "gpa": _f("gpa", 0.0),
+        "gpa_drop": _f("gpa_drop", 0.0),
+        "attendance_rate": _f("attendance_rate", DEFAULT_ATTENDANCE_RATE),
+        "rank_pct": _f("rank_pct", 0.0),
+    }
+
+
+# ----------------------------------------------------------------
+# MySQL 取数（每条 SQL 都带 tenant_id）
+# ----------------------------------------------------------------
+def _connect() -> pymysql.connections.Connection:
+    """建立 MySQL 连接（口令只从 .env 读，禁止硬编码），字典游标。"""
+    s = get_settings()
+    return pymysql.connect(
+        host=s.mysql_host,
+        port=s.mysql_port,
+        user=s.mysql_user,
+        password=s.mysql_password,
+        database=s.mysql_db,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+
+
+def _query(sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
+    """执行查询并返回全部字典行；连接不可用或表缺失时返回空列表。"""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+    except (pymysql.MySQLError, OSError):
+        # 阈值表/明细表不可用 → 交由上层按默认规则或空结果处理
+        return []
+    finally:
+        conn.close()
+
+
+def fetch_threshold_rows(tenant_id: int) -> list[dict[str, Any]]:
+    """读取该租户的预警阈值行（WHERE tenant_id=?，禁止全表扫描）。"""
+    sql = (
+        "SELECT metric, weight, red_value, orange_value, yellow_value "
+        "FROM warning_threshold WHERE tenant_id = %s ORDER BY metric"
+    )
+    return _query(sql, (tenant_id,))
+
+
+def get_rules(tenant_id: int) -> WarningRules:
+    """该租户的预警规则：表空或库不可用时使用默认阈值与权重。"""
+    return build_rules(tenant_id, fetch_threshold_rows(tenant_id))
+
+
+def compute_rank_pct(gpa_of: Mapping[str, float]) -> dict[str, float]:
+    """按班级均分算落后百分位：0.0=班级第一，1.0=班级末位。
+
+    单人班级恒为 0.0；同分时按 student_no 升序打破平局，保证排序确定。
+    """
+    n = len(gpa_of)
+    if n <= 1:
+        return {sno: 0.0 for sno in gpa_of}
+    ordered = sorted(gpa_of.items(), key=lambda kv: (-round(float(kv[1]), 2), kv[0]))
+    return {sno: round(i / (n - 1), 4) for i, (sno, _g) in enumerate(ordered)}
+
+
+def _fetch_previous_term(tenant_id: int, class_name: str, term: str) -> str | None:
+    """返回该班级小于当前学期且最接近的学期号；不存在返回 None。"""
+    sql = (
+        "SELECT sc.term AS term "
+        "FROM score sc "
+        "JOIN student s ON s.id = sc.student_id "
+        "WHERE s.tenant_id = %s AND s.class_name = %s AND sc.term < %s "
+        "GROUP BY sc.term ORDER BY sc.term DESC LIMIT 1"
+    )
+    rows = _query(sql, (tenant_id, class_name, term))
+    return str(rows[0]["term"]) if rows else None
+
+
+def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[str, Any]]:
+    """读取该租户某班级某学期的原始指标行（含 name），按 student_no 升序。
+
+    仅对有成绩记录的学生出行；rank_pct 在本函数内按班级均分排名确定。
+    """
+    cur_sql = (
+        "SELECT s.student_no AS student_no, s.name AS name, "
+        "       AVG(sc.score) AS gpa, "
+        "       SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_count "
+        "FROM student s "
+        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
+        "WHERE s.tenant_id = %s AND s.class_name = %s "
+        "GROUP BY s.student_no, s.name"
+    )
+    cur_rows = _query(cur_sql, (term, tenant_id, class_name))
+
+    prev_term = _fetch_previous_term(tenant_id, class_name, term)
+    prev_gpa: dict[str, float] = {}
+    if prev_term is not None:
+        prev_sql = (
+            "SELECT s.student_no AS student_no, AVG(sc.score) AS gpa "
+            "FROM student s "
+            "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
+            "WHERE s.tenant_id = %s AND s.class_name = %s "
+            "GROUP BY s.student_no"
+        )
+        prev_gpa = {
+            str(r["student_no"]): float(r["gpa"])
+            for r in _query(prev_sql, (prev_term, tenant_id, class_name))
+        }
+
+    att_sql = (
+        "SELECT s.student_no AS student_no, "
+        "       SUM(a.total_sessions) AS total_sessions, "
+        "       SUM(a.absent_sessions) AS absent_sessions "
+        "FROM student s "
+        "JOIN attendance a ON a.student_id = s.id AND a.term = %s "
+        "WHERE s.tenant_id = %s AND s.class_name = %s "
+        "GROUP BY s.student_no"
+    )
+    attendance: dict[str, float] = {}
+    for r in _query(att_sql, (term, tenant_id, class_name)):
+        total = float(r["total_sessions"] or 0)
+        absent = float(r["absent_sessions"] or 0)
+        if total > 0:
+            attendance[str(r["student_no"])] = (total - absent) / total
+
+    # rank_pct：按班级均分由高到低排名换算的落后百分位（0=第一，1=末位）
+    gpa_of = {str(r["student_no"]): round(float(r["gpa"]), 2) for r in cur_rows}
+    rank_pct = compute_rank_pct(gpa_of)
+
+    rows: list[dict[str, Any]] = []
+    for r in sorted(cur_rows, key=lambda x: str(x["student_no"])):
+        sno = str(r["student_no"])
+        gpa = gpa_of[sno]
+        prev = prev_gpa.get(sno)
+        rows.append({
+            "student_no": sno,
+            "name": str(r["name"]) if r["name"] is not None else "",
+            "fail_count": int(r["fail_count"] or 0),
+            "gpa": gpa,
+            "gpa_drop": round(prev - gpa, 2) if prev is not None else 0.0,
+            "attendance_rate": round(attendance.get(sno, DEFAULT_ATTENDANCE_RATE), 4),
+            "rank_pct": rank_pct[sno],
+        })
+    return rows
+
+
+def fetch_student_row(tenant_id: int, student_no: str, term: str) -> dict[str, Any] | None:
+    """读取单个学生的原始指标行；无成绩记录返回 None。"""
+    sql = (
+        "SELECT s.student_no AS student_no, s.name AS name, s.class_name AS class_name "
+        "FROM student s "
+        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
+        "WHERE s.tenant_id = %s AND s.student_no = %s "
+        "GROUP BY s.student_no, s.name, s.class_name"
+    )
+    rows = _query(sql, (term, tenant_id, student_no))
+    if not rows:
+        return None
+    class_name = str(rows[0]["class_name"])
+    for r in fetch_class_rows(tenant_id, class_name, term):
+        if r["student_no"] == student_no:
+            return r
+    return None
+
+
+# ----------------------------------------------------------------
+# 打分 / 分级 / 归因（纯计算）
+# ----------------------------------------------------------------
+def _reason_templates(metrics: Mapping[str, Any]) -> dict[str, str]:
+    """三条指标的模板化归因句式（数值全部取自 metrics，无主观词）。"""
+    return {
+        "fail_count": f"本学期挂科{int(metrics['fail_count'])}门",
+        "gpa_drop": f"本学期平均成绩下滑{_fmt(metrics['gpa_drop'])}分",
+        "attendance_rate": (
+            f"本学期出勤率降至{_fmt(round(float(metrics['attendance_rate']) * 100, 1))}%"
+        ),
+    }
+
+
+def build_reasons(metrics: Mapping[str, Any], rules: WarningRules) -> list[str]:
+    """取触发项中得分最高的 1~3 条归因，得分相同时按指标固定顺序。"""
+    order = ("fail_count", "gpa_drop", "attendance_rate")
+    scores = {
+        "fail_count": rules.fail_count.score(metrics["fail_count"]),
+        "gpa_drop": rules.gpa_drop.score(metrics["gpa_drop"]),
+        "attendance_rate": rules.attendance.score(metrics["attendance_rate"]),
+    }
+    triggered = [(k, scores[k]) for k in order if scores[k] > 0]
+    triggered.sort(key=lambda kv: (-kv[1], order.index(kv[0])))
+    templates = _reason_templates(metrics)
+    return [templates[k] for k, _s in triggered[:3]]
+
+
+def risk_score_of(metrics: Mapping[str, Any], rules: WarningRules) -> int:
+    """三项指标加权和，四舍五入后裁剪到 0~100。"""
+    total = (
+        rules.fail_count.score(metrics["fail_count"])
+        + rules.gpa_drop.score(metrics["gpa_drop"])
+        + rules.attendance.score(metrics["attendance_rate"])
+    )
+    return int(_clamp(_round_half_up(total), SCORE_MIN, SCORE_MAX))
+
+
+def evaluate_student(
+    student_no: str,
+    metrics: Mapping[str, Any],
+    rules: WarningRules,
+    name: str = "",
+) -> dict[str, Any]:
+    """把一条原始指标行算成标准预警结果（纯函数，不碰 IO）。"""
+    m = normalize_metrics(metrics)
+    score = risk_score_of(m, rules)
+    return {
+        "student_no": student_no,
+        "name": name if name else str(metrics.get("name") or ""),
+        "risk_score": score,
+        "level": rules.level_of(score),
+        "reasons": build_reasons(m, rules),
+        "metrics": m,
+    }
+
+
+# ----------------------------------------------------------------
+# 对外接口
+# ----------------------------------------------------------------
+def compute_student(
+    tenant_id: int,
+    student_no: str,
+    term: str,
+    *,
+    metrics: Mapping[str, Any] | None = None,
+    rules: WarningRules | None = None,
+    fetcher: MetricsFetcher | None = None,
+) -> dict[str, Any]:
+    """单个学生的预警结果。
+
+    tenant_id 为强制入参，MySQL 取数一律带 WHERE tenant_id=?。
+    metrics 非空时跳过取数（便于单测与离线复算）；不然用 fetcher，
+    fetcher 为空则走默认 MySQL 取数。
+    """
+    used_rules = rules if rules is not None else get_rules(tenant_id)
+    if metrics is None:
+        if fetcher is not None:
+            metrics = fetcher(tenant_id, student_no, term)
+        else:
+            metrics = fetch_student_row(tenant_id, student_no, term)
+    if metrics is None:
+        return evaluate_student(student_no, {}, used_rules, name="")
+    name = str(metrics.get("name") or "")
+    return evaluate_student(student_no, metrics, used_rules, name=name)
+
+
+def compute_class(
+    tenant_id: int,
+    class_name: str,
+    term: str,
+    *,
+    rows: Sequence[Mapping[str, Any]] | None = None,
+    rules: WarningRules | None = None,
+    fetcher: RowsFetcher | None = None,
+) -> list[dict[str, Any]]:
+    """整班预警结果，按 risk_score 降序、student_no 升序排序。"""
+    used_rules = rules if rules is not None else get_rules(tenant_id)
+    if rows is None:
+        if fetcher is not None:
+            rows = fetcher(tenant_id, class_name, term)
+        else:
+            rows = fetch_class_rows(tenant_id, class_name, term)
+    results = [
+        evaluate_student(str(r.get("student_no") or ""), r, used_rules,
+                         name=str(r.get("name") or ""))
+        for r in rows
+    ]
+    results.sort(key=lambda x: (-x["risk_score"], x["student_no"]))
+    return results
+
+
+def get_warning_list(
+    tenant_id: int,
+    class_name: str,
+    term: str,
+    level: str | None = None,
+    *,
+    rows: Sequence[Mapping[str, Any]] | None = None,
+    rules: WarningRules | None = None,
+    fetcher: RowsFetcher | None = None,
+) -> list[dict[str, Any]]:
+    """按等级过滤的预警名单；level 为空返回全班，level 非法抛 ValueError。"""
+    if level is not None and level not in LEVELS:
+        raise ValueError(f"非法预警等级：{level}，可选 {LEVELS}")
+    results = compute_class(
+        tenant_id, class_name, term, rows=rows, rules=rules, fetcher=fetcher
+    )
+    if level is None:
+        return results
+    return [r for r in results if r["level"] == level]
