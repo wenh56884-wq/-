@@ -113,3 +113,8 @@ D:\qihang\
 ### 2026-10-26
 - 新增 `AGENTS.md`：项目宪法，写入六条铁律、运行环境、编码约定与交付汇报格式。
 - 补充 `README.md` 骨架：项目简介、验收指标表（V1–V10）。
+- P1-1：补全 `__init__.py`（app/ app\routers/ agents/ engine/ etl/）。
+- P1-1：创建 16 个空模块骨架（app\*.py agents\*.py engine\*.py），仅含职责注释 + TODO。
+- P1-1：实现 `app\config.py`（pydantic-settings `Settings` 单例）。
+- P1-1：写 `requirements.txt`（依赖锁版本）。
+- P1-1：`docs\目录说明.md` 追加 P1-1 已落地文件清单。
