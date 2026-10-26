@@ -28,6 +28,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 copy .env.example .env      # 然后填 DEEPSEEK_API_KEY / MYSQL_PASSWORD / JWT_SECRET
 python -m agents.llm        # 验证 DeepSeek 链路
 python scripts\seed_freshman.py  # 可选：补 4 个 2026 级大一演示账号（学号即口令）
+python scripts\seed_intent_demo.py  # 可选：给非 2026 级补职业目标分布（教师端可见）
 ```
 
 ## 目录结构
@@ -146,3 +147,5 @@ D:\qihang\
 - 新增学生生涯规划卡：大一先选考公/考研/考编/就业（`career_intent` 表），大二/大三直接给出确定性路径；教师端支持按学号直达学生档案。
 - `scripts/init_db.py` 现在会同时执行 `mysql_schema.sql` 与 `career_tables.sql`，新环境一次建表完成。
 - 新增 `scripts/seed_freshman.py`：幂等插入 4 个 2026 级大一演示账号（AI2026001 / RJ2026001 / KJ2026001 / JR2026001，初始口令=学号）。
+- 教师端班级总览新增「职业目标分布」卡：考公 / 考研 / 考编 / 就业 / 未填写人数与占比。
+- 新增 `scripts/seed_intent_demo.py`：按学号哈希为演示学生补目标分布（`--reset` 可重建），不影响 2026 级大一先选流程。

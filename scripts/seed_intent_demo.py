@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -21,8 +23,18 @@ TENANT_ID = 1
 FRESHMAN_YEAR = 2026
 
 
-def seed() -> int:
-    """按学生 id 顺序确定性分配四类目标，返回本次新增条数。"""
+def _intent_for(student_no: str) -> str:
+    """按学号哈希确定性分配目标，避免与分班顺序/自增 id 产生共振。"""
+    digest = hashlib.sha256(str(student_no).encode("utf-8")).hexdigest()
+    return INTENTS[int(digest[:8], 16) % len(INTENTS)]
+
+
+def seed(reset: bool = False) -> int:
+    """为未填写目标的学生补演示数据，返回本次新增条数。
+
+    reset=True 时先清掉非 2026 级的演示目标再重建，用于修正旧分布；
+    默认不覆盖已有选择。
+    """
     settings = get_settings()
     conn = pymysql.connect(
         host=settings.mysql_host,
@@ -34,12 +46,20 @@ def seed() -> int:
     )
     try:
         with conn.cursor() as cur:
+            if reset:
+                cur.execute(
+                    "DELETE ci FROM career_intent ci "
+                    "JOIN student s ON s.id = ci.student_id "
+                    "WHERE ci.tenant_id = %s AND s.enroll_year <> %s",
+                    (TENANT_ID, FRESHMAN_YEAR),
+                )
+
             cur.execute(
-                "SELECT id FROM student "
+                "SELECT id, student_no FROM student "
                 "WHERE tenant_id = %s AND enroll_year <> %s ORDER BY id",
                 (TENANT_ID, FRESHMAN_YEAR),
             )
-            student_ids = [int(row[0]) for row in cur.fetchall()]
+            students = [(int(row[0]), str(row[1])) for row in cur.fetchall()]
 
             cur.execute(
                 "SELECT student_id FROM career_intent WHERE tenant_id = %s",
@@ -48,8 +68,8 @@ def seed() -> int:
             existing = {int(row[0]) for row in cur.fetchall()}
 
             rows = [
-                (TENANT_ID, student_id, INTENTS[index % len(INTENTS)])
-                for index, student_id in enumerate(student_ids)
+                (TENANT_ID, student_id, _intent_for(student_no))
+                for student_id, student_no in students
                 if student_id not in existing
             ]
             if rows:
@@ -66,7 +86,11 @@ def seed() -> int:
 
 def main() -> None:
     """入口：补数据并打印教师端会看到的分布。"""
-    created = seed()
+    parser = argparse.ArgumentParser(description="补齐职业目标演示数据")
+    parser.add_argument("--reset", action="store_true",
+                        help="先清空非 2026 级演示目标再重建（会覆盖这些学生的选择）")
+    args = parser.parse_args()
+    created = seed(reset=args.reset)
     settings = get_settings()
     conn = pymysql.connect(
         host=settings.mysql_host,

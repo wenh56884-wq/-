@@ -60,6 +60,21 @@
       </el-form>
     </el-card>
 
+    <div v-if="overview.career_intent?.total" class="intent-bar">
+      <span class="intent-bar-label">职业目标</span>
+      <span
+        v-for="item in intentItems"
+        :key="item.key"
+        class="intent-chip"
+        :style="{ '--intent-color': item.color }"
+      >
+        {{ item.label }} <b>{{ item.value }}</b>
+      </span>
+      <span class="intent-bar-total">
+        已填写 {{ overview.career_intent.filled }} / {{ overview.career_intent.total }} 人
+      </span>
+    </div>
+
     <el-row :gutter="12">
       <el-col :span="9">
         <el-card shadow="never">
@@ -228,6 +243,19 @@ const clock = useClock()
 
 const activeRow = computed(() => rows.value.find((row) => row.student_no === activeNo.value) || null)
 const stored = computed(() => detail.value.stored || {})
+
+const INTENT_META = [
+  { key: '考公', label: '考公', color: '#dc2626' },
+  { key: '考研', label: '考研', color: '#d97706' },
+  { key: '考编', label: '考编', color: '#16a34a' },
+  { key: '就业', label: '就业', color: '#2563eb' },
+  { key: '未填写', label: '未填写', color: '#a1a1aa' }
+]
+
+const intentItems = computed(() => {
+  const dist = overview.value?.career_intent?.distribution || {}
+  return INTENT_META.map((item) => ({ ...item, value: Number(dist[item.key] || 0) }))
+})
 
 function levelText(level) {
   return LEVEL_TEXT[level] || level || '-'
@@ -484,6 +512,44 @@ onBeforeUnmount(() => {
 <style scoped>
 .filter-bar {
   margin-bottom: 12px;
+}
+
+.intent-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--qh-surface, #fff);
+  border: 1px solid var(--qh-border, #e5e6eb);
+  border-radius: var(--qh-radius-lg, 8px);
+  font-size: 13px;
+}
+
+.intent-bar-label {
+  color: var(--qh-text-mute, #86909c);
+  margin-right: 2px;
+}
+
+.intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--intent-color) 10%, transparent);
+  color: var(--intent-color);
+}
+
+.intent-chip b {
+  font-variant-numeric: tabular-nums;
+}
+
+.intent-bar-total {
+  margin-left: auto;
+  color: var(--qh-text-mute, #86909c);
+  font-size: 12px;
 }
 
 .option-note {
