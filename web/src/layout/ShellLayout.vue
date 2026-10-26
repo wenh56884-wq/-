@@ -683,24 +683,29 @@ onBeforeUnmount(() => {
   right: 24px;
   bottom: 24px;
   z-index: 45;
-  width: 48px;
-  height: 48px;
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: #ffffff;
-  color: #2563eb;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(24, 24, 27, 0.08);
-  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  overflow: visible;
+  transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
 .assistant-fab:hover {
-  transform: translateY(-2px);
-  background: #eff6ff;
-  box-shadow: 0 6px 16px rgba(24, 24, 27, 0.12);
+  transform: translateY(-3px) scale(1.04);
+}
+
+.fab-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(24, 24, 27, 0.16));
 }
 
 .assistant-fab.is-open {
@@ -708,31 +713,17 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.fab-icon {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 150ms ease;
-}
-
-.assistant-fab:hover .fab-icon {
-  transform: translateX(2px);
-}
-
 .fab-badge {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  padding: 1px 5px;
+  top: -2px;
+  right: -4px;
+  padding: 1px 6px;
   border-radius: 8px;
   background: #2563eb;
   color: #ffffff;
   font-size: 10px;
   font-weight: 500;
+  border: 1px solid #ffffff;
 }
 
 /* 抽屉本体：抹掉默认内边距，交给 ChatDrawer 自己排布 */
@@ -768,10 +759,10 @@ onBeforeUnmount(() => {
   }
 
   .assistant-fab {
-    right: 16px;
-    bottom: 16px;
-    width: 44px;
-    height: 44px;
+    right: 12px;
+    bottom: 12px;
+    width: 56px;
+    height: 56px;
   }
 }
 
@@ -783,7 +774,8 @@ onBeforeUnmount(() => {
   .side-btn,
   .ghost-btn,
   .logout-btn,
-  .icon-btn {
+  .icon-btn,
+  .assistant-fab {
     transition: none;
   }
 }

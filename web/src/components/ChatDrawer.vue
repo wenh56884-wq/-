@@ -12,7 +12,7 @@
     <div class="chat-shell">
       <header class="chat-head">
         <div class="chat-title">
-          <span class="chat-logo">启</span>
+          <img class="chat-logo-img" :src="moyuImg" alt="AI" />
           <div class="chat-title-text">
             <div class="chat-name">启航智能助手</div>
             <div class="chat-sub">LangGraph 多智能体 · 数值经 Critic 回查</div>
@@ -106,6 +106,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 
 import http from '../api/http'
 import { currentRole } from '../api/http'
+import moyuImg from '../assets/deepseek-mo-yu.webp'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false }
@@ -230,18 +231,11 @@ function clearChat() {
   min-width: 0;
 }
 
-.chat-logo {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.chat-logo-img {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  object-fit: contain;
 }
 
 .chat-name {
