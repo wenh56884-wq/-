@@ -292,6 +292,20 @@ def test_anonymous_request_still_audited(client, db):
 
 
 # ----------------------------------------------------------------
+# 4.5 招考公告：列表查询（中文 schema 回归）
+# ----------------------------------------------------------------
+@requires_mysql
+def test_exam_notices_list_returns_rows(client):
+    """招考公告列表必须按 `租户编号` 过滤；曾因遗留 tenant_id 列名导致 500。"""
+    resp = client.get("/exam/notices", params={"limit": 5})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["total"] > 0
+    assert body["items"], "演示库应至少有 1 条未截止公告"
+    assert body["items"][0]["id"] > 0
+
+
+# ----------------------------------------------------------------
 # 5. 生涯规划：年级分层 + 目标选择
 # ----------------------------------------------------------------
 @requires_mysql

@@ -66,7 +66,7 @@ def list_notices(
     if exam_type and exam_type not in _EXAM_TYPES:
         raise HTTPException(status_code=422, detail=f"exam_type 只能是 {sorted(_EXAM_TYPES)}")
 
-    where = ["tenant_id = %s"]
+    where = ["`租户编号` = %s"]
     params: list[Any] = [1]
     if exam_type:
         where.append("`考试类型` = %s")
