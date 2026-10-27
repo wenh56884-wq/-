@@ -200,7 +200,7 @@ def _usage_metrics(settings, tenant_id: int) -> dict[str, Any]:
             cur.execute(
                 "SELECT COUNT(DISTINCT `操作者编号`) AS n FROM `审计日志` "
                 "WHERE `操作者类型` = 'student' AND `操作者编号` > 0 "
-                "AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+                "AND `创建时间` >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
             )
             active_students = int(cur.fetchone()["n"] or 0)
             cur.execute(
