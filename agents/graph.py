@@ -10,6 +10,9 @@ import json
 import os
 import re
 import uuid
+from collections.abc import Iterator
+from queue import Queue
+from threading import Thread
 from typing import Any, Callable, Mapping, Sequence, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -465,7 +468,7 @@ def _evidence_lines(result: Mapping[str, Any], tool: str, limit: int = 4) -> str
 
 
 def _llm_external_draft(state: AgentState, result: Mapping[str, Any],
-                        feedback: str) -> str | None:
+                        feedback: str, on_token: Callable[[str], None] | None = None) -> str | None:
     """知识库/联网的模型稿：仍受引用校验约束，不过就退回模板直引。"""
     ctx: ToolContext = state["ctx"]
     tool = str(state.get("tool_name") or "")
@@ -478,7 +481,8 @@ def _llm_external_draft(state: AgentState, result: Mapping[str, Any],
     if feedback:
         parts.append(f"【上一稿被退回的原因，务必逐条改正】\n{feedback}")
     return llm_client.generate_reply(ctx.actor_type, system_prompt=_RAG_SYSTEM,
-                                     user_prompt="\n\n".join(parts), tag="rag")
+                                     user_prompt="\n\n".join(parts), tag="rag",
+                                     on_token=on_token)
 
 
 def _facts_blob(result: Mapping[str, Any], limit: int = 3000) -> str:
@@ -511,7 +515,8 @@ def _history_text(state: AgentState, limit: int = 4) -> str:
     return "\n".join(lines)
 
 
-def _llm_draft(state: AgentState, result: Mapping[str, Any], feedback: str) -> str | None:
+def _llm_draft(state: AgentState, result: Mapping[str, Any], feedback: str,
+               on_token: Callable[[str], None] | None = None) -> str | None:
     """让 LLM 把结构化结果说成人话；返回值仍需过 Critic，不可用时返回 None。"""
     ctx: ToolContext = state["ctx"]
     query = str(state.get("query") or "")
@@ -536,10 +541,12 @@ def _llm_draft(state: AgentState, result: Mapping[str, Any], feedback: str) -> s
         system_prompt=_DRAFT_SYSTEM,
         user_prompt="\n\n".join(parts),
         tag="draft",
+        on_token=on_token,
     )
 
 
-def _llm_chitchat(state: AgentState) -> str | None:
+def _llm_chitchat(state: AgentState,
+                  on_token: Callable[[str], None] | None = None) -> str | None:
     """寒暄 / 能力提问：纯对话，不带任何数据。"""
     ctx: ToolContext = state["ctx"]
     parts = [f"【提问】{state.get('query') or ''}"]
@@ -551,6 +558,7 @@ def _llm_chitchat(state: AgentState) -> str | None:
         system_prompt=_CHAT_SYSTEM,
         user_prompt="\n\n".join(parts),
         tag="chitchat",
+        on_token=on_token,
     )
 
 
@@ -582,12 +590,15 @@ def _external_verify(answer: str, result: Mapping[str, Any],
     return rag_engine.verify_citations(text, snippets)
 
 
-def draft_node(state: AgentState) -> dict[str, Any]:
+def draft_node(state: AgentState,
+               on_token: Callable[[str], None] | None = None) -> dict[str, Any]:
     """生成草稿：注入优先（演示幻觉拦截）→ LLM 润色 → 模板直引兜底。
 
     生成顺序：第 1、2 稿用 LLM（第 2 稿带 Critic 退回意见做修正），
     第 3 稿起回到模板直引保底——模板是原样引用、几乎必然通过审核，
     即使大模型连续说错数字，用户拿到的也是有依据的版本，而不是无数值的降级话术。
+
+    on_token 非空时 LLM 走流式，逐块回调；模板稿瞬间生成，不回调。
     """
     draft_fn = state.get("draft_fn")
     feedback = str(state.get("feedback") or "")
@@ -604,7 +615,7 @@ def draft_node(state: AgentState) -> dict[str, Any]:
             "分析班级与岗位的能力差距，也能从企业知识库里查制度流程（会给出文档与页码），"
             "还能按已定义的工作流一键跑多步流程。比如直接问「报销的住宿标准是多少」就行。"
         )
-        draft = _llm_chitchat(state) or fallback_text
+        draft = _llm_chitchat(state, on_token) or fallback_text
         mode = "chitchat"
     elif str(state.get("tool_name") or "") == "run_workflow":
         draft = _workflow_draft(result)
@@ -614,13 +625,15 @@ def draft_node(state: AgentState) -> dict[str, Any]:
         if attempts >= 3 or not _llm_draft_enabled():
             draft = _external_draft(state, result)
         else:
-            draft = _llm_external_draft(state, result, feedback) or _external_draft(state, result)
+            draft = (_llm_external_draft(state, result, feedback, on_token)
+                     or _external_draft(state, result))
         mode = "rag"
     elif attempts >= 3 or not _llm_draft_enabled():
         draft = _template_draft(result, feedback)
         mode = "template"
     else:
-        draft = _llm_draft(state, result, feedback) or _template_draft(result, feedback)
+        draft = (_llm_draft(state, result, feedback, on_token)
+                 or _template_draft(result, feedback))
         mode = "draft" if draft else "template"
     if not draft:
         draft = _template_draft(result, feedback)
@@ -720,6 +733,32 @@ def get_graph():
     return _GRAPH
 
 
+def _normalize_history(history: Sequence[Mapping[str, str]] | None) -> list[dict[str, str]]:
+    """最近几轮对话：只保留 user/assistant 且非空，单轮截到 500 字。"""
+    turns: list[dict[str, str]] = []
+    for item in list(history or [])[-8:]:
+        role = str(item.get("role") or "")
+        text = str(item.get("text") or "").strip()
+        if role in ("user", "assistant") and text:
+            turns.append({"role": role, "text": text[:500]})
+    return turns
+
+
+def _initial_state(ctx: ToolContext, query: str, term: str | None,
+                   history: Sequence[Mapping[str, str]] | None,
+                   last_tool: str | None, trace_id: str) -> AgentState:
+    return {
+        "ctx": ctx,
+        "query": str(query),
+        "term": term,
+        "history": _normalize_history(history),
+        "last_tool": last_tool,
+        "attempts": 0,
+        "feedback": "",
+        "trace_id": trace_id,
+    }
+
+
 def run_chat(
     ctx: ToolContext,
     query: str,
@@ -737,22 +776,7 @@ def run_chat(
     history 是前端回传的最近几轮对话，只作为 LLM 上下文，不参与任何鉴权。
     """
     trace_id = uuid.uuid4().hex[:12]
-    turns: list[dict[str, str]] = []
-    for item in list(history or [])[-8:]:
-        role = str(item.get("role") or "")
-        text = str(item.get("text") or "").strip()
-        if role in ("user", "assistant") and text:
-            turns.append({"role": role, "text": text[:500]})
-    state: AgentState = {
-        "ctx": ctx,
-        "query": str(query),
-        "term": term,
-        "history": turns,
-        "last_tool": last_tool,
-        "attempts": 0,
-        "feedback": "",
-        "trace_id": trace_id,
-    }
+    state = _initial_state(ctx, query, term, history, last_tool, trace_id)
     if draft_fn is not None:
         state["draft_fn"] = draft_fn
 
@@ -810,3 +834,138 @@ def run_chat(
         # 引用清单（知识库给页码、联网给 URL）：前端据此渲染可点开的出处
         "citations": list((state.get("tool_result") or {}).get("citations") or []),
     }
+
+
+def run_chat_stream(
+    ctx: ToolContext,
+    query: str,
+    term: str | None = None,
+    claims: Mapping[str, Any] | None = None,
+    *,
+    draft_fn: Callable[..., str] | None = None,
+    tool_result: Mapping[str, Any] | None = None,
+    history: Sequence[Mapping[str, str]] | None = None,
+    last_tool: str | None = None,
+) -> Iterator[dict[str, Any]]:
+    """流式跑一次对话：逐事件产出 status / replace / delta / done / error。
+
+    事件口径：
+      status  —— 阶段提示（plan / tool / draft / critic / retry），前端只做文案展示；
+      replace —— 用给定文本**整体替换**当前气泡（重写新稿、模板稿、降级稿都走它）；
+      delta   —— 追加一段正文（LLM 逐块产出）；
+      done    —— 最终答案（已过 Critic）与元信息，前端以此为准覆盖气泡文本；
+      error   —— 本次失败的安全话术，不含任何数值。
+
+    与 run_chat 的数值口径一致：delta 只是「边生成边看」，Critic 驳回就 replace 重写，
+    超过 MAX_RETRY 走降级模板，done.answer 永远是唯一最终的、已核验的答案。
+    """
+    trace_id = uuid.uuid4().hex[:12]
+    state = _initial_state(ctx, query, term, history, last_tool, trace_id)
+    if draft_fn is not None:
+        state["draft_fn"] = draft_fn
+
+    try:
+        if tool_result is not None:
+            # 离线模式：跳过 plan/tool（测试与演示注入用）
+            state["tool_result"] = dict(tool_result)
+            state["tool_name"] = "injected"
+            state["plan"] = {"tool": "injected"}
+            yield {"type": "status", "stage": "tool", "text": "已载入注入的工具结果"}
+        else:
+            yield {"type": "status", "stage": "plan", "text": "正在理解问题…"}
+            state.update(plan_node(state))
+            yield {"type": "status", "stage": "tool",
+                   "text": f"正在调用 {state.get('tool_name')}…",
+                   "tool": state.get("tool_name")}
+            state.update(tool_node(state))
+
+        while True:
+            attempt = int(state.get("attempts") or 0) + 1
+            # 每次新稿先清空气泡：上一稿即使被驳回也不留在界面上
+            yield {"type": "replace", "text": "", "attempt": attempt}
+            yield {"type": "status", "stage": "draft", "attempt": attempt,
+                   "text": "正在生成回答…" if attempt == 1 else "正在按回查意见重写…"}
+            # 草稿在工作线程里生成，token 经队列回到本生成器：
+            # 主线程不阻塞在 draft_node 上，才能把每块正文立刻 yield 给 SSE。
+            streamed: list[str] = []
+            token_q: Queue[str | None] = Queue()
+            box: dict[str, Any] = {}
+            failure: list[Exception] = []
+
+            def _run_draft() -> None:
+                try:
+                    box.update(draft_node(state, on_token=token_q.put))
+                except Exception as exc:      # 交给主线程统一走安全话术
+                    failure.append(exc)
+                finally:
+                    token_q.put(None)          # 结束标记：无论成败都要放
+
+            worker = Thread(target=_run_draft, daemon=True)
+            worker.start()
+            while True:
+                piece = token_q.get()
+                if piece is None:
+                    break
+                streamed.append(piece)
+                yield {"type": "delta", "text": piece, "attempt": attempt}
+            worker.join()
+            if failure:
+                raise failure[0]
+            state.update(box)
+            draft = str(state.get("draft") or "")
+            if "".join(streamed).strip() != draft.strip():
+                # 模板稿 / 流式中途断流 / 注入稿：没有逐块输出，整体下发
+                yield {"type": "replace", "text": draft, "attempt": attempt}
+            yield {"type": "status", "stage": "critic", "attempt": attempt,
+                   "text": "正在逐条核对数值…"}
+            state.update(critic_node(state))
+            verdict = dict(state.get("verdict") or {})
+            if verdict.get("passed"):
+                state.update(accept_node(state))
+                break
+            if int(state.get("attempts") or 0) > MAX_RETRY:
+                state.update(fallback_node(state))
+                yield {"type": "replace", "text": str(state.get("answer") or ""),
+                       "attempt": attempt}
+                break
+            yield {"type": "status", "stage": "retry", "attempt": attempt,
+                   "text": "数值回查未通过，正在重写…"}
+
+        answer = str(state.get("answer") or "")
+        degraded = bool(state.get("degraded"))
+        audit_event(
+            actor_type=ctx.actor_type,
+            actor_id=ctx.student_id or ctx.teacher_id or 0,
+            action="agent.chat",
+            target=trace_id,
+            detail={
+                "query": str(query)[:120],
+                "term": term,
+                "tool": state.get("tool_name"),
+                "attempts": int(state.get("attempts") or 0),
+                "draft_mode": str(state.get("draft_mode") or ""),
+                "passed": bool((state.get("verdict") or {}).get("passed")),
+                "degraded": degraded,
+                "stream": True,
+                "graph_version": GRAPH_VERSION,
+                "critic_version": CRITIC_VERSION,
+            },
+        )
+        yield {
+            "type": "done",
+            "answer": answer,
+            "trace_id": trace_id,
+            "term": term,
+            "degraded": degraded,
+            "attempts": int(state.get("attempts") or 0),
+            "tool": str(state.get("tool_name") or ""),
+            "citations": list((state.get("tool_result") or {}).get("citations") or []),
+        }
+    except Exception as exc:  # 断库/工具异常等：给安全话术，不外泄堆栈
+        audit_event(actor_type=ctx.actor_type,
+                    actor_id=ctx.student_id or ctx.teacher_id or 0,
+                    action="agent.chat.failed", target=trace_id,
+                    detail={"query": str(query)[:120], "stream": True,
+                            "error": str(exc)[:200]})
+        yield {"type": "error", "trace_id": trace_id,
+               "message": "智能体处理失败，已停止本轮回答（不含任何未核对的数值）。"}

@@ -5,13 +5,18 @@
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pymysql
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
+from app.audit import audit_event
 from app.auth import get_current_ctx
 from app.config import get_settings
+from app.schemas import ChatIn
 from engine import rag
 from engine import web_search as web_engine
 from engine import workflow as wf_engine
@@ -41,6 +46,52 @@ def _json_list(raw: Any) -> list:
         return data if isinstance(data, list) else []
     except (TypeError, ValueError):
         return []
+
+
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",   # 关闭 Nginx 缓冲，逐块下发
+    "Connection": "keep-alive",
+}
+
+
+def _sse(event: Mapping[str, Any]) -> str:
+    """把事件编码成 SSE 帧：event 名 + 单行 JSON（JSON 会转义换行，天然一帧一行 data）。"""
+    kind = str(event.get("type") or "message")
+    return f"event: {kind}\ndata: {json.dumps(dict(event), ensure_ascii=False)}\n\n"
+
+
+@router.post("/stream")
+def stream_chat(body: ChatIn, ctx: ToolContext = Depends(get_current_ctx)) -> StreamingResponse:
+    """流式对话（SSE）：status → replace/delta → done。
+
+    身份同样只来自 get_current_ctx；数值口径与 /chat 一致——delta 只是生成过程，
+    最终以 done.answer（已过 Critic）为准，前端收到 done 后整体覆盖气泡文本。
+    """
+    def gen() -> Iterator[str]:
+        started = time.perf_counter()
+        try:
+            from app import chat_service
+
+            for event in chat_service.handle_stream(ctx, body.query, body.term,
+                                                    body.session_id, body.history):
+                if event.get("type") == "done":
+                    audit_event(
+                        actor_type=ctx.actor_type, actor_id=_actor(ctx),
+                        action="api.chat.stream", target=str(event.get("trace_id") or ""),
+                        detail={"query": body.query[:120], "term": body.term,
+                                "session_id": event.get("session_id"),
+                                "tool": event.get("tool"),
+                                "citations": len(event.get("citations") or []),
+                                "degraded": bool(event.get("degraded"))},
+                        duration_ms=(time.perf_counter() - started) * 1000,
+                    )
+                yield _sse(event)
+        except Exception:
+            yield _sse({"type": "error",
+                        "message": "对话服务暂时不可用，请稍后重试（本轮不含任何未核对的数值）。"})
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @router.get("/sessions")

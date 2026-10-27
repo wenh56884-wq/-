@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from functools import lru_cache
 
 from langchain_openai import ChatOpenAI
@@ -57,6 +58,13 @@ def get_student_llm() -> ChatOpenAI:
     return _build_llm(temperature=0.3)
 
 
+def _messages(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
 def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) -> str:
     """按角色取对应 LLM 实例发一次对话；返回纯文本正文。"""
     from app.audit import audit_event
@@ -64,10 +72,7 @@ def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) 
     llm = get_teacher_llm() if actor_type == "teacher" else get_student_llm()
     started = time.perf_counter()
     try:
-        resp = llm.invoke([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ])
+        resp = llm.invoke(_messages(system_prompt, user_prompt))
     except Exception as exc:  # Key 无效/限流/超时都归到这里，由调用方兜底
         audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
                     target="", detail={"error": str(exc)[:200]})
@@ -78,11 +83,44 @@ def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) 
     return str(content).strip()
 
 
-def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
-                   tag: str = "draft") -> str | None:
-    """生成一段回复；LLM 不可用时返回 None（让上层回退到模板，而不是给用户报错）。"""
+def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
+                   on_token: Callable[[str], None]) -> str:
+    """流式调用：每收到一块就回调 on_token，最后返回完整正文（仍由 Critic 核验后定稿）。"""
+    from app.audit import audit_event
+
+    llm = get_teacher_llm() if actor_type == "teacher" else get_student_llm()
+    started = time.perf_counter()
+    parts: list[str] = []
     try:
-        return _invoke(actor_type, system_prompt, user_prompt, tag=tag)
+        for chunk in llm.stream(_messages(system_prompt, user_prompt)):
+            text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+            if not text:
+                continue
+            parts.append(text)
+            on_token(text)
+    except Exception as exc:  # 中途断流同样归到这里，草稿退回模板直引
+        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
+                    target="", detail={"error": str(exc)[:200], "partial_chars": len("".join(parts))})
+        raise
+    content = "".join(parts)
+    audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target="",
+                detail={"chars": len(content), "stream": True,
+                        "cost_ms": round((time.perf_counter() - started) * 1000)})
+    return str(content).strip()
+
+
+def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
+                   tag: str = "draft",
+                   on_token: Callable[[str], None] | None = None) -> str | None:
+    """生成一段回复；LLM 不可用时返回 None（让上层回退到模板，而不是给用户报错）。
+
+    on_token 非空时走流式：每块正文实时回调，返回值仍是完整正文。
+    """
+    try:
+        if on_token is None:
+            return _invoke(actor_type, system_prompt, user_prompt, tag=tag)
+        return _invoke_stream(actor_type, system_prompt, user_prompt, tag=tag,
+                              on_token=on_token)
     except Exception:
         return None
 

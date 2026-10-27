@@ -48,7 +48,16 @@
         <div v-for="msg in messages" :key="msg.id" class="msg-row" :class="msg.role">
           <div class="avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
           <div class="bubble">
-            <div class="bubble-text">{{ msg.text }}</div>
+            <div v-if="msg.streaming && !msg.text" class="typing">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-text">{{ msg.status || '意图识别 → 工具取数 → 生成 → Critic 回查…' }}</span>
+            </div>
+            <div v-else class="bubble-text">{{ msg.text }}<span v-if="msg.streaming" class="stream-caret"></span></div>
+            <div v-if="msg.streaming && msg.text" class="stream-status">
+              {{ msg.status || '生成中 · 核验通过后生效' }}
+            </div>
             <div v-if="msg.citations && msg.citations.length" class="cite-list">
               <div class="cite-title">引用（点开可核对原文）</div>
               <div v-for="c in msg.citations" :key="c.no" class="cite-item">
@@ -59,7 +68,7 @@
                 <span v-else-if="c.chunk_no" class="cite-pos">第 {{ c.chunk_no }} 段</span>
               </div>
             </div>
-            <div v-if="msg.role === 'assistant'" class="bubble-foot">
+            <div v-if="msg.role === 'assistant' && !msg.streaming" class="bubble-foot">
               <span v-if="msg.tool" class="chip">{{ msg.tool }}</span>
               <span class="chip">trace {{ msg.trace_id }}</span>
               <span class="chip">{{ msg.term }}</span>
@@ -69,16 +78,6 @@
               </span>
             </div>
             <div v-if="msg.error" class="bubble-err">{{ msg.error }}</div>
-          </div>
-        </div>
-
-        <div v-if="sending" class="msg-row assistant">
-          <div class="avatar">AI</div>
-          <div class="bubble typing">
-            <span class="typing-dot"></span>
-            <span class="typing-dot"></span>
-            <span class="typing-dot"></span>
-            <span class="typing-text">意图识别 → 工具取数 → 生成 → Critic 回查…</span>
           </div>
         </div>
       </div>
@@ -117,10 +116,11 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 
 import http from '../api/http'
-import { currentRole } from '../api/http'
+import { clearSession, currentRole } from '../api/http'
+import router from '../router'
 import moyuImg from '../assets/deepseek-mo-yu.webp'
 
 const props = defineProps({
@@ -193,6 +193,118 @@ async function scrollBottom() {
   }
 }
 
+// 逐块到达时不必每块都等 nextTick：合并到下一帧再滚，避免抖动
+let scrollQueued = false
+function scheduleScroll() {
+  if (scrollQueued) return
+  scrollQueued = true
+  requestAnimationFrame(() => {
+    scrollQueued = false
+    scrollBottom()
+  })
+}
+
+function apiError(message, status) {
+  const err = new Error(message)
+  err.status = status
+  return err
+}
+
+function streamUrl() {
+  return `${import.meta.env.DEV ? '/api' : '/'}chat/stream`
+}
+
+// 解析 SSE：按空行切帧，逐帧回调 onEvent(eventName, payload)
+async function streamChat(payload, onEvent) {
+  const token = localStorage.getItem('qh_token')
+  const resp = await fetch(streamUrl(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify(payload)
+  })
+  if (resp.status === 401) {
+    clearSession()
+    router.push('/login')
+    throw apiError('登录已失效，请重新登录', 401)
+  }
+  if (!resp.ok || !resp.body) {
+    let detail = ''
+    try {
+      detail = (await resp.json())?.detail || ''
+    } catch {
+      detail = ''
+    }
+    throw apiError(typeof detail === 'string' && detail ? detail : `请求失败（${resp.status}）`,
+      resp.status)
+  }
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  const drain = () => {
+    let cut
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const frame = buffer.slice(0, cut)
+      buffer = buffer.slice(cut + 2)
+      let name = 'message'
+      const dataLines = []
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) name = line.slice(6).trim()
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+      }
+      if (!dataLines.length) continue
+      try {
+        onEvent(name, JSON.parse(dataLines.join('\n')))
+      } catch {
+        // 单帧损坏不影响后续帧
+      }
+    }
+  }
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    drain()
+  }
+  buffer += decoder.decode()
+  drain()
+}
+
+// 旧后端没有 /chat/stream 时退回一次性请求，保证演示不中断
+async function sendOneShot(pending, content, history, started) {
+  try {
+    const { data } = await http.post('/chat', {
+      query: content,
+      term: term.value || null,
+      session_id: sessionId.value,
+      history
+    })
+    if (data?.session_id) sessionId.value = data.session_id
+    Object.assign(pending, {
+      text: data?.answer || '（本次没有返回内容）',
+      trace_id: data?.trace_id || '-',
+      term: data?.term || term.value,
+      degraded: Boolean(data?.degraded),
+      tool: data?.tool || '',
+      citations: data?.citations || [],
+      cost: Math.round(performance.now() - started),
+      streaming: false,
+      status: ''
+    })
+  } catch (err) {
+    const detail = err?.response?.data?.detail || err?.message || '请求失败'
+    pending.streaming = false
+    pending.status = ''
+    pending.error = typeof detail === 'string' ? detail : '请求失败'
+  } finally {
+    scheduleScroll()
+  }
+}
+
 async function send(text) {
   const content = String(text ?? query.value).trim()
   if (!content || sending.value) return
@@ -205,36 +317,82 @@ async function send(text) {
   query.value = ''
   sending.value = true
   const started = performance.now()
+
+  // 助手气泡先占位，随后由流式事件持续填充
+  const pending = reactive({
+    id: ++seq,
+    role: 'assistant',
+    text: '',
+    streaming: true,
+    status: '正在理解问题…',
+    trace_id: '-',
+    term: term.value,
+    degraded: false,
+    tool: '',
+    citations: [],
+    cost: 0
+  })
+  messages.value.push(pending)
+  scrollBottom()
+
+  let gotDone = false
   try {
-    const { data } = await http.post('/chat', {
+    await streamChat({
       query: content,
       term: term.value || null,
       session_id: sessionId.value,
       history
+    }, (name, data) => {
+      if (name === 'status') {
+        pending.status = data?.text || pending.status
+        if (data?.tool) pending.tool = data.tool
+      } else if (name === 'replace') {
+        pending.text = data?.text || ''
+      } else if (name === 'delta') {
+        pending.text += data?.text || ''
+      } else if (name === 'done') {
+        gotDone = true
+        if (data?.session_id) sessionId.value = data.session_id
+        // 最终文本以已过 Critic 的 done.answer 为准
+        if (data?.answer) pending.text = data.answer
+        pending.trace_id = data?.trace_id || '-'
+        pending.term = data?.term || term.value
+        pending.degraded = Boolean(data?.degraded)
+        pending.tool = data?.tool || pending.tool
+        pending.citations = data?.citations || []
+        pending.cost = Math.round(performance.now() - started)
+        pending.status = ''
+        pending.streaming = false
+      } else if (name === 'error') {
+        const message = data?.message || '请求失败'
+        pending.error = pending.text ? `生成中断，以上内容未核验：${message}` : message
+      }
+      scheduleScroll()
     })
-    if (data?.session_id) sessionId.value = data.session_id
-    push('assistant', data?.answer || '（本次没有返回内容）', {
-      trace_id: data?.trace_id || '-',
-      term: data?.term || term.value,
-      degraded: Boolean(data?.degraded),
-      tool: data?.tool || '',
-      citations: data?.citations || [],
-      cost: Math.round(performance.now() - started)
-    })
+    if (!gotDone) {
+      pending.streaming = false
+      pending.status = ''
+      if (!pending.error) {
+        pending.error = pending.text
+          ? '连接中断：以上是不完整的生成内容，未经过 Critic 核验。'
+          : '连接已断开，回答可能不完整。'
+      }
+    }
   } catch (err) {
-    // 仅 401 由拦截器统一跳登录；其余在气泡内给具体原因
-    if (err?.response?.status !== 401) {
-      const detail = err?.response?.data?.detail || err?.message || '请求失败'
-      push('assistant', '这次没能拿到回答。', {
-        trace_id: '-',
-        term: term.value,
-        degraded: false,
-        cost: Math.round(performance.now() - started),
-        error: typeof detail === 'string' ? detail : '请求失败'
-      })
+    if (!pending.text && (err?.status === 404 || err?.status === 405)) {
+      await sendOneShot(pending, content, history, started)
+    } else if (err?.status !== 401) {
+      pending.streaming = false
+      pending.status = ''
+      pending.error = err?.message || '请求失败'
+      if (pending.text) {
+        pending.error = `流式连接中断，以上内容未核验：${pending.error}`
+      }
     }
   } finally {
+    pending.streaming = false
     sending.value = false
+    scrollBottom()
   }
 }
 
@@ -426,6 +584,22 @@ function clearChat() {
   word-break: break-word;
 }
 
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: #2563eb;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+.stream-status {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
 .bubble-foot {
   margin-top: 8px;
   display: flex;
@@ -586,6 +760,12 @@ function clearChat() {
   cursor: default;
 }
 
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 @keyframes typing-bounce {
   0%,
   80%,
@@ -600,7 +780,8 @@ function clearChat() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .typing-dot {
+  .typing-dot,
+  .stream-caret {
     animation: none;
   }
 

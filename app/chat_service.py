@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any, Mapping
 
 import pymysql
@@ -169,3 +170,50 @@ def handle(ctx: ToolContext, query: str, term: str | None,
     result["session_id"] = sid
     persist_turn(ctx, sid, query, result, int((time.time() - started) * 1000))
     return result
+
+
+def _client_turns(client_history: Any) -> list[dict[str, str]]:
+    """前端回传的最近几轮（仅在服务端历史不可用时使用）。"""
+    return [{"role": t.role, "text": t.text}
+            for t in (client_history or [])][-RECENT_TURNS:]
+
+
+def handle_stream(ctx: ToolContext, query: str, term: str | None,
+                  session_id: int | None,
+                  client_history: Any = None) -> Iterator[dict[str, Any]]:
+    """流式对话：事件原样转发，拿到最终答案后落库，再补上 session_id 发 done。
+
+    存储不可用不阻塞回答：定会话/取历史失败时退回前端历史，本轮不留痕；
+    回答照常流式给出——与 handle 的容错原则一致。
+    """
+    import time
+
+    sid: int | None = None
+    turns: list[dict[str, str]] = []
+    summary = ""
+    prev_tool: str | None = None
+    try:
+        sid = ensure_session(ctx, session_id, str(query)[:60])
+        turns, summary = load_history(ctx, sid)
+        prev_tool = last_tool(ctx, sid)
+    except Exception:
+        sid = None
+    if summary:
+        turns = [{"role": "assistant", "text": f"（此前对话摘要）{summary}"}, *turns]
+    if not turns:
+        turns = _client_turns(client_history)
+
+    started = time.time()
+    for event in graph.run_chat_stream(ctx, query, term=term, history=turns,
+                                       last_tool=prev_tool):
+        if event.get("type") == "done" and sid is not None:
+            result = {
+                "answer": event.get("answer"),
+                "degraded": event.get("degraded"),
+                "trace_id": event.get("trace_id"),
+                "tool_name": event.get("tool"),
+                "citations": event.get("citations") or [],
+            }
+            persist_turn(ctx, sid, query, result, int((time.time() - started) * 1000))
+            event["session_id"] = sid
+        yield event
