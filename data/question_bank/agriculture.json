@@ -1,0 +1,117 @@
+{
+  "family": "agriculture",
+  "label": "农 / 林 / 牧 / 渔",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "agri-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择农业技术员？你理解基层农技推广主要做什么？",
+      "keywords": ["农业", "推广", "农户", "技术", "服务"],
+      "answer_hint": "从技术示范、农户培训、田间指导和政策落地说明岗位理解，再谈动机。",
+      "difficulty": 1,
+      "source_name": "金锄头",
+      "source_url": "https://www.jinchutou.com/shtml/a174a9b364d51dff48665afcf4bdca1e.html",
+      "job_family": "农业技术员/农技推广"
+    },
+    {
+      "id": "agri-mot-002",
+      "qtype": "motivation",
+      "question": "基层条件比较苦、经常下田，你怎么看？",
+      "keywords": ["接受", "适应", "责任", "沟通", "成长"],
+      "answer_hint": "坦诚接受基层条件，用经历证明吃苦耐劳和与农户沟通的能力。",
+      "difficulty": 1,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/6a170084000000003601927d",
+      "job_family": "农业技术员/农技推广"
+    },
+    {
+      "id": "agri-major-001",
+      "qtype": "major",
+      "question": "测土配方施肥的原理是什么？怎么取土和制定配方？",
+      "keywords": ["土壤检测", "配方", "氮磷钾", "目标产量", "有机肥"],
+      "answer_hint": "讲清测土—配方—施肥的闭环，以及取土代表性、目标产量和有机无机配施。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500200245.html",
+      "job_family": "农业技术员/土肥"
+    },
+    {
+      "id": "agri-major-002",
+      "qtype": "major",
+      "question": "作物出现叶片发黄或病斑，你怎么做田间诊断？",
+      "keywords": ["症状", "缺素", "病害", "虫害", "取样"],
+      "answer_hint": "先观察分布与症状，区分缺素/病害/虫害/药害，再取样送检或对照资料确认。",
+      "difficulty": 2,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/69fd5d59000000001e00e6af",
+      "job_family": "农业技术员/植保"
+    },
+    {
+      "id": "agri-major-003",
+      "qtype": "major",
+      "question": "病虫害综合防治（IPM）包含哪些措施？",
+      "keywords": ["农业防治", "生物防治", "化学防治", "监测", "阈值"],
+      "answer_hint": "按农业/物理/生物/化学防治分类，强调监测预警、防治阈值和减量用药。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/501949441.html",
+      "job_family": "农业技术员/植保"
+    },
+    {
+      "id": "agri-scenario-001",
+      "qtype": "scenario",
+      "question": "春耕前要组织一场技术培训，但农户参与度低，你怎么做？",
+      "keywords": ["需求", "示范", "时间", "激励", "回访"],
+      "answer_hint": "先摸清农户需求和农时，用田间示范、错峰/短会、示范户带动并回访。",
+      "difficulty": 2,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/68a439a9000000001d028044",
+      "job_family": "农业技术员/农技推广"
+    },
+    {
+      "id": "agri-scenario-002",
+      "qtype": "scenario",
+      "question": "倒春寒或干旱等灾害预警来了，你怎么组织防灾减损？",
+      "keywords": ["预警", "通知", "措施", "物资", "复盘"],
+      "answer_hint": "快速通知到户，给出可操作措施，协调物资和技术指导，灾后评估复盘。",
+      "difficulty": 3,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/68a439a9000000001d028044",
+      "job_family": "农业技术员/农技推广"
+    },
+    {
+      "id": "agri-project-001",
+      "qtype": "project",
+      "question": "讲一次你做过的农技推广或试验示范项目：目标、做法、结果。",
+      "keywords": ["试验", "数据", "示范", "推广", "结果"],
+      "answer_hint": "用 STAR 说清试验设计、数据对比、示范推广范围和增产/节本结果。",
+      "difficulty": 2,
+      "source_name": "book118",
+      "source_url": "https://max.book118.com/html/2026/0608/5242243101013224.shtm",
+      "job_family": "农业技术员/农技推广"
+    },
+    {
+      "id": "agri-stress-001",
+      "qtype": "stress",
+      "question": "农户不接受新技术，坚持老办法，你怎么说服？",
+      "keywords": ["倾听", "对比", "示范", "风险", "耐心"],
+      "answer_hint": "先倾听顾虑，用小面积对比示范和算账的方式降低风险，耐心跟进。",
+      "difficulty": 2,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/6a170084000000003601927d",
+      "job_family": "农业技术员/农技推广"
+    },
+    {
+      "id": "agri-counter-001",
+      "qtype": "counter",
+      "question": "你对智慧农业或绿色农业怎么看？最后有什么问题想问？",
+      "keywords": ["智慧农业", "绿色", "数据", "团队", "成长"],
+      "answer_hint": "说清一个具体方向（精准施肥/物联网监测/绿色防控），再问团队业务或成长路径。",
+      "difficulty": 1,
+      "source_name": "金锄头",
+      "source_url": "https://www.jinchutou.com/shtml/a174a9b364d51dff48665afcf4bdca1e.html",
+      "job_family": "农业技术员/农技推广"
+    }
+  ]
+}

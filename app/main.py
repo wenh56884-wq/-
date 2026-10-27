@@ -30,6 +30,7 @@ from app.routers import exam as exam_router
 from app.routers import interview as interview_router
 from app.routers import job as job_router
 from app.routers import kg as kg_router
+from app.routers import question_bank as qb_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
 from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(job_router.router)
     app.include_router(interview_router.router)
     app.include_router(kg_router.router)
+    app.include_router(qb_router.router)
 
     @app.middleware("http")
     async def audit_middleware(request: Request, call_next):

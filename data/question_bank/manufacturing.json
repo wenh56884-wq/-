@@ -1,0 +1,185 @@
+{
+  "version": "qb-v1",
+  "family": "manufacturing",
+  "family_label": "机械 / 制造 / 电气 / 自动化 / 电子半导体",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：刷刷题《机电公司面试题》《制造工艺面试题》、知行求职论坛《首钢集团有限公司二面》、人人文库《制造业人才招聘面试题及解析集》。",
+  "items": [
+    {
+      "id": "mfg-major-001",
+      "qtype": "major",
+      "job_family": "电气/自动化",
+      "question": "简述三相异步电动机的启动方式及适用场景。",
+      "keywords": ["直接启动", "星三角", "自耦变压器", "启动电流"],
+      "answer_hint": "常见启动方式有直接启动（适用于小容量电机）、星-三角启动（适用于正常运行时定子绕组为三角形连接的电机）、自耦变压器启动（适用于大功率电机）。直接启动成本低但启动电流大；星-三角可降低启动电流但启动转矩也减小。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/a0575f77c7d44cf88493f265ed07036e.html"
+    },
+    {
+      "id": "mfg-major-002",
+      "qtype": "major",
+      "job_family": "机械工艺",
+      "question": "什么是机械加工工艺过程？",
+      "keywords": ["毛坯", "工序", "工步", "安装"],
+      "answer_hint": "机械加工工艺过程是指用机械加工方法直接改变毛坯形状、尺寸、性能，使其成为合格零件的全过程，包括工序、工步、安装等环节。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/a0575f77c7d44cf88493f265ed07036e.html"
+    },
+    {
+      "id": "mfg-major-003",
+      "qtype": "major",
+      "job_family": "机械设计",
+      "question": "什么是公差与配合？举例说明其在机电装配中的作用。",
+      "keywords": ["公差", "配合", "互换性", "过盈"],
+      "answer_hint": "公差是允许尺寸的变动量，配合是基本尺寸相同的孔与轴之间的松紧关系，作用是保证零件的互换性和装配精度，如轴与轴承内圈的过盈配合。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/a0575f77c7d44cf88493f265ed07036e.html"
+    },
+    {
+      "id": "mfg-major-004",
+      "qtype": "major",
+      "job_family": "电气/自动化",
+      "question": "简述 PLC 梯形图的基本逻辑指令（如常开、常闭触点、线圈）。",
+      "keywords": ["常开触点", "常闭触点", "线圈", "串联", "并联"],
+      "answer_hint": "梯形图是 PLC 的编程语言，基本逻辑指令包括常开触点（表示条件满足）、常闭触点（表示条件不满足）、线圈（表示输出控制），通过触点的串联和并联实现逻辑控制。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/a0575f77c7d44cf88493f265ed07036e.html"
+    },
+    {
+      "id": "mfg-major-005",
+      "qtype": "major",
+      "job_family": "电气/自动化",
+      "question": "什么是电气原理图的互锁与自锁？",
+      "keywords": ["自锁", "互锁", "接触器", "正反转"],
+      "answer_hint": "自锁是通过接触器辅助触点保持自身回路通电，实现持续动作；互锁是通过控制回路断开另一回路，防止两个接触器同时动作，如电机正反转控制中的互锁。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/a0575f77c7d44cf88493f265ed07036e.html"
+    },
+    {
+      "id": "mfg-major-006",
+      "qtype": "major",
+      "job_family": "机械工艺",
+      "question": "什么是制造工艺中的“工装夹具”？它在生产中的作用是什么？",
+      "keywords": ["定位", "夹紧", "精度", "效率"],
+      "answer_hint": "工装夹具是在制造过程中用于装夹工件、引导刀具或定位产品的专用工具。作用是保证加工精度、提高装夹效率、稳定质量、减少人为误差、辅助自动化生产。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/3ecdd1ed386949748bfb59ff852d88b8.html"
+    },
+    {
+      "id": "mfg-major-007",
+      "qtype": "major",
+      "job_family": "生产管理",
+      "question": "制造工艺中的“快速换型（SMED）”是什么？其主要步骤有哪些？",
+      "keywords": ["换型时间", "内换型", "外换型", "OEE"],
+      "answer_hint": "快速换型是缩短设备换型时间以提高设备利用率的技术，常见于精益生产。步骤：区分内换型（停机才能做）和外换型（不停机可做），将内换型转化为外换型，优化内换型步骤（标准化工具、预装配），利用防错技术，持续测量并减少换型时间。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/3ecdd1ed386949748bfb59ff852d88b8.html"
+    },
+    {
+      "id": "mfg-major-008",
+      "qtype": "major",
+      "job_family": "生产管理",
+      "question": "什么是制造工艺中的“5S 管理”？具体指哪些内容？",
+      "keywords": ["整理", "整顿", "清扫", "清洁", "素养"],
+      "answer_hint": "5S 是通过整理、整顿、清扫、清洁、素养五个环节提升现场效率和质量：整理区分必要与不必要物品，整顿做定置管理与目视化，清扫保持现场清洁，清洁把前三者制度化，素养培养员工良好习惯。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/3ecdd1ed386949748bfb59ff852d88b8.html"
+    },
+    {
+      "id": "mfg-major-009",
+      "qtype": "major",
+      "job_family": "质量管理",
+      "question": "制造工艺中的“防错法（Poka-Yoke）”是什么？举例说明其应用场景。",
+      "keywords": ["防错", "报警", "纠正", "设计"],
+      "answer_hint": "防错法是通过设计或使用装置、工具，使人为操作错误或设备失误不易发生，即使发生也能自动报警或纠正。例如工装上加定位销，装反就装不进去。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/3ecdd1ed386949748bfb59ff852d88b8.html"
+    },
+    {
+      "id": "mfg-major-010",
+      "qtype": "major",
+      "job_family": "材料/冶金",
+      "question": "常用黑色金属材料有哪几类？什么是优质碳素钢？",
+      "keywords": ["生铁", "铸铁", "钢", "碳素钢", "硫磷"],
+      "answer_hint": "黑色金属材料主要包括生铁、铸铁和钢。钢按化学成分分碳素钢和合金钢，按用途分结构钢、工具钢、特殊性能钢。优质碳素钢是硫、磷等有害杂质含量较少的碳素钢（S≤0.035%，P≤0.035%），同时保证化学成分和机械性能。",
+      "difficulty": 3,
+      "source_name": "知行求职论坛",
+      "source_url": "https://bbs.zhixingqiuzhi.com/forum.php?action=printable&mod=viewthread&tid=989"
+    },
+    {
+      "id": "mfg-scen-001",
+      "qtype": "scenario",
+      "job_family": "质量管理",
+      "question": "某电子产品的不良率高达 5%，如何通过 SPC 控制图识别异常波动？",
+      "keywords": ["控制图", "控制限", "异常点", "SPC"],
+      "answer_hint": "建立 X-bar-R 图，按抽样数据计算控制限，分析连续点趋势、超出控制限的点与链状分布，判断是普通原因还是特殊原因波动，再针对性整改。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://renrendoc.com/paper/495215473.html"
+    },
+    {
+      "id": "mfg-scen-002",
+      "qtype": "scenario",
+      "job_family": "安全管理",
+      "question": "如果施工现场（车间）发生一宗可记录的工伤，你作为主管的即时行动是什么？",
+      "keywords": ["救治", "现场安全", "报告", "调查", "防止再发"],
+      "answer_hint": "先确保伤者得到救治和现场安全，再按规定通报安全管理部门，启动事故调查，并制定防止再发的措施。",
+      "difficulty": 3,
+      "source_name": "EmployHK 港才指南",
+      "source_url": "https://employ.hk/posts/hong-kong-job-interview-10-common-questions-framework"
+    },
+    {
+      "id": "mfg-proj-001",
+      "qtype": "project",
+      "job_family": "机械工艺",
+      "question": "举一个你参与过的工艺改进或设备改善项目：问题、你的做法、最终效果。",
+      "keywords": ["问题", "分析", "措施", "效果"],
+      "answer_hint": "按 STAR 讲：先量化问题（不良率、节拍、OEE），再说你如何定位根因（5M1E、数据回溯），采取了哪些可落地的措施，最后给改进后的量化结果。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://renrendoc.com/paper/495215473.html"
+    },
+    {
+      "id": "mfg-stress-001",
+      "qtype": "stress",
+      "job_family": "生产管理",
+      "question": "产线突然停线，交付又压得很紧，你会怎么处理？",
+      "keywords": ["止损", "定位", "临时方案", "沟通"],
+      "answer_hint": "先按应急预案止损（隔离不良、切换备用工位），同时组织快速定位根因，给出临时对策保证交付，再排长期整改；期间同步向计划和销售通报影响范围。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://renrendoc.com/paper/495215473.html"
+    },
+    {
+      "id": "mfg-mot-001",
+      "qtype": "motivation",
+      "job_family": "机械/电气",
+      "question": "你了解冶炼/机械/电气的基本流程吗？请结合你应聘的岗位说说。",
+      "keywords": ["流程", "基础", "岗位", "现场"],
+      "answer_hint": "机械类可讲机械设计原理、制造基础、热处理方法（退火、正火、淬火、回火）、减速机选型、定位与轴承固定；电气类讲电路原理、电机学、PLC 与 SCADA；并说明希望在设备预知性维护、振动监测等方向继续拓展。",
+      "difficulty": 3,
+      "source_name": "知行求职论坛",
+      "source_url": "https://bbs.zhixingqiuzhi.com/forum.php?action=printable&mod=viewthread&tid=989"
+    },
+    {
+      "id": "mfg-cnt-001",
+      "qtype": "counter",
+      "job_family": "机械/电气",
+      "question": "最后留给你提问：关于这个技术岗位，你想了解什么？",
+      "keywords": ["产线", "培训", "成长", "安全"],
+      "answer_hint": "可围绕：入职后会分到哪条产线/哪个项目、师带徒与培训安排、技术序列的成长路径、现场安全与倒班安排。",
+      "difficulty": 1,
+      "source_name": "知行求职论坛",
+      "source_url": "https://bbs.zhixingqiuzhi.com/forum.php?action=printable&mod=viewthread&tid=989"
+    }
+  ]
+}

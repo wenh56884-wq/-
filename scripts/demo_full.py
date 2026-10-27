@@ -18,6 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlencode
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
@@ -196,10 +197,25 @@ Python、MySQL、Hive
         print(f"   [{i['kind']}] {i['where']}：{i['problem'][:40]}")
         print(f"        改写：{i['rewrite'][:56]}")
 
-    step("模拟面试：开局（引擎出题，按简历证据裁剪）")
+    step("题库 RAG：行业族 → 题型检索（每道题都有出处）")
+    s, qst = _call("GET", "/qb/stats", st)
+    print(f"   HTTP {s} 题库 {qst.get('total')} 条｜行业族 {len(qst.get('families') or {})}"
+          f"｜来源 {len(qst.get('sources') or [])} 个")
+    for fam, info in list((qst.get("families") or {}).items())[:4]:
+        print(f"     {fam:16s} {info['label'][:18]:20s} {info['total']:>3} 条")
+    s, qsr = _call("GET", "/qb/search?" + urlencode(
+        {"industry": "计算机软件", "q": "Java后端开发 MySQL", "qtype": "major", "k": 2}), st)
+    print(f"   HTTP {s} 检索「Java后端开发/计算机软件」→ 行业族={qsr.get('family_label')}")
+    for h in (qsr.get("items") or []):
+        print(f"     {h['score']:.3f} {h['question'][:40]}")
+        print(f"           来源={h['source_name']} 命中={h['matched_by']}")
+
+    step("模拟面试：开局（题库优先出题，按简历证据裁剪）")
     s, d = _call("POST", "/interview/start", st, {"job_id": jid, "resume_id": rid})
     print(f"   HTTP {s} 会话 {d.get('session_id')} 共 {d.get('total_rounds')} 轮，"
           f"第1题[{d.get('question_label')}]：{d.get('question')}")
+    src = d.get("source") or {}
+    print(f"   出题来源：{'题库 ' + str(src.get('name')) + ' / ' + str(src.get('id')) if src.get('kind') == 'bank' else '模板出题'}")
     sid = d.get("session_id")
 
     answers = [
@@ -221,7 +237,10 @@ Python、MySQL、Hive
             break
         print(f"   第{i + 1}轮 得分 {d.get('score')} 点评版本={d.get('comment_version')}")
         print(f"      点评：{(d.get('comment') or '')[:64]}")
-        print(f"      下一题：{(d.get('next') or {}).get('question', '')[:48]}")
+        nxt = d.get("next") or {}
+        nsrc = nxt.get("source") or {}
+        origin = (f"题库·{nsrc.get('name')}" if nsrc.get("kind") == "bank" else "模板")
+        print(f"      下一题（{origin}）：{(nxt.get('question') or '')[:44]}")
     if final is None:
         s, final = _call("POST", f"/interview/{sid}/answer", st, {"text": answers[-1]})
 
@@ -230,6 +249,15 @@ Python、MySQL、Hive
     print("   " + (final.get("report") or "").split("\n")[0])
     for g in (final.get("gaps") or [])[:4]:
         print(f"   [{g['dimension']}] {g['gap'][:44]} → {g['action'][:34]}")
+
+    step("本场题目出处（防幻觉：每道题都可回溯到来源页面）")
+    srcs = final.get("sources") or []
+    bank_n = sum(1 for x in srcs if x.get("kind") == "bank")
+    print(f"   {len(srcs)} 题中 {bank_n} 题来自题库，{len(srcs) - bank_n} 题用模板")
+    for x in srcs:
+        print(f"   [{x['round']}] {x['label']:6s} {x['name'] or '模板':16s} {x['question'][:36]}")
+        if x.get("url"):
+            print(f"        出处 {x['url']}")
 
     step("面试详情与历史（防虚构证据留痕）")
     s, d = _call("GET", f"/interview/{sid}", st)

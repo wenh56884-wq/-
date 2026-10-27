@@ -1,0 +1,196 @@
+{
+  "version": "qb-v1",
+  "family": "it_software",
+  "family_label": "计算机软件 / 互联网 / IT 服务",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：应届毕业生网《阿里巴巴常用面试题》、牛客网《26年 Java 面试就问这些》、EmployHK《香港求职面试10类问题框架》。",
+  "items": [
+    {
+      "id": "it-major-001",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "String、StringBuilder、StringBuffer 的区别是什么？String 为什么是不可变的？",
+      "keywords": ["不可变", "final", "线程安全", "字符串常量池", "拼接"],
+      "answer_hint": "String 是不可变对象，底层数组被 final 修饰且不对外暴露，因此可以安全共享、放进字符串常量池；StringBuilder 非线程安全但性能最好，StringBuffer 方法加了同步、线程安全但开销更大。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-002",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "ArrayList 和 LinkedList 的底层实现有什么区别？各自在增删改查操作上时间复杂度如何？为什么很多业务场景下 ArrayList 反而比 LinkedList 更合适？",
+      "keywords": ["数组", "链表", "时间复杂度", "随机访问", "缓存友好"],
+      "answer_hint": "ArrayList 基于动态数组，随机访问 O(1)、中间插入删除 O(n)；LinkedList 基于双向链表，头尾操作 O(1)、随机访问 O(n)。业务中查询远多于增删，且数组内存连续、缓存友好，所以 ArrayList 更常用。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-003",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "ConcurrentHashMap 在 JDK 1.7 和 JDK 1.8 中实现方式有什么不同？JDK 1.8 为什么放弃分段锁？put 操作时如何保证线程安全？",
+      "keywords": ["分段锁", "CAS", "synchronized", "红黑树", "链表"],
+      "answer_hint": "1.7 用 Segment 分段锁，锁粒度是段；1.8 放弃分段锁，改为 CAS + synchronized 锁单个桶的头节点，并发度更高、内存开销更小，并在链表长度超过阈值时转红黑树。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-004",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "== 和 equals() 的区别是什么？重写 equals() 时为什么必须同时重写 hashCode()？不重写会导致什么问题？",
+      "keywords": ["引用", "值", "hashCode", "哈希桶", "HashMap"],
+      "answer_hint": "== 比较引用（基本类型比较值），equals 默认也是引用比较、可被重写为值比较。equals 相等必须保证 hashCode 相等，否则放进 HashMap/HashSet 会落到不同桶里，导致查不到、去重失效。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-005",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "Java 类加载机制的完整流程是什么？什么是双亲委派模型？这样设计是为了解决什么问题？",
+      "keywords": ["加载", "验证", "准备", "解析", "初始化", "双亲委派"],
+      "answer_hint": "流程为加载、验证、准备、解析、初始化。双亲委派指类加载请求先交给父加载器，父加载器无法完成才自己加载，避免核心类被篡改、保证同一个类只被加载一次。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-006",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "JVM 常见的垃圾回收算法有哪些？标记-清除、标记-整理、复制算法各有什么优缺点？新生代和老年代通常分别采用哪种策略？",
+      "keywords": ["标记清除", "标记整理", "复制算法", "新生代", "老年代"],
+      "answer_hint": "标记-清除简单但产生碎片；标记-整理不产生碎片但移动对象开销大；复制算法无碎片、效率高但浪费一半空间。新生代多用复制算法，老年代多用标记-整理或标记-清除。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-007",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "什么情况下会触发 Full GC？如何排查频繁 Full GC？常用的 JVM 调优参数有哪些？",
+      "keywords": ["老年代", "内存不足", "jstat", "堆转储", "Xmx"],
+      "answer_hint": "老年代空间不足、元空间耗尽、显式调用 System.gc、晋升失败等会触发 Full GC。排查用 jstat 看 GC 频率、jmap 抓堆转储分析大对象，调优常改 -Xms/-Xmx/-Xmn、新生代比例、GC 器选型。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-008",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "synchronized 和 ReentrantLock 的区别是什么？公平锁和非公平锁有什么区别？ReentrantLock 中的 Condition 用来解决什么问题？",
+      "keywords": ["关键字", "API", "公平锁", "可中断", "Condition"],
+      "answer_hint": "synchronized 是关键字、自动释放、非公平；ReentrantLock 是 API、需手动 unlock、支持公平锁、可中断、可超时、可用 Condition 做多条件等待唤醒（类似 wait/notify 但更灵活）。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-009",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "ThreadLocal 的原理是什么？为什么会出现内存泄漏？在线程池环境中使用 ThreadLocal 有什么风险？",
+      "keywords": ["ThreadLocalMap", "弱引用", "内存泄漏", "线程池", "remove"],
+      "answer_hint": "每个 Thread 持有一个 ThreadLocalMap，key 是 ThreadLocal 的弱引用、value 是强引用。key 被回收后 value 无法访问却不释放，造成泄漏；线程池里线程长期存活，残留值会串到下一个任务，所以用完必须 remove。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928"
+    },
+    {
+      "id": "it-major-010",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "数据库索引的原理是什么？索引有哪些种类？使用索引有什么好处和问题？",
+      "keywords": ["B+树", "聚簇索引", "回表", "覆盖索引", "写入开销"],
+      "answer_hint": "主流用 B+ 树，非叶子节点只存键、叶子节点存数据并相互链接，适合范围查询。好处是减少扫描行数、加速查询和排序；问题是占空间、增删改要维护索引、索引选择不当会失效。",
+      "difficulty": 3,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/baodian/alibaba/7-2.html"
+    },
+    {
+      "id": "it-major-011",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "Statement 与 PreparedStatement 的区别是什么？什么是 SQL 注入？如何防止 SQL 注入？",
+      "keywords": ["预编译", "参数化", "SQL注入", "拼接", "转义"],
+      "answer_hint": "PreparedStatement 预编译并支持参数占位符，Statement 需要字符串拼接。SQL 注入是把用户输入当 SQL 语句执行；防止靠参数化查询、输入校验、最小权限，不要拼接 SQL。",
+      "difficulty": 2,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/baodian/alibaba/7-2.html"
+    },
+    {
+      "id": "it-major-012",
+      "qtype": "major",
+      "job_family": "后端开发",
+      "question": "对 Spring 的理解，项目中都用什么？怎么用的？对 IOC 和 AOP 的理解及实现原理？",
+      "keywords": ["IOC", "DI", "AOP", "动态代理", "Bean"],
+      "answer_hint": "IOC 是控制反转，把对象创建和依赖装配交给容器，实现方式是依赖注入；AOP 是面向切面，把日志、事务等横切逻辑抽出来，底层用 JDK 动态代理或 CGLIB 生成代理对象。",
+      "difficulty": 3,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/baodian/alibaba/7-2.html"
+    },
+    {
+      "id": "it-scen-001",
+      "qtype": "scenario",
+      "job_family": "后端开发",
+      "question": "设计一个电商优惠券系统，如何防止滥用？",
+      "keywords": ["规则引擎", "限额", "身份验证", "实时监控"],
+      "answer_hint": "从规则引擎、限额管理、用户身份验证和实时监控四个层面作答。",
+      "difficulty": 3,
+      "source_name": "EmployHK 港才指南",
+      "source_url": "https://employ.hk/posts/hong-kong-job-interview-10-common-questions-framework"
+    },
+    {
+      "id": "it-scen-002",
+      "qtype": "scenario",
+      "job_family": "运维/DevOps",
+      "question": "如何建立一条完善的 CI/CD 管道？",
+      "keywords": ["源码管理", "自动化测试", "容器化", "监控"],
+      "answer_hint": "涵盖源码管理、自动化测试、容器化部署和生产环境监控，并举例用过的工具如 Jenkins、Docker。",
+      "difficulty": 3,
+      "source_name": "EmployHK 港才指南",
+      "source_url": "https://employ.hk/posts/hong-kong-job-interview-10-common-questions-framework"
+    },
+    {
+      "id": "it-proj-001",
+      "qtype": "project",
+      "job_family": "后端开发",
+      "question": "说说你项目里做过的最有技术含量的一件事：背景、你负责的部分、难点、最后结果。",
+      "keywords": ["背景", "负责", "难点", "方案", "结果"],
+      "answer_hint": "按 STAR 讲：先说业务背景与量级，再说你独立负责的模块，重点讲清技术难点（并发、性能、数据一致性）和你选的方案对比，最后给可验证的结果（QPS、耗时、错误率）。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/869231276035760128"
+    },
+    {
+      "id": "it-stress-001",
+      "qtype": "stress",
+      "job_family": "后端开发",
+      "question": "线上突然出现接口大面积超时，你会怎么排查？",
+      "keywords": ["监控", "日志", "定位", "回滚", "复盘"],
+      "answer_hint": "先看监控确认范围（全站还是单接口、是否伴随发布），再查日志与链路追踪定位到具体依赖（DB、缓存、下游），必要时先回滚止损，事后做根因分析与复盘。",
+      "difficulty": 3,
+      "source_name": "EmployHK 港才指南",
+      "source_url": "https://employ.hk/posts/hong-kong-job-interview-10-common-questions-framework"
+    },
+    {
+      "id": "it-cnt-001",
+      "qtype": "counter",
+      "job_family": "后端开发",
+      "question": "最后留给你提问：关于这个技术团队，你想了解什么？",
+      "keywords": ["技术栈", "流程", "评审", "成长"],
+      "answer_hint": "可围绕：团队的技术栈与架构演进方向、代码评审与发布流程、新人上手期的带教方式、这个岗位半年内要解决的问题。",
+      "difficulty": 1,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/869231276035760128"
+    }
+  ]
+}

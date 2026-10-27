@@ -1,0 +1,196 @@
+{
+  "version": "qb-v1",
+  "family": "healthcare",
+  "family_label": "医疗 / 护理 / 医药 / 医疗器械",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：刷刷题《护士的专业面试题》《护士正装面试题》《理想的护士面试题》《护士的苦与乐面试题》、中公医考网《执业护士考试常见面试问题汇总》。",
+  "items": [
+    {
+      "id": "med-major-001",
+      "qtype": "major",
+      "job_family": "护理",
+      "question": "请谈谈你对“三查七对”制度的理解及其在临床工作中的重要性。",
+      "keywords": ["三查", "七对", "用药安全", "差错"],
+      "answer_hint": "三查指操作前、操作中、操作后查；七对指对床号、姓名、药名、剂量、浓度、时间、用法。这是保证用药安全的核心制度，可有效避免医疗差错，保障患者生命安全。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/d7ec4ced845e42d59ae7d1bd366999d2.html"
+    },
+    {
+      "id": "med-major-002",
+      "qtype": "major",
+      "job_family": "护理",
+      "question": "请解释“护理程序”的五个步骤及其临床应用价值。",
+      "keywords": ["评估", "诊断", "计划", "实施", "评价"],
+      "answer_hint": "护理程序包括评估（收集患者资料）、诊断（确定护理问题）、计划（制定护理目标）、实施（执行护理措施）、评价（效果反馈与方案调整）；价值在于系统性解决患者健康问题，确保护理服务个体化、连续性和可追溯性。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/b409cababc9e493ea811287591455981.html"
+    },
+    {
+      "id": "med-major-003",
+      "qtype": "major",
+      "job_family": "护理",
+      "question": "简述压疮的预防措施及不同分期压疮的护理重点。",
+      "keywords": ["翻身", "减压", "清洁干燥", "营养", "敷料"],
+      "answer_hint": "预防：每2小时翻身一次并建立翻身卡、保持皮肤清洁干燥、使用减压床垫/气垫床、改善营养状态。Ⅰ期避免受压、局部用泡沫敷料或水胶体；Ⅱ期及以上需清创、无菌敷料覆盖、预防感染，采用湿性愈合疗法。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/de61dd4315344aceadf669d95438ae91.html"
+    },
+    {
+      "id": "med-major-004",
+      "qtype": "major",
+      "job_family": "护理",
+      "question": "护士在静脉输液操作中，如何预防静脉炎的发生？",
+      "keywords": ["血管选择", "无菌", "滴速", "冲管"],
+      "answer_hint": "严格选择合适血管（避开关节、瘢痕），控制穿刺部位数量和留置时间；规范无菌操作，避免反复穿刺同一部位；输注刺激性药物时减慢滴速，观察局部皮肤温度颜色及肿胀；输液后及时用生理盐水冲管，拔针后按压至无出血。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/de61dd4315344aceadf669d95438ae91.html"
+    },
+    {
+      "id": "med-major-005",
+      "qtype": "major",
+      "job_family": "护理",
+      "question": "洗胃的禁忌症是什么？",
+      "keywords": ["惊厥", "腐蚀剂", "静脉曲张", "强酸强碱"],
+      "answer_hint": "惊厥未控制者不宜插胃管；服用腐蚀剂者；原有食管静脉曲张或上消化道出血病史者；误服强酸强碱、急性腹膜症。",
+      "difficulty": 3,
+      "source_name": "中公医考网",
+      "source_url": "https://m.offcn.com/yixue/2023/0925/116643.html"
+    },
+    {
+      "id": "med-major-006",
+      "qtype": "major",
+      "job_family": "护理",
+      "question": "作为一名护士，如何有效管理患者的疼痛？请简述疼痛评估方法及干预原则。",
+      "keywords": ["评估", "NRS", "非药物", "遵医嘱", "个体化"],
+      "answer_hint": "用 0-10 数字评分法（NRS）或面部表情量表动态监测；干预优先无创方法与非药物干预，必要时遵医嘱用止痛药，结合心理支持与环境调整，避免过度使用镇静剂掩盖病情。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/de61dd4315344aceadf669d95438ae91.html"
+    },
+    {
+      "id": "med-scen-001",
+      "qtype": "scenario",
+      "job_family": "护理",
+      "question": "作为一名护士，你如何处理患者的突发病情变化？",
+      "keywords": ["评估", "呼叫", "急救", "记录", "安抚"],
+      "answer_hint": "首先保持冷静，立即评估患者情况，同时呼叫医生和相关人员协助，迅速采取必要的急救措施如心肺复苏、吸氧等，及时汇报病情变化并做好记录，安抚患者及家属情绪。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/d7ec4ced845e42d59ae7d1bd366999d2.html"
+    },
+    {
+      "id": "med-scen-002",
+      "qtype": "scenario",
+      "job_family": "护理",
+      "question": "当你发现同事在工作中存在失误时，你会怎么做？",
+      "keywords": ["判断", "患者安全", "私下", "上报"],
+      "answer_hint": "先判断失误是否直接威胁患者安全：轻微错误（如记录笔误）可私下温和提醒并协助纠正；涉及安全隐患（如剂量错误）应立即制止并上报护士长，同时采取补救措施，事后参与科室安全复盘。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/b409cababc9e493ea811287591455981.html"
+    },
+    {
+      "id": "med-scen-003",
+      "qtype": "scenario",
+      "job_family": "护理",
+      "question": "如何与情绪激动或有暴力倾向的患者家属沟通？",
+      "keywords": ["冷静", "单独沟通", "共情", "说明", "记录"],
+      "answer_hint": "保持冷静，主动邀请家属到安静区域单独沟通，避免在公共场合激化矛盾；倾听诉求，用共情语言缓解对立情绪；清晰说明病情进展和医院流程，必要时请医生参与解释，同时保留沟通记录。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/de61dd4315344aceadf669d95438ae91.html"
+    },
+    {
+      "id": "med-scen-004",
+      "qtype": "scenario",
+      "job_family": "护理",
+      "question": "护士在静脉输液时发现药液外渗，应立即采取哪些措施？",
+      "keywords": ["停止输液", "拔针", "冷敷", "抬高", "上报"],
+      "answer_hint": "立即停止输液、拔除针头；局部冷敷（血管活性药等特殊药物需热敷）；抬高患肢观察肿胀；通知医生遵医嘱处理（涂抹药物、局部封闭）；记录外渗时间、部位、处理措施及患者反应。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/paper/23b1347a5cc6458ab55ddd1b0729661f.html"
+    },
+    {
+      "id": "med-scen-005",
+      "qtype": "scenario",
+      "job_family": "护理",
+      "question": "有一位病人医嘱 4 小时用一次镇痛剂，这次病人用过镇痛剂不足三个小时，吵闹疼痛厉害，你该怎么办？",
+      "keywords": ["医嘱", "解释", "观察", "报告医生"],
+      "answer_hint": "正确执行医嘱。向病人解释用药的指征、作用过程，并注意观察病人是否有病情变化，自己无法确认的情况下，请医生诊察。",
+      "difficulty": 3,
+      "source_name": "中公医考网",
+      "source_url": "https://m.offcn.com/yixue/2023/0925/116643.html"
+    },
+    {
+      "id": "med-stress-001",
+      "qtype": "stress",
+      "job_family": "护理",
+      "question": "面试时被问及“如何处理医疗纠纷”，应如何回应？",
+      "keywords": ["预防", "规范", "记录", "告知", "配合调查"],
+      "answer_hint": "承认医疗工作存在风险，强调预防为主：严格遵守操作规范、详细记录诊疗过程、尊重患者知情权；若纠纷发生，立即启动应急预案保护患者安全，与家属沟通保持冷静客观陈述事实，配合医院调查，避免推诿责任。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/paper/23b1347a5cc6458ab55ddd1b0729661f.html"
+    },
+    {
+      "id": "med-stress-002",
+      "qtype": "stress",
+      "job_family": "护理",
+      "question": "你如何理解护理工作中的“慎独”精神？",
+      "keywords": ["自律", "无人监督", "规范", "责任"],
+      "answer_hint": "慎独是指在无人监督时仍严格按规范操作，不因没人看见就简化流程。夜班、单人值守时尤其重要，直接关系患者安全与职业底线。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/d7ec4ced845e42d59ae7d1bd366999d2.html"
+    },
+    {
+      "id": "med-mot-001",
+      "qtype": "motivation",
+      "job_family": "护理",
+      "question": "如果这次你通过面试安排在急诊科工作，但工作一段时间之后，却发现你不适合急诊科工作，你该怎么办？",
+      "keywords": ["适应", "找出问题", "解决", "沟通"],
+      "answer_hint": "努力去适应工作，而不是让工作适应我。找出存在的问题，积极解决面临的问题。",
+      "difficulty": 2,
+      "source_name": "中公医考网",
+      "source_url": "https://m.offcn.com/yixue/2023/0925/116643.html"
+    },
+    {
+      "id": "med-mot-002",
+      "qtype": "motivation",
+      "job_family": "护理",
+      "question": "谈谈你对护士工作有何优缺点？",
+      "keywords": ["优势", "经验不足", "学习", "激情"],
+      "answer_hint": "优点：我是新手，有最新专业理念、专业知识和技能，有激情、有创造力。缺点：临床经验不足。我会用最新的理念、最新的技能和激情到临床中创造经验。",
+      "difficulty": 2,
+      "source_name": "中公医考网",
+      "source_url": "https://m.offcn.com/yixue/2023/0925/116643.html"
+    },
+    {
+      "id": "med-proj-001",
+      "qtype": "project",
+      "job_family": "护理",
+      "question": "请举例说明你在护理工作中如何体现人文关怀？",
+      "keywords": ["具体", "细节", "需求", "体验"],
+      "answer_hint": "例如为老年患者提供放大镜辅助阅读用药说明、为术后患者播放舒缓音乐减轻焦虑、对情绪低落的患者主动倾听并联系心理科协助、出院时赠送康复手册并预约随访。关键在于关注患者心理需求，用细节提升就医体验。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/de61dd4315344aceadf669d95438ae91.html"
+    },
+    {
+      "id": "med-cnt-001",
+      "qtype": "counter",
+      "job_family": "护理",
+      "question": "最后留给你提问：关于这个护理岗位，你想了解什么？",
+      "keywords": ["科室", "带教", "排班", "进修"],
+      "answer_hint": "可围绕：入职后分到哪个科室、带教与规范化培训安排、排班与夜班频次、专科护士与进修的成长路径。",
+      "difficulty": 1,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/paper/23b1347a5cc6458ab55ddd1b0729661f.html"
+    }
+  ]
+}

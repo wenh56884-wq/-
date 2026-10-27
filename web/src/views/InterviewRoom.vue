@@ -120,6 +120,23 @@
             </div>
           </template>
           <div class="question">{{ session.question }}</div>
+          <div v-if="session.source" class="q-source">
+            <template v-if="session.source.kind === 'bank'">
+              <el-tag size="small" type="success" effect="plain">题库命中</el-tag>
+              <span class="src-txt">
+                本题出自
+                <a :href="session.source.url" target="_blank" rel="noopener">{{ session.source.name }}</a>
+                · {{ session.source.family_label || session.source.family }}
+                <template v-if="session.source.matched_by && session.source.matched_by.length">
+                  · 命中 {{ session.source.matched_by.join('、') }}
+                </template>
+              </span>
+            </template>
+            <template v-else>
+              <el-tag size="small" type="info" effect="plain">模板出题</el-tag>
+              <span class="src-txt">该行业暂无题库覆盖，按简历证据套用通用问法</span>
+            </template>
+          </div>
           <el-input v-model="answerText" type="textarea" :rows="5"
             placeholder="建议用 STAR 结构回答：背景 → 目标 → 行动 → 结果（带数字）" />
           <div class="mt8 head-row">
@@ -148,6 +165,21 @@
             </div>
           </template>
           <pre class="report">{{ report.report }}</pre>
+          <div v-if="reportSources.length" class="mt8">
+            <div class="muted">本场题目出处（每道题都能回到来源页面核对）</div>
+            <el-table :data="reportSources" size="small" class="mt8">
+              <el-table-column prop="round" label="轮次" width="70" />
+              <el-table-column prop="label" label="题型" width="100" />
+              <el-table-column prop="name" label="来源" width="140" />
+              <el-table-column prop="question" label="题目" min-width="240" show-overflow-tooltip />
+              <el-table-column label="链接" width="90">
+                <template #default="{ row }">
+                  <a v-if="row.url" :href="row.url" target="_blank" rel="noopener">查看</a>
+                  <span v-else class="muted">模板</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </el-card>
 
         <el-card shadow="never" class="block-card bento-span-4">
@@ -201,6 +233,15 @@ const ISSUE_LABELS = {
   alignment: '岗位对齐'
 }
 const issueLabel = (k) => ISSUE_LABELS[k] || k
+
+const TYPE_LABELS = {
+  motivation: '动机匹配', major: '专业基础', project: '项目深挖',
+  scenario: '情景模拟', stress: '抗压应对', counter: '反问环节'
+}
+const labelOf = (t) => TYPE_LABELS[t] || t
+
+// 报告页的题目出处表：题库题给链接，模板题明确标注，不含糊
+const reportSources = computed(() => (report.value && report.value.sources) || [])
 
 async function loadResume() {
   const { data } = await http.get('/interview/resume/me')
@@ -310,7 +351,8 @@ async function startInterview() {
     const job = jobs.value.find((j) => j.id === jobId.value)
     jobTitle.value = job ? job.title : ''
     session.value = { round: data.round, total: data.total_rounds, question: data.question,
-      type: data.question_type, label: data.question_label, id: data.session_id }
+      type: data.question_type, label: data.question_label, id: data.session_id,
+      source: data.source || null }
     report.value = null
     lastComment.value = null
     answerText.value = ''
@@ -333,7 +375,7 @@ async function submitAnswer(real) {
     }
     lastComment.value = { text: data.comment, score: data.score, version: data.comment_version }
     session.value = { ...session.value, round: data.next.round, question: data.next.question,
-      type: data.next.question_type }
+      type: data.next.question_type, source: data.next.source || null }
     answerText.value = ''
   } finally {
     answering.value = false
@@ -346,7 +388,12 @@ async function openHistory(row) {
     return
   }
   const { data } = await http.get(`/interview/${row['编号']}`)
-  report.value = { total: data.session['总分'], report: data.session['报告'] || '(报告为空)', gaps: [] }
+  report.value = { total: data.session['总分'], report: data.session['报告'] || '(报告为空)', gaps: [],
+    sources: (data.outline || []).map((o) => ({
+      round: o.round, type: o.type, label: labelOf(o.type),
+      question: o.question, kind: (o.source || {}).kind || 'template',
+      name: (o.source || {}).name || '模板出题', url: (o.source || {}).url, bank_id: (o.source || {}).id,
+    })) }
   session.value = null
   lastComment.value = null
 }
@@ -375,6 +422,10 @@ onMounted(async () => {
 .exp-item { margin: 2px 0; }
 .head-row { display: flex; align-items: center; gap: 8px; }
 .question { font-size: 15px; font-weight: 600; margin-bottom: 10px; line-height: 1.6; }
+.q-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: -2px 0 12px; font-size: 12px; color: #6b7280; }
+.q-source .src-txt a { color: #2563eb; text-decoration: none; }
+.q-source .src-txt a:hover { text-decoration: underline; }
 .comment { line-height: 1.7; font-size: 13px; }
 .report { white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.8; margin: 0; }
 .diag-item { margin: 10px 0; font-size: 13px; line-height: 1.6; }

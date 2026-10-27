@@ -1,0 +1,185 @@
+{
+  "version": "qb-v1",
+  "family": "hr_admin",
+  "family_label": "人力资源 / 行政 / 人事",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：第一范文网《人事工作面试题及答案》、简历网《人力资源岗位面试题及答案》、刷刷题《国企HR专业知识面试题》《人资专业面试题》、时时翻译《面试人事的问题及答案》。",
+  "items": [
+    {
+      "id": "hr-major-001",
+      "qtype": "major",
+      "job_family": "人力资源",
+      "question": "人力资源六大模块有哪些？",
+      "keywords": ["人力资源规划", "招聘与配置", "培训与开发", "绩效管理", "薪酬福利", "劳动关系"],
+      "answer_hint": "人力资源规划、招聘与配置、培训与开发、绩效管理、薪酬福利管理、劳动关系管理。",
+      "difficulty": 1,
+      "source_name": "第一范文网",
+      "source_url": "https://m.diyifanwen.net/wenku/1100154.html"
+    },
+    {
+      "id": "hr-major-002",
+      "qtype": "major",
+      "job_family": "招聘",
+      "question": "如何组织公司的招聘活动？招聘用的表单有哪些？",
+      "keywords": ["招聘计划", "渠道", "初试", "复试", "录用"],
+      "answer_hint": "制定招聘计划、确定招聘途径、应聘者填写求职申请书、核查个人资料、初次面谈、复试测试、审查批准、录用报到。表单包括员工招聘申请表、招聘工作计划表、应聘人员基本情况登记表、面试记录表等。",
+      "difficulty": 2,
+      "source_name": "第一范文网",
+      "source_url": "https://m.diyifanwen.net/wenku/1100154.html"
+    },
+    {
+      "id": "hr-major-003",
+      "qtype": "major",
+      "job_family": "招聘",
+      "question": "在招聘工作中，企业常用的渠道有哪些？请列举并分析其优缺点。",
+      "keywords": ["内部招聘", "网络招聘", "校园招聘", "猎头", "成本"],
+      "answer_hint": "内部招聘（员工推荐、轮岗、晋升）成本低、激励性强，但易近亲繁殖；外部招聘（网络招聘、校园招聘、人才市场、猎头）选择范围广但成本高、筛选难；招聘会/报纸针对性强但时效性差。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/3ecbdd43ef9c4e4d91c10b96d3d0c844.html"
+    },
+    {
+      "id": "hr-major-004",
+      "qtype": "major",
+      "job_family": "招聘",
+      "question": "怎么进行简历甄别及招聘测试？综合素质测评有哪些方法？",
+      "keywords": ["简历甄别", "能力测试", "个性测试", "结构化面试"],
+      "answer_hint": "简历甄别看书写规范、年龄职级待遇是否匹配、工作经历连续性、稳定性、企业背景、教育背景、离职原因等；测评分能力测试和个性测试，方法包括笔试、面试、现场操作测试、技能测试、性格测评。",
+      "difficulty": 3,
+      "source_name": "第一范文网",
+      "source_url": "https://m.diyifanwen.net/wenku/1100154.html"
+    },
+    {
+      "id": "hr-major-005",
+      "qtype": "major",
+      "job_family": "招聘",
+      "question": "背景调查需调查哪些内容？如何进行？",
+      "keywords": ["通用项目", "职位相关", "学历核实", "历任公司"],
+      "answer_hint": "内容分两类：通用项目（学历学位真实性、任职资格证书有效性）和与职位说明书相关的经验、技能、业绩。时间选在面试结束后上岗前，学历证书可网络或管理部门查询，经验业绩需向历任雇佣公司了解，必要时实地走访。",
+      "difficulty": 3,
+      "source_name": "第一范文网",
+      "source_url": "https://m.diyifanwen.net/wenku/1100154.html"
+    },
+    {
+      "id": "hr-major-006",
+      "qtype": "major",
+      "job_family": "绩效",
+      "question": "绩效考核的常见方法有哪些？请简述 360 度反馈法的适用场景。",
+      "keywords": ["KPI", "OKR", "360度", "行为锚定", "强制分布"],
+      "answer_hint": "常见方法有 KPI、OKR、360 度反馈、行为锚定法、强制分布法。360 度适合需要多维度评价、协作密集的岗位（如管理者、项目负责人），能减少单一上级评价的偏差。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/3ecbdd43ef9c4e4d91c10b96d3d0c844.html"
+    },
+    {
+      "id": "hr-major-007",
+      "qtype": "major",
+      "job_family": "薪酬",
+      "question": "如何设计公平且具有激励性的薪酬体系？",
+      "keywords": ["外部公平", "内部公平", "个人公平", "动态调整"],
+      "answer_hint": "四个原则：外部公平（参考市场薪酬水平定价）、内部公平（岗位价值评估确定职级差异）、个人公平（依据绩效贡献浮动）、动态调整（结合市场变化与员工成长更新）。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/30b6fad1986f43a0a8cb7f9265f54280.html"
+    },
+    {
+      "id": "hr-major-008",
+      "qtype": "major",
+      "job_family": "绩效",
+      "question": "请解释关键绩效指标（KPI）与 OKR 的区别及适用场景。",
+      "keywords": ["KPI", "OKR", "结果", "目标对齐", "适用"],
+      "answer_hint": "KPI 聚焦结果量化指标，适用于目标明确、流程稳定的岗位；OKR 强调目标对齐与挑战突破，适用于创新型、项目制工作。核心差异是 KPI 重考核结果，OKR 重目标协同与敏捷调整。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/30b6fad1986f43a0a8cb7f9265f54280.html"
+    },
+    {
+      "id": "hr-major-009",
+      "qtype": "major",
+      "job_family": "培训",
+      "question": "员工培训效果不佳的常见原因有哪些？如何改进？",
+      "keywords": ["需求调研", "跟踪", "形式", "评估闭环"],
+      "answer_hint": "原因：需求调研不足导致内容与岗位脱节、缺乏持续跟踪使技能未转化为行为、形式单一参与度低、缺少考核反馈。改进：建立需求-实施-评估闭环，采用混合式学习，强化训战结合。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/30b6fad1986f43a0a8cb7f9265f54280.html"
+    },
+    {
+      "id": "hr-scen-001",
+      "qtype": "scenario",
+      "job_family": "招聘",
+      "question": "如果在招聘过程中，候选人突然放弃入职，你会怎么办？",
+      "keywords": ["沟通", "原因", "备用", "不空缺"],
+      "answer_hint": "第一时间与候选人沟通了解原因：薪资问题则评估薪酬体系是否有调整空间，职业发展问题则介绍晋升机制与培训机会；同时立即启动备用候选人筛选，确保岗位不空缺。",
+      "difficulty": 3,
+      "source_name": "时时翻译",
+      "source_url": "https://ms.shishifanyi.com/knowledge?url=15840"
+    },
+    {
+      "id": "hr-scen-002",
+      "qtype": "scenario",
+      "job_family": "员工关系",
+      "question": "如果要你负责推行绩效考核这项工作，你会遇到哪些问题和困难？",
+      "keywords": ["重视", "方法", "公开", "指标", "挂钩"],
+      "answer_hint": "常见困难：各部门主管甚至高层不重视、考核方法不科学、过程缺乏公开透明、考核指标设计不科学量化程度不高、考核结果难以与薪酬有效挂钩。",
+      "difficulty": 3,
+      "source_name": "简历网",
+      "source_url": "https://www.jianli.com/article/glpnrg.html"
+    },
+    {
+      "id": "hr-scen-003",
+      "qtype": "scenario",
+      "job_family": "员工关系",
+      "question": "员工招聘进来后人力资源部门需要做哪些工作？",
+      "keywords": ["入职手续", "花名册", "制度告知", "合同社保", "转正"],
+      "answer_hint": "办理入职手续、更新员工花名册、告知试用期制度与考核标准、向新员工介绍管理层并带到部门、安排学习培训与考核、签订劳动合同并办理社保档案公积金、试用期满前考核与转正。",
+      "difficulty": 2,
+      "source_name": "第一范文网",
+      "source_url": "https://m.diyifanwen.net/wenku/1100154.html"
+    },
+    {
+      "id": "hr-mot-001",
+      "qtype": "motivation",
+      "job_family": "人力资源",
+      "question": "你认为做人事工作最需要具备的品质是什么？",
+      "keywords": ["公正", "保密", "沟通", "细致"],
+      "answer_hint": "公正与保密是底线（薪酬、考核、员工信息都不能外泄），沟通与共情决定能否推动事情，细致决定不出错。",
+      "difficulty": 2,
+      "source_name": "第一范文网",
+      "source_url": "https://m.diyifanwen.net/wenku/1100154.html"
+    },
+    {
+      "id": "hr-proj-001",
+      "qtype": "project",
+      "job_family": "招聘",
+      "question": "请分享一次你成功招聘到关键岗位人才的经历。",
+      "keywords": ["岗位", "挑战", "渠道", "方法", "结果"],
+      "answer_hint": "讲清岗位与市场稀缺程度、你遇到的挑战、采取的渠道策略（行业论坛、人脉推荐）、甄选方式（结构化面试+实操考核），最后给出结果与对业务的实际支撑。",
+      "difficulty": 2,
+      "source_name": "时时翻译",
+      "source_url": "https://ms.shishifanyi.com/knowledge?url=15840"
+    },
+    {
+      "id": "hr-cnt-001",
+      "qtype": "counter",
+      "job_family": "人力资源",
+      "question": "最后留给你提问：关于这个 HR 岗位，你想了解什么？",
+      "keywords": ["模块", "团队", "业务", "指标"],
+      "answer_hint": "可围绕：这个岗位主要负责哪几个模块、HR 团队的分工与汇报关系、公司当前在人力上的核心痛点、岗位的考核方式。",
+      "difficulty": 1,
+      "source_name": "简历网",
+      "source_url": "https://www.jianli.com/article/glpnrg.html"
+    },
+    {
+      "id": "hr-stress-001",
+      "qtype": "stress",
+      "job_family": "人力资源",
+      "question": "用人单位在招聘过程中都看重高学历，你怎么看？",
+      "keywords": ["学历", "能力", "人岗匹配", "实践"],
+      "answer_hint": "先分析为什么看重（认为高学历知识更全面扎实、省去培养成本），再指出学历不等于能力、人才成长途径多样，最后给出结论：应结合岗位实际需要，把合适的人放到合适的岗位，不盲目追求高学历。",
+      "difficulty": 3,
+      "source_name": "简历网",
+      "source_url": "https://www.jianli.com/article/glpnrg.html"
+    }
+  ]
+}

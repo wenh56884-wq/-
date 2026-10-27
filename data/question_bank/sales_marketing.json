@@ -1,0 +1,196 @@
+{
+  "version": "qb-v1",
+  "family": "sales_marketing",
+  "family_label": "销售 / 市场 / 营销 / 商务",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：刷刷题《营销类情景面试题》《销售面试考官问题及答案解析》、百度文库《销售岗位面试题目与答案》、JobHai《Sales And Marketing Interview Questions》。",
+  "items": [
+    {
+      "id": "sal-major-001",
+      "qtype": "major",
+      "job_family": "销售",
+      "question": "销售和营销的区别是什么？",
+      "keywords": ["营销", "销售", "认知", "转化", "协同"],
+      "answer_hint": "营销创造认知、激发对产品或服务的兴趣；销售通过和潜在客户直接互动，把这种兴趣转化为实际收入。两者对齐时效果最好。",
+      "difficulty": 2,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-major-002",
+      "qtype": "major",
+      "job_family": "市场",
+      "question": "你如何衡量一场营销活动的成功？",
+      "keywords": ["目标", "KPI", "成本", "转化率", "ROI"],
+      "answer_hint": "取决于活动目标：品牌曝光看触达与曝光量，线索获取看单条线索成本与转化率，销售导向看带来的收入与广告支出回报率；启动前就设好清晰的 KPI。",
+      "difficulty": 3,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-major-003",
+      "qtype": "major",
+      "job_family": "市场",
+      "question": "你如何理解“营销漏斗”？",
+      "keywords": ["漏斗", "认知", "培育", "转化", "留存"],
+      "answer_hint": "营销漏斗描述客户从第一次知道产品到完成购买的旅程：顶部做认知，中部培育兴趣，底部促成转化；每一层都要有对应的指标和动作。",
+      "difficulty": 2,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-major-004",
+      "qtype": "major",
+      "job_family": "销售",
+      "question": "你如何给潜在客户排优先级？",
+      "keywords": ["预算", "决策权", "时间", "匹配度"],
+      "answer_hint": "按转化可能性与价值排序，看四个因素：预算、决策权、时间表、产品匹配度。四项都高的立即跟进，其余进入更长的培育周期。",
+      "difficulty": 3,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-major-005",
+      "qtype": "major",
+      "job_family": "市场",
+      "question": "当公司营销预算有限时，如何分配资源以实现最佳 ROI？",
+      "keywords": ["高转化", "核心渠道", "测试", "70-20-10", "淘汰"],
+      "answer_hint": "优先分配至高转化环节：核心渠道（复购率高的私域、高精准的付费搜索）、小规模测试新渠道、老客户留存激励。采用 70-20-10 法则：70% 保核心、20% 试新方向、10% 做品牌曝光，并动态淘汰低效渠道。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/1db5e5298e4c45c6905e47b13e5e1124.html"
+    },
+    {
+      "id": "sal-major-006",
+      "qtype": "major",
+      "job_family": "销售",
+      "question": "你如何看待销售中的“客户异议”？它对销售过程有何影响？",
+      "keywords": ["异议", "需求", "信号", "突破口"],
+      "answer_hint": "客户异议是购买决策的信号，不是否定而是需求未被满足。它能帮我们识别客户真实顾虑（价格、质量、信任），处理得当可以转化为成交突破口，也暴露产品与服务的不足。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/paper/f3b58226e1dd418db21620d500dfc661.html"
+    },
+    {
+      "id": "sal-scen-001",
+      "qtype": "scenario",
+      "job_family": "销售",
+      "question": "客户说“再考虑一下”时，你会如何应对？",
+      "keywords": ["共情", "澄清", "解决", "跟进"],
+      "answer_hint": "先共情表示理解，再澄清真实顾虑（价格、交付周期、决策人），然后给出针对性解决方案，最后约定明确的跟进时间，避免无期限等待。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/v/11148744.html"
+    },
+    {
+      "id": "sal-scen-002",
+      "qtype": "scenario",
+      "job_family": "销售",
+      "question": "假设客户提出超出你权限的要求，你会怎么做？",
+      "keywords": ["权限", "原则", "替代方案", "申请"],
+      "answer_hint": "首先明确告知客户我的权限范围（原则），同时提出替代方案如延长账期或增加增值服务（灵活），最后承诺 48 小时内向上级申请特殊审批（闭环）。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/v/11148744.html"
+    },
+    {
+      "id": "sal-scen-003",
+      "qtype": "scenario",
+      "job_family": "市场",
+      "question": "当你的团队与其他部门（如产品、销售）在营销策略上产生冲突时，你会如何协调？",
+      "keywords": ["冲突", "数据", "目标", "机制"],
+      "answer_hint": "先明确冲突根源（如营销重曝光、销售重成交），再用数据说话共同回顾目标，提出折中方案，并建立沟通机制（如双周联席会议）确保目标对齐。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/1db5e5298e4c45c6905e47b13e5e1124.html"
+    },
+    {
+      "id": "sal-scen-004",
+      "qtype": "scenario",
+      "job_family": "销售",
+      "question": "在进行销售拜访时，突然遇到客户临时有事要离开，你该怎么办？",
+      "keywords": ["礼貌", "重点", "联系方式", "跟进"],
+      "answer_hint": "保持礼貌，询问客户大概离开时间再约；同时简要介绍此次拜访的重点内容，让客户了解我们的诚意；离开前留下联系方式，方便后续跟进。",
+      "difficulty": 2,
+      "source_name": "百度文库",
+      "source_url": "https://wenku.baidu.com/view/300c4306561810a6f524ccbff121dd36a32dc4bf.html"
+    },
+    {
+      "id": "sal-scen-005",
+      "qtype": "scenario",
+      "job_family": "市场",
+      "question": "正在进行销售演讲时，投影仪突然故障无法正常使用，你该如何应对？",
+      "keywords": ["冷静", "道歉", "备用方案", "完成"],
+      "answer_hint": "迅速保持冷静，向客户道歉并说明情况；立即切换备用演示方式，如使用笔记本电脑直接展示；同时用幽默化解尴尬，继续演讲，确保内容完整传达。",
+      "difficulty": 2,
+      "source_name": "百度文库",
+      "source_url": "https://wenku.baidu.com/view/300c4306561810a6f524ccbff121dd36a32dc4bf.html"
+    },
+    {
+      "id": "sal-scen-006",
+      "qtype": "scenario",
+      "job_family": "销售",
+      "question": "如何有效处理客户投诉并将其转化为品牌口碑？",
+      "keywords": ["倾听", "道歉", "解决", "补偿", "回访"],
+      "answer_hint": "遵循倾听-道歉-解决-补偿-回访五步法：耐心倾听记录细节、真诚道歉不推诿、快速给方案、额外补偿、48小时内回访确认满意度，并把案例内部复盘优化产品或服务。",
+      "difficulty": 2,
+      "source_name": "刷刷题",
+      "source_url": "https://m.shuashuati.com/paper/1db5e5298e4c45c6905e47b13e5e1124.html"
+    },
+    {
+      "id": "sal-stress-001",
+      "qtype": "stress",
+      "job_family": "销售",
+      "question": "你如何面对销售中的拒绝？",
+      "keywords": ["拒绝", "不针对个人", "记录", "调整"],
+      "answer_hint": "不把拒绝当成针对个人。每一次拒绝都是了解客户、产品或自己话术的机会：记下异议点，调整方法继续推进，把注意力放在过程而不是单次结果上。",
+      "difficulty": 2,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-stress-002",
+      "qtype": "stress",
+      "job_family": "销售",
+      "question": "如果客户提出回扣要求，你会怎么做？",
+      "keywords": ["底线", "拒绝", "合规", "替代"],
+      "answer_hint": "明确拒绝并说明公司合规红线与法律风险；同时从产品价值、服务条款、付款方式等正当维度寻找替代方案，必要时上报主管，不做任何私下承诺。",
+      "difficulty": 3,
+      "source_name": "刷刷题",
+      "source_url": "https://www.shuashuati.com/v/11148744.html"
+    },
+    {
+      "id": "sal-mot-001",
+      "qtype": "motivation",
+      "job_family": "销售",
+      "question": "你为什么想从事销售和营销工作？",
+      "keywords": ["策略", "执行", "客户", "可衡量"],
+      "answer_hint": "我享受销售与营销兼具的策略与执行，喜欢理解客户决策的动因并找到最有效的价值传递方式；而且这份工作的结果可衡量，我能清楚知道自己的努力有没有产生效果。",
+      "difficulty": 2,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-proj-001",
+      "qtype": "project",
+      "job_family": "市场",
+      "question": "请描述一次你参与过的营销活动及其结果。",
+      "keywords": ["目标", "渠道", "数据", "结果"],
+      "answer_hint": "讲清活动目标、你负责的渠道与执行动作、投放周期与预算，最后给可验证的数据结果（线索量、单条线索成本、转化率），并说明复盘结论。",
+      "difficulty": 2,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    },
+    {
+      "id": "sal-cnt-001",
+      "qtype": "counter",
+      "job_family": "销售",
+      "question": "最后留给你提问：关于这个销售/市场岗位，你想了解什么？",
+      "keywords": ["指标", "客群", "支持", "团队"],
+      "answer_hint": "可围绕：这个岗位的考核指标怎么定（业绩、线索、转化）、主要客群与产品线、市场与销售的配合方式、团队现在最想解决的问题。",
+      "difficulty": 1,
+      "source_name": "JobHai",
+      "source_url": "https://www.jobhai.com/blog/learning/sales-and-marketing-interview-questions"
+    }
+  ]
+}

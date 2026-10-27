@@ -1,0 +1,207 @@
+{
+  "version": "qb-v1",
+  "family": "finance_bank",
+  "family_label": "金融 / 银行 / 证券 / 保险",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：上岸鸭公考《中信银行/交通银行/浦发银行/邮储银行面试常见问题》系列、银行考试网《银行秋招面试专业题四类概念》。",
+  "items": [
+    {
+      "id": "fin-major-001",
+      "qtype": "major",
+      "job_family": "柜员/客户服务",
+      "question": "简述商业银行的主要业务。",
+      "keywords": ["负债业务", "资产业务", "中间业务", "存款", "贷款"],
+      "answer_hint": "商业银行主要业务分三类：负债业务（吸收存款、同业拆借）、资产业务（发放贷款、投资）、中间业务（结算、代理、理财等不占用自有资金的业务）。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    },
+    {
+      "id": "fin-major-002",
+      "qtype": "major",
+      "job_family": "柜员/客户服务",
+      "question": "活期和定期的区别是什么？LPR 又是什么？",
+      "keywords": ["活期", "定期", "利率", "LPR", "提前支取"],
+      "answer_hint": "活期灵活但利率低，定期利率高，提前支取按活期算。LPR 是贷款市场报价利率，2019年8月改革后由报价行报出、每月20日公布，企业贷款和房贷定价都参考它。",
+      "difficulty": 2,
+      "source_name": "银行考试网",
+      "source_url": "https://yhks.cn/y.php/a/16729"
+    },
+    {
+      "id": "fin-major-003",
+      "qtype": "major",
+      "job_family": "理财/客户经理",
+      "question": "客户说理财产品亏了要来网点闹，你怎么解释为什么理财不能承诺收益？",
+      "keywords": ["资管新规", "净值型", "不保本", "风险揭示"],
+      "answer_hint": "2022年资管新规正式实施后，理财产品不得承诺保本保收益，净值型产品会涨也会跌。要讲清产品风险等级、销售时的风险揭示与客户签字确认，以及投诉处理流程。",
+      "difficulty": 3,
+      "source_name": "银行考试网",
+      "source_url": "https://yhks.cn/y.php/a/16729"
+    },
+    {
+      "id": "fin-major-004",
+      "qtype": "major",
+      "job_family": "柜员/客户服务",
+      "question": "银行要是出事了，客户的钱怎么办？请说明存款保险制度。",
+      "keywords": ["存款保险", "50万", "本息", "条例"],
+      "answer_hint": "同一存款人在同一家银行的存款，本息合计最高偿付50万元，《存款保险条例》2015年5月起施行。",
+      "difficulty": 2,
+      "source_name": "银行考试网",
+      "source_url": "https://yhks.cn/y.php/a/16729"
+    },
+    {
+      "id": "fin-major-005",
+      "qtype": "major",
+      "job_family": "柜员/客户服务",
+      "question": "征信谁能查、怎么查？反洗钱为什么要追着问资金来源？",
+      "keywords": ["征信", "授权", "反洗钱", "客户身份识别", "可疑交易"],
+      "answer_hint": "征信查询必须经本人授权，可通过人民银行征信中心或银行渠道查询。反洗钱要求做客户身份识别和可疑交易报告，新修订的《反洗钱法》2025年1月1日起施行，柜面和客户经理岗都会被问到。",
+      "difficulty": 3,
+      "source_name": "银行考试网",
+      "source_url": "https://yhks.cn/y.php/a/16729"
+    },
+    {
+      "id": "fin-major-006",
+      "qtype": "major",
+      "job_family": "管培/综合",
+      "question": "如何看待利率市场化对银行的影响？",
+      "keywords": ["净息差", "定价能力", "中间业务", "竞争"],
+      "answer_hint": "利率市场化会压缩净息差、加剧同业竞争，银行需要提升风险定价能力、优化资产负债结构、发展中间业务降低对息差的依赖。",
+      "difficulty": 3,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    },
+    {
+      "id": "fin-major-007",
+      "qtype": "major",
+      "job_family": "管培/综合",
+      "question": "你对普惠金融、绿色金融有什么理解？",
+      "keywords": ["小微企业", "乡村振兴", "绿色信贷", "政策"],
+      "answer_hint": "普惠金融是让小微企业、农户等长尾客群获得可负担的金融服务，对应乡村振兴；绿色金融是通过绿色信贷、绿色债券引导资金流向低碳项目，服务双碳目标。",
+      "difficulty": 3,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    },
+    {
+      "id": "fin-major-008",
+      "qtype": "major",
+      "job_family": "管培/综合",
+      "question": "你如何看待互联网金融对传统银行的冲击？",
+      "keywords": ["渠道", "场景", "科技", "转型"],
+      "answer_hint": "冲击主要在支付结算、小额信贷和客户触达渠道；但银行在资金成本、风控与合规、大额授信上仍有优势，应对方式是数字化转型、开放合作与场景嵌入。",
+      "difficulty": 3,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/407186.html"
+    },
+    {
+      "id": "fin-scen-001",
+      "qtype": "scenario",
+      "job_family": "柜员/客户服务",
+      "question": "客户对你的服务不满意并进行投诉怎么办？",
+      "keywords": ["倾听", "安抚", "合规", "解决", "上报"],
+      "answer_hint": "坚持客户至上、合规优先、冷静处理、及时上报的原则：先倾听安抚，确认诉求，在制度范围内给出解决方案，超出权限及时上报，事后回访。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    },
+    {
+      "id": "fin-scen-002",
+      "qtype": "scenario",
+      "job_family": "柜员/客户服务",
+      "question": "假如你是柜员，遇到一位情绪激动的客户坚持要办理不符合规定的业务，你怎么办？",
+      "keywords": ["安抚", "解释规定", "替代方案", "上报"],
+      "answer_hint": "先安抚情绪、把人请到安静区域，耐心解释制度依据；在不违规的前提下提供替代方案（电子渠道、预约次日办理、补齐材料），仍不接受则请主管协助，全程留痕。",
+      "difficulty": 3,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://m.gwy.com/yhzp/390372.html"
+    },
+    {
+      "id": "fin-scen-003",
+      "qtype": "scenario",
+      "job_family": "柜员/客户服务",
+      "question": "客户未带身份证要求存款，你怎么办？",
+      "keywords": ["合规", "解释", "电子渠道", "预约"],
+      "answer_hint": "耐心解释实名制与大额存款的身份核验规定，建议使用电子渠道或协助预约次日带证办理，不能因为客户着急就跳过核验。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://m.gwy.com/jlgwy/375832.html"
+    },
+    {
+      "id": "fin-scen-004",
+      "qtype": "scenario",
+      "job_family": "理财/客户经理",
+      "question": "发现身边同事有违规操作行为，你会如何处理？",
+      "keywords": ["合规", "制止", "上报", "证据"],
+      "answer_hint": "先判断是否危及客户资金安全，能制止的立即制止并保留记录，按规定向合规或上级报告，不隐瞒不包庇，同时避免在同事间传播。",
+      "difficulty": 3,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    },
+    {
+      "id": "fin-scen-005",
+      "qtype": "scenario",
+      "job_family": "理财/客户经理",
+      "question": "营销任务完不成你会采取哪些方法？",
+      "keywords": ["客群", "分层", "话术", "复盘"],
+      "answer_hint": "先做客户分层找出高潜力客群，再优化触达方式（厅堂、电话、外拓、线上），复盘未成交原因调整话术与产品组合，必要时向主管申请资源支持。",
+      "difficulty": 3,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    },
+    {
+      "id": "fin-proj-001",
+      "qtype": "project",
+      "job_family": "管培/综合",
+      "question": "分享一次团队协作完成任务的经历。",
+      "keywords": ["背景", "分工", "行动", "结果", "协作"],
+      "answer_hint": "用 STAR 讲：说清任务背景与团队目标、你在团队里承担的具体角色与分工、为推进协作做了哪些动作，最后给可验证的结果。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/407186.html"
+    },
+    {
+      "id": "fin-mot-001",
+      "qtype": "motivation",
+      "job_family": "管培/综合",
+      "question": "为什么报考我行而不是其他银行？",
+      "keywords": ["定位", "特色", "契合", "规划"],
+      "answer_hint": "结合该行特色作答：如普惠金融定位与个人职业理念契合、希望参与县域金融服务；同时说明自身规划与该行发展方向一致，避免只说稳定。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://m.gwy.com/jlgwy/375832.html"
+    },
+    {
+      "id": "fin-mot-002",
+      "qtype": "motivation",
+      "job_family": "柜员/客户服务",
+      "question": "你认为柜员岗位最重要的素质是什么？",
+      "keywords": ["耐心", "细心", "风险意识", "服务"],
+      "answer_hint": "耐心与细心是基础，风险合规意识是底线，服务意识决定客户体验；柜面直接接触资金与客户，任何一笔业务都不能想当然。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://m.gwy.com/yhzp/390372.html"
+    },
+    {
+      "id": "fin-stress-001",
+      "qtype": "stress",
+      "question": "面对高强度加班、业绩压力如何调整心态？",
+      "job_family": "柜员/客户服务",
+      "keywords": ["理解", "节奏", "方法", "支持"],
+      "answer_hint": "先承认银行业务有周期性旺季，愿意在关键时期承担责任；同时用方法减少无效加班（提前规划、抓重点客户），并通过团队协作与复盘缓解压力。",
+      "difficulty": 2,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/407186.html"
+    },
+    {
+      "id": "fin-cnt-001",
+      "qtype": "counter",
+      "job_family": "管培/综合",
+      "question": "最后留给你提问：关于这个岗位，你想了解什么？",
+      "keywords": ["培养", "轮岗", "考核", "团队"],
+      "answer_hint": "可围绕：新员工的培养路径与轮岗安排、岗位的考核指标、所在支行/团队的客群结构、转正与晋升的时间节点。",
+      "difficulty": 1,
+      "source_name": "上岸鸭公考",
+      "source_url": "https://www.gwy.com/yhzp/405490.html"
+    }
+  ]
+}

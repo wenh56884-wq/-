@@ -1,0 +1,54 @@
+{
+  "evaluated_at": "2026-10-27",
+  "version": "qb-v1",
+  "bank": {
+    "total": 234,
+    "families": 17,
+    "sources": 28,
+    "by_qtype": {
+      "major": 82,
+      "scenario": 53,
+      "stress": 23,
+      "motivation": 34,
+      "project": 25,
+      "counter": 17
+    }
+  },
+  "metrics": {
+    "traceable_rate": 1.0,
+    "matrix_cover_rate": 1.0,
+    "job_cover_rate": 0.9987,
+    "retrieval_hit_rate": 1.0,
+    "question_fidelity": 1.0,
+    "avg_bank_rounds": 6.0
+  },
+  "detail": {
+    "matrix_cells": "96/96",
+    "jobs_sampled": 1514,
+    "jobs_with_bank_family": 1512,
+    "probe_sample": 200,
+    "probe_zero_bank_rounds": 0,
+    "fidelity_checked": 360,
+    "family_distribution": {
+      "机械 / 制造 / 电气 / 自动化 / 电子半导体": 390,
+      "计算机软件 / 互联网 / IT 服务": 306,
+      "销售 / 市场 / 营销 / 商务": 188,
+      "金融 / 银行 / 证券 / 保险": 141,
+      "医疗 / 护理 / 医药 / 医疗器械": 132,
+      "通信 / 电信 / 网络优化": 91,
+      "财务 / 会计 / 审计 / 税务": 70,
+      "物业 / 房地产 / 商业中心": 57,
+      "物流 / 运输 / 仓储 / 供应链": 40,
+      "新媒体 / 内容 / 影视 / 设计": 36,
+      "教育 / 培训 / 院校 / 教研": 26,
+      "酒店 / 旅游 / 餐饮 / 服务": 24,
+      "政府 / 公共事业": 5,
+      "人力资源 / 行政 / 人事": 4,
+      "通用（跨行业）": 2,
+      "法律 / 法务 / 合规": 2
+    }
+  },
+  "thresholds": {
+    "min_bank_rounds_per_interview": 4
+  }
+}

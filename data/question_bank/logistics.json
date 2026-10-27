@@ -1,0 +1,117 @@
+{
+  "family": "logistics",
+  "label": "物流 / 运输 / 仓储 / 供应链",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "log-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择物流专员这个岗位？你理解的物流专员日常主要做什么？",
+      "keywords": ["物流", "订单", "仓储", "运输", "协调"],
+      "answer_hint": "结合对岗位职责的理解（订单、仓储、运输、异常协调）说明动机，避免只谈“喜欢”。",
+      "difficulty": 1,
+      "source_name": "超级简历",
+      "source_url": "https://www.chaojijianli.com/mianshi/logistics-specialist-interview-questions-e5444f167a58?page=29",
+      "job_family": "物流专员/仓储/运输"
+    },
+    {
+      "id": "log-mot-002",
+      "qtype": "motivation",
+      "question": "物流行业节奏快、经常要处理突发情况，你为什么觉得自己适合？",
+      "keywords": ["抗压", "沟通", "细心", "责任", "应变"],
+      "answer_hint": "用具体经历证明抗压与应变，不要只说“能吃苦”。",
+      "difficulty": 1,
+      "source_name": "超级简历",
+      "source_url": "https://www.chaojijianli.com/mianshi/logistics-specialist-interview-questions-e5444f167a58?page=29",
+      "job_family": "物流专员/仓储/运输"
+    },
+    {
+      "id": "log-major-001",
+      "qtype": "major",
+      "question": "请说一下仓储从入库到出库的完整流程，以及每个环节的关键控制点。",
+      "keywords": ["收货", "验收", "上架", "拣货", "复核", "出库"],
+      "answer_hint": "按收货—验收—上架—存储—拣货—复核—出库顺序说清，并点出账实一致、先进先出等控制点。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500598456.html",
+      "job_family": "仓储/物流专员"
+    },
+    {
+      "id": "log-major-002",
+      "qtype": "major",
+      "question": "库存周转率怎么计算？如果库存周转慢，你会从哪些方面排查？",
+      "keywords": ["周转率", "销售成本", "平均库存", "呆滞", "安全库存"],
+      "answer_hint": "给出公式（销售成本/平均库存），再从需求预测、呆滞料、安全库存、补货策略排查。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500598456.html",
+      "job_family": "仓储/库存管理"
+    },
+    {
+      "id": "log-major-003",
+      "qtype": "major",
+      "question": "运输时效和运输成本冲突时，你怎么平衡？请举例说明。",
+      "keywords": ["时效", "成本", "线路", "装载率", "客户"],
+      "answer_hint": "先看客户时效要求和违约成本，再谈线路组合、装载率、承运商比价与分级服务。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500598456.html",
+      "job_family": "运输/物流专员"
+    },
+    {
+      "id": "log-project-001",
+      "qtype": "project",
+      "question": "讲一次你处理物流异常（延误、破损、错发或积压）的经历：背景、你的动作、最终结果。",
+      "keywords": ["异常", "原因", "方案", "复盘", "结果"],
+      "answer_hint": "用 STAR 结构，重点说清你如何定位原因、协调资源和闭环复盘。",
+      "difficulty": 2,
+      "source_name": "超级简历",
+      "source_url": "https://www.chaojijianli.com/mianshi/logistics-specialist-interview-questions-e5444f167a58?page=29",
+      "job_family": "物流专员/仓储/运输"
+    },
+    {
+      "id": "log-scenario-001",
+      "qtype": "scenario",
+      "question": "双十一单量突然涨 300%，仓内爆仓、承运商运力不足，你会怎么排优先级？",
+      "keywords": ["预估", "运力", "临时仓", "优先级", "沟通"],
+      "answer_hint": "先保重点客户/时效件，再盘临时仓与运力，最后同步上下游并做异常预案。",
+      "difficulty": 3,
+      "source_name": "超级简历",
+      "source_url": "https://www.chaojijianli.com/mianshi/logistics-specialist-interview-questions-e5444f167a58?page=29",
+      "job_family": "物流专员/仓储/运输"
+    },
+    {
+      "id": "log-scenario-002",
+      "qtype": "scenario",
+      "question": "供应商延迟交货导致生产线有停线风险，你作为物流专员怎么处理？",
+      "keywords": ["供应商", "催交", "替代", "库存", "升级"],
+      "answer_hint": "先核实交期与库存，再催交/找替代/调整排产，必要时升级并保留沟通记录。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500598456.html",
+      "job_family": "供应链/物流专员"
+    },
+    {
+      "id": "log-stress-001",
+      "qtype": "stress",
+      "question": "客户投诉货物破损并要求赔偿，但责任一时无法界定，你怎么应对？",
+      "keywords": ["安抚", "取证", "保险", "责任", "闭环"],
+      "answer_hint": "先安抚并取证，再按合同/保险/承运商责任推进，给出时间表和回访。",
+      "difficulty": 2,
+      "source_name": "超级简历",
+      "source_url": "https://www.chaojijianli.com/mianshi/logistics-specialist-interview-questions-e5444f167a58?page=29",
+      "job_family": "物流专员/客服"
+    },
+    {
+      "id": "log-counter-001",
+      "qtype": "counter",
+      "question": "最后你有什么问题想问我们？",
+      "keywords": ["团队", "考核", "成长", "业务"],
+      "answer_hint": "问业务目标、团队分工、考核指标或成长路径，避免只问薪资福利。",
+      "difficulty": 1,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=Mzg3OTc1ODA5MA==&mid=2247486560&idx=2&sn=46700df49a1a3e57926bb9db1090772a",
+      "job_family": "物流专员/仓储/运输"
+    }
+  ]
+}

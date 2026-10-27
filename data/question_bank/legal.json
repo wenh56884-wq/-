@@ -1,0 +1,73 @@
+{
+  "family": "legal",
+  "label": "法律 / 法务 / 合规",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "legal-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择法务专员？你理解的企业法务和律师工作有什么不同？",
+      "keywords": ["企业", "合规", "合同", "风险", "业务"],
+      "answer_hint": "从企业合规、合同审核、风险前置和业务支持说明法务定位，再谈动机。",
+      "difficulty": 1,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/501698648.html",
+      "job_family": "法务专员/合规"
+    },
+    {
+      "id": "legal-major-001",
+      "qtype": "major",
+      "question": "审核一份采购合同时，你会重点看哪些条款？",
+      "keywords": ["主体", "标的", "价款", "违约", "争议解决"],
+      "answer_hint": "从主体资格、标的与质量、价款支付、交付验收、违约和争议解决逐项说明。",
+      "difficulty": 2,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzA3OTQ1MzY2Mw==&mid=2247486199&idx=1&sn=11c90f22bd742e9103970dd55b129e0d",
+      "job_family": "法务专员/合同"
+    },
+    {
+      "id": "legal-project-001",
+      "qtype": "project",
+      "question": "讲一次你处理合同纠纷或合规项目的经历：背景、你的动作、结果。",
+      "keywords": ["事实", "证据", "方案", "结果", "复盘"],
+      "answer_hint": "用 STAR 说清事实梳理、证据固定、方案选择和最终结果。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/501713559.html",
+      "job_family": "法务专员/合规"
+    },
+    {
+      "id": "legal-scenario-001",
+      "qtype": "scenario",
+      "question": "业务部门为了赶进度要求你跳过合规审核，你怎么处理？",
+      "keywords": ["风险", "沟通", "替代", "升级", "留痕"],
+      "answer_hint": "先说明风险与底线，给替代方案/分层审批，必要时升级并全程留痕。",
+      "difficulty": 3,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/6934c61b000000001e0359d6",
+      "job_family": "法务专员/合规"
+    },
+    {
+      "id": "legal-stress-001",
+      "qtype": "stress",
+      "question": "核心技术人员离职加入竞对，公司要求你处理商业秘密问题，你怎么做？",
+      "keywords": ["保密", "竞业", "证据", "律师", "诉讼"],
+      "answer_hint": "先固定保密/竞业证据，评估损失与诉讼时效，联合外部律师制定谈判或诉讼方案。",
+      "difficulty": 3,
+      "source_name": "小红书",
+      "source_url": "https://www.xiaohongshu.com/discovery/item/6934c61b000000001e0359d6",
+      "job_family": "法务专员/知识产权"
+    },
+    {
+      "id": "legal-counter-001",
+      "qtype": "counter",
+      "question": "你平时关注哪些法律或行业动态？最后有什么问题想问？",
+      "keywords": ["法规", "案例", "行业", "团队", "成长"],
+      "answer_hint": "说 1-2 个具体法规/案例，再问团队业务、培训或成长路径。",
+      "difficulty": 1,
+      "source_name": "book118",
+      "source_url": "https://m.book118.com/html/2025/0902/8016016023007127.shtm",
+      "job_family": "法务专员/合规"
+    }
+  ]
+}

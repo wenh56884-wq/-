@@ -1,0 +1,62 @@
+{
+  "family": "it_software",
+  "label": "计算机软件 / 互联网 / IT 服务",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "itx-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择后端开发这个方向？你平时怎么学习新技术？",
+      "keywords": ["兴趣", "项目", "学习方法", "源码", "实践"],
+      "answer_hint": "用项目或作品证明兴趣，讲清学习路径（文档/源码/实践）和持续迭代。",
+      "difficulty": 1,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928",
+      "job_family": "后端开发"
+    },
+    {
+      "id": "itx-major-001",
+      "qtype": "major",
+      "question": "MySQL 的索引为什么能加快查询？什么情况下索引会失效？",
+      "keywords": ["B+树", "聚簇索引", "最左前缀", "回表", "失效"],
+      "answer_hint": "从 B+ 树结构与聚簇索引讲起，再说过滤条件、最左前缀、函数/隐式转换导致失效。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928",
+      "job_family": "后端开发"
+    },
+    {
+      "id": "itx-project-001",
+      "qtype": "project",
+      "question": "讲一个你负责的后端项目：你承担的模块、最难的问题、最终结果。",
+      "keywords": ["角色", "模块", "难点", "方案", "结果"],
+      "answer_hint": "用 STAR 结构，重点说清你个人的职责、技术选型和可量化的结果。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928",
+      "job_family": "后端开发"
+    },
+    {
+      "id": "itx-scenario-001",
+      "qtype": "scenario",
+      "question": "线上接口突然变慢，你会怎么排查和止损？",
+      "keywords": ["监控", "日志", "慢查询", "限流", "回滚"],
+      "answer_hint": "先看监控/日志定位，再查慢 SQL、下游依赖和资源瓶颈，必要时限流/降级/回滚。",
+      "difficulty": 3,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928",
+      "job_family": "后端开发/运维"
+    },
+    {
+      "id": "itx-stress-001",
+      "qtype": "stress",
+      "question": "如果你负责的模块上线后出了故障，但责任不全在你，你会怎么处理？",
+      "keywords": ["止损", "复盘", "责任", "改进", "沟通"],
+      "answer_hint": "先止损和对齐事实，再做无责复盘、明确改进项，避免甩锅和情绪化。",
+      "difficulty": 2,
+      "source_name": "牛客网",
+      "source_url": "https://www.nowcoder.com/discuss/899663140705660928",
+      "job_family": "后端开发"
+    }
+  ]
+}

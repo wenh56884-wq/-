@@ -1,0 +1,240 @@
+{
+  "version": "qb-v1",
+  "family": "accounting",
+  "family_label": "财务 / 会计 / 审计 / 税务",
+  "collected_at": "2026-10-27",
+  "note": "题目原文照抄来源页面。来源：应届毕业生网《应聘会计的面试问题》、东奥会计在线《会计面试高频问答》《会计岗位面试应答实战经验》。",
+  "items": [
+    {
+      "id": "acc-major-001",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "会计的6大基本要素是什么？",
+      "keywords": ["资产", "负债", "所有者权益", "收入", "费用", "利润"],
+      "answer_hint": "资产、负债、所有者权益、收入、费用和利润。",
+      "difficulty": 1,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-major-002",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "会计的3大报表是什么？",
+      "keywords": ["资产负债表", "现金流量表", "利润表"],
+      "answer_hint": "资产负债表，现金流量表，利润表（也称为损益表）。",
+      "difficulty": 1,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-major-003",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "权益性支出与资本性支出的差异是什么？",
+      "keywords": ["资本性支出", "收益性支出", "折旧", "摊销", "当期损益"],
+      "answer_hint": "资本性支出是用于购买或生产使用年限在一年以上的耐用品所需的支出，效益及于两个或两个以上会计年度；收益性支出（期间费用）效益仅与本会计年度相关，由本年收益补偿。前者先记作资产，通过计提折旧或摊销分年摊入成本费用。",
+      "difficulty": 2,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-major-004",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "固定资产折旧采用的方法有哪些？",
+      "keywords": ["直线法", "平均年限法", "工作量法", "加速折旧", "双倍余额递减", "年数总和"],
+      "answer_hint": "分为两类：直线法和加速折旧法。直线法包括平均年限法和工作量法；加速折旧法包括双倍余额递减法和年数总和法。",
+      "difficulty": 2,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-major-005",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "固定资产账面价值在什么情况下会出现负值？",
+      "keywords": ["负值", "准则", "备查簿", "减值"],
+      "answer_hint": "什么情况下都不应该出现负值，现在的准则不允许负资产的存在，包括负商誉。所有资产出现负值时，最多在备查簿上予以记录。",
+      "difficulty": 3,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-major-006",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "费用与支出的区别是什么？",
+      "keywords": ["费用", "支出", "经济利益", "所有者权益", "成本"],
+      "answer_hint": "费用和收入相对应而存在，只有在经济利益很可能流出从而导致企业资产减少或者负债增加，且流出额能够可靠计量时才予以确认；支出是事业单位为开展业务活动和其他活动所发生的各种资金耗费。",
+      "difficulty": 3,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-major-007",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "什么是权责发生制？和收付实现制有什么区别？",
+      "keywords": ["权责发生制", "收付实现制", "确认", "款项"],
+      "answer_hint": "权责发生制是以权利和责任的发生来确认收入和费用，不管款项是否收付，适用于企业会计；收付实现制是以款项实际收付来确认收入和费用，多用于行政事业单位，核心区别在于确认收支的依据不同。",
+      "difficulty": 2,
+      "source_name": "东奥会计在线",
+      "source_url": "https://m.dongao.com/scjy/wenda_bsmsjy/202603304648432.html"
+    },
+    {
+      "id": "acc-major-008",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "坏账准备怎么计提？有什么意义？",
+      "keywords": ["坏账准备", "余额百分比法", "账龄分析法", "谨慎性"],
+      "answer_hint": "坏账准备是对应收款项预估的坏账损失，常用计提方法有余额百分比法、账龄分析法，计提坏账准备能更真实反映企业资产状况，遵循谨慎性原则，避免高估资产。",
+      "difficulty": 2,
+      "source_name": "东奥会计在线",
+      "source_url": "https://m.dongao.com/scjy/wenda_bsmsjy/202603304648432.html"
+    },
+    {
+      "id": "acc-major-009",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "小规模纳税人和一般纳税人有什么区别？",
+      "keywords": ["计税方式", "税率", "进项税", "发票"],
+      "answer_hint": "主要区别在计税方式、税率和发票开具。一般纳税人税率更高，可抵扣进项税；小规模纳税人征收率低，不能抵扣进项税，计税方式更简便。",
+      "difficulty": 2,
+      "source_name": "东奥会计在线",
+      "source_url": "https://m.dongao.com/scjy/wenda_bsmsjy/202603304648432.html"
+    },
+    {
+      "id": "acc-major-010",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "请说一下三张报表之间的勾稽关系。",
+      "keywords": ["资产负债表", "利润表", "现金流量表", "未分配利润", "净利润"],
+      "answer_hint": "资产负债表是底子，利润表是面子，现金流量表是日子。最核心的勾稽是：资产负债表未分配利润期末减期初数，等于利润表净利润（剔除分红后）；现金流量表主表的变动要能跟资产负债表货币资金期初期末对上。",
+      "difficulty": 3,
+      "source_name": "东奥会计在线",
+      "source_url": "https://www.dongao.com/scjy/zixun_zcjn/202604224654568.html"
+    },
+    {
+      "id": "acc-major-011",
+      "qtype": "major",
+      "job_family": "会计",
+      "question": "月末、年末会计主要做哪些工作？",
+      "keywords": ["核对", "计提", "结转", "报表", "汇算清缴"],
+      "answer_hint": "月末主要核对账目、计提折旧摊销、结转成本费用、编制财务报表；年末还要汇算清缴、核对全年账务、资产盘点、整理归档全年凭证资料。",
+      "difficulty": 2,
+      "source_name": "东奥会计在线",
+      "source_url": "https://m.dongao.com/scjy/wenda_bsmsjy/202603304648432.html"
+    },
+    {
+      "id": "acc-scen-001",
+      "qtype": "scenario",
+      "job_family": "会计",
+      "question": "老板拿来一张个人消费的发票让你报销，你怎么办？",
+      "keywords": ["拒绝", "合规", "纳税调增", "替代方案"],
+      "answer_hint": "首先委婉提醒老板，这属于与企业经营无关的个人消费，强行入账税务查账不仅要纳税调增补缴企业所得税，还可能视同分红追缴20%个人所得税。如果老板确实想从公司拿钱，建议用合理差旅费、年终奖筹划或备用金冲抵的方式合规处理。",
+      "difficulty": 3,
+      "source_name": "东奥会计在线",
+      "source_url": "https://www.dongao.com/scjy/zixun_zcjn/202604224654568.html"
+    },
+    {
+      "id": "acc-scen-002",
+      "qtype": "scenario",
+      "job_family": "会计",
+      "question": "如何处理不合规报销单据？",
+      "keywords": ["财务制度", "拒绝", "沟通", "补充资料"],
+      "answer_hint": "严格依照公司财务制度，拒绝不合规单据入账；主动对接业务人员，说明单据问题，指导补充合规资料，兼顾财务原则与部门沟通。",
+      "difficulty": 2,
+      "source_name": "东奥会计在线",
+      "source_url": "https://www.dongao.com/scjy/wenda_bsmsjy/202607014669830.html"
+    },
+    {
+      "id": "acc-scen-003",
+      "qtype": "scenario",
+      "job_family": "会计",
+      "question": "月底发现上个月漏记了一笔大额折旧，现在该怎么处理？",
+      "keywords": ["重要性", "以前年度损益调整", "追溯", "差错更正"],
+      "answer_hint": "如果金额重大，不能直接补记在本月，这会扭曲本月利润。应按会计差错更正，通过以前年度损益调整科目追溯重述上期报表（若跨年）。",
+      "difficulty": 3,
+      "source_name": "东奥会计在线",
+      "source_url": "https://www.dongao.com/scjy/zixun_zcjn/202604224654568.html"
+    },
+    {
+      "id": "acc-scen-004",
+      "qtype": "scenario",
+      "job_family": "会计",
+      "question": "发现账务数据有误如何处理？",
+      "keywords": ["核对", "差异", "原因", "调整", "备查"],
+      "answer_hint": "逐笔核对凭证、流水、台账，查找记账漏记、错记问题，核实差异原因后，按照财务制度规范调整账务，做好备查登记。",
+      "difficulty": 2,
+      "source_name": "东奥会计在线",
+      "source_url": "https://www.dongao.com/scjy/wenda_bsmsjy/202607014669830.html"
+    },
+    {
+      "id": "acc-stress-001",
+      "qtype": "stress",
+      "job_family": "会计",
+      "question": "你会做假账吗？",
+      "keywords": ["不做", "法律", "准则", "底线"],
+      "answer_hint": "能力上可以做，但是法律和准则不允许我那么做，所以我不会去做。",
+      "difficulty": 3,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-stress-002",
+      "qtype": "stress",
+      "job_family": "会计",
+      "question": "怎么理解“坐支”？你认为坐支合理吗？",
+      "keywords": ["坐支", "现金收入", "直接支出", "不合理"],
+      "answer_hint": "坐支是指企事业单位和机关团体从本单位的现金收入中直接用于现金支出。当然不合理，但是坐支也不是一律都禁止的。",
+      "difficulty": 3,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-mot-001",
+      "qtype": "motivation",
+      "job_family": "会计",
+      "question": "你认为会计理论知识重要还是实践重要？",
+      "keywords": ["理论", "实践", "检验", "服务"],
+      "answer_hint": "我认为同样重要，但是实践是检验理论的唯一途径，理论是为实践服务的，特别体现在我们会计职业中。",
+      "difficulty": 2,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-mot-002",
+      "qtype": "motivation",
+      "job_family": "会计",
+      "question": "你认为自己比和你同届毕业的毕业生优在哪里？",
+      "keywords": ["优势", "具体", "证据", "岗位"],
+      "answer_hint": "说自己的优点就好，但别说太多，否则会显得太过自信、不够谦虚。",
+      "difficulty": 2,
+      "source_name": "应届毕业生网",
+      "source_url": "https://www.yjbys.com/qiuzhizhinan/show-493758.html"
+    },
+    {
+      "id": "acc-proj-001",
+      "qtype": "project",
+      "job_family": "会计",
+      "question": "你做过成本核算吗？具体怎么做？",
+      "keywords": ["情境", "任务", "分摊", "行动", "结果"],
+      "answer_hint": "实训时做过制造业成本核算（情境），负责把材料成本分摊到3种产品（任务）。我先统计各产品耗用工时，再按工时比例分配，最后算出每种产品单位成本（行动），结果和老师的标准答案只差2%（结果）。",
+      "difficulty": 2,
+      "source_name": "中国会计网",
+      "source_url": "http://m.canet.com.cn/view-863040-1.html"
+    },
+    {
+      "id": "acc-cnt-001",
+      "qtype": "counter",
+      "job_family": "会计",
+      "question": "最后留给你提问：关于这个财务岗位，你想了解什么？",
+      "keywords": ["核算范围", "系统", "团队", "考核"],
+      "answer_hint": "可围绕：目前财务团队的分工与核算范围、公司在用的财务系统（用友/金蝶/SAP）、月结关账的时间要求、岗位的考核指标。",
+      "difficulty": 1,
+      "source_name": "东奥会计在线",
+      "source_url": "https://www.dongao.com/scjy/wenda_bsmsjy/202607014669830.html"
+    }
+  ]
+}

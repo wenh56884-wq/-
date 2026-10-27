@@ -1,0 +1,73 @@
+{
+  "family": "public_sector",
+  "label": "政府 / 公共事业",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "pub-mot-001",
+      "qtype": "motivation",
+      "question": "为什么报考事业单位综合岗？你理解的岗位职责是什么？",
+      "keywords": ["公共服务", "政策", "群众", "责任", "稳定"],
+      "answer_hint": "结合公共服务、政策落地和群众工作说明岗位理解，动机要具体、不空喊。",
+      "difficulty": 1,
+      "source_name": "金标尺教育",
+      "source_url": "https://cq.m.jinbiaochi.com/sydw/news_876904.html",
+      "job_family": "事业单位综合岗"
+    },
+    {
+      "id": "pub-major-001",
+      "qtype": "major",
+      "question": "综合分析：有人反映基层“痕迹主义”严重，你怎么看？",
+      "keywords": ["形式主义", "考核", "减负", "实效", "群众"],
+      "answer_hint": "先点明危害与根源，再从考核导向、减负机制、数字化和群众评价提对策。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://cq.m.jinbiaochi.com/sydw/news_876904.html",
+      "job_family": "事业单位综合岗"
+    },
+    {
+      "id": "pub-project-001",
+      "qtype": "project",
+      "question": "讲一次你组织活动、调研或志愿服务的经历：目标、做法、结果。",
+      "keywords": ["目标", "方案", "协调", "结果", "复盘"],
+      "answer_hint": "用 STAR 说清目标、组织分工、资源协调和可量化结果。",
+      "difficulty": 2,
+      "source_name": "华图教育",
+      "source_url": "https://m.huatu.com/2026/0622/2865853.html",
+      "job_family": "事业单位综合岗"
+    },
+    {
+      "id": "pub-scenario-001",
+      "qtype": "scenario",
+      "question": "窗口群众情绪激动、投诉办事效率低，你怎么处理？",
+      "keywords": ["安抚", "倾听", "政策", "方案", "回访"],
+      "answer_hint": "先安抚倾听、核实诉求，再解释政策/给方案并跟踪回访。",
+      "difficulty": 3,
+      "source_name": "九峰公务员考试网",
+      "source_url": "http://jiufengsw.com/index.php?a=shows&catid=170&id=61241",
+      "job_family": "事业单位综合岗/窗口"
+    },
+    {
+      "id": "pub-stress-001",
+      "qtype": "stress",
+      "question": "领导临时交办紧急任务，和你手上的工作冲突，你怎么安排？",
+      "keywords": ["优先级", "沟通", "计划", "加班", "结果"],
+      "answer_hint": "先确认紧急程度和截止时间，重排优先级、主动沟通并保证关键结果。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://cq.m.jinbiaochi.com/sydw/news_876904.html",
+      "job_family": "事业单位综合岗"
+    },
+    {
+      "id": "pub-counter-001",
+      "qtype": "counter",
+      "question": "如果入职后发现基层条件比预期艰苦，你怎么调整？最后有什么问题想问？",
+      "keywords": ["适应", "责任", "学习", "团队", "成长"],
+      "answer_hint": "坦诚谈适应方式，再问培训、轮岗或团队支持，避免只问待遇。",
+      "difficulty": 1,
+      "source_name": "华图教育",
+      "source_url": "https://m.huatu.com/2026/0622/2865853.html",
+      "job_family": "事业单位综合岗"
+    }
+  ]
+}

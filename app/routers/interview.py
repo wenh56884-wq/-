@@ -9,7 +9,7 @@ import json
 import re
 import zipfile
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import pymysql
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -21,6 +21,7 @@ from app.auth import require_student
 from app.config import get_settings
 from engine.interview import (
     INTERVIEW_ENGINE_VERSION,
+    QUESTION_TYPES,
     aggregate,
     build_outline,
     diagnose,
@@ -34,6 +35,8 @@ from engine.recommend import clean_skill_tags
 from agents.tools import ToolContext
 
 router = APIRouter(prefix="/interview", tags=["interview"])
+
+QUESTION_LABELS = {k: v["label"] for k, v in QUESTION_TYPES.items()}
 
 # 提纲之外允许的上下文长度（回答与证据传给模型前截断，防 prompt 爆炸）
 _MAX_ANSWER = 2000
@@ -84,6 +87,20 @@ def _evidence(resume: Mapping[str, Any], job_snapshot: Mapping[str, Any] | None)
     evidence += [str(t) for t in (job_snapshot or {}).get("skill_tags") or []]
     evidence += [str(e.get("desc") or "") for e in resume.get("experiences") or [] if e.get("desc")]
     return [e for e in evidence if e.strip()]
+
+
+def _rubric_of_q(question: Mapping[str, Any], job_skills: Sequence[str]) -> dict[str, Any]:
+    """取某道题的评分要点：优先用提纲里已存的（题库题带自己的考点）。
+
+    build_outline 现在会把题库考点写进 outline[i]["rubric"]，如果这里再用
+    `rubric_of(q["type"], job_skills)` 重算，题库考点就被通用关键词覆盖掉了，
+    专业题会出现「答对了得分低、答偏了得分高」。老会话的提纲同样带 rubric 字段，
+    因此这里直接取用是向后兼容的；取不到才回退重算。
+    """
+    stored = question.get("rubric")
+    if isinstance(stored, Mapping) and stored.get("keywords") is not None:
+        return dict(stored)
+    return rubric_of(str(question.get("type") or "major"), job_skills)
 
 
 # ----------------------------------------------------------------
@@ -351,8 +368,8 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
                     target=str(sid), detail={"job_id": inp.job_id, "rounds": len(outline)})
         q = outline[0]
         return {"session_id": sid, "total_rounds": len(outline), "round": 1,
-                "question_type": q["type"], "question_label": rubric_of(q["type"], job_snapshot["skill_tags"] if job_snapshot else [])["label"],
-                "question": q["question"]}
+                "question_type": q["type"], "question_label": _rubric_of_q(q, job_snapshot["skill_tags"] if job_snapshot else [])["label"],
+                "question": q["question"], "source": q.get("source")}
     finally:
         conn.close()
 
@@ -384,7 +401,7 @@ def interview_answer(sid: int, inp: AnswerIn,
             resume = _load_resume(cur, int(sess["简历编号"]), ctx.tenant_id)
             evidence = _evidence(resume, job_snapshot)
 
-            rubric = rubric_of(q["type"], job_snapshot.get("skill_tags") or [])
+            rubric = _rubric_of_q(q, job_snapshot.get("skill_tags") or [])
             item = score_answer(answer, rubric, evidence)
             turn = interviewer.run_turn(q["question"], q["type"], answer, item, evidence)
 
@@ -406,7 +423,8 @@ def interview_answer(sid: int, inp: AnswerIn,
         nq = outline[nxt]
         return {"round_done": rnd + 1, "score": item["score"] if item else None,
                 "comment": turn["comment"], "comment_version": turn["comment_version"],
-                "next": {"round": nxt + 1, "question": nq["question"], "question_type": nq["type"]}}
+                "next": {"round": nxt + 1, "question": nq["question"], "question_type": nq["type"],
+                         "source": nq.get("source")}}
     return _finish(sid, ctx)
 
 
@@ -428,13 +446,13 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
     finally:
         conn.close()
 
-    scores = [score_answer(a["学生回答"], rubric_of(str(o["type"]), job.get("skill_tags") or []),
+    scores = [score_answer(a["学生回答"], _rubric_of_q(o, job.get("skill_tags") or []),
                            evidence) for a, o in zip(answers, outline)]
     total = aggregate(scores, outline)
     gaps = gap_list(resume, job, scores, outline)
     items = []
     for o, a, s in zip(outline, answers, scores):
-        items.append({"round": o["round"], "label": rubric_of(o["type"], job.get("skill_tags") or [])["label"],
+        items.append({"round": o["round"], "label": _rubric_of_q(o, job.get("skill_tags") or [])["label"],
                       "score": s["score"] if s else None,
                       "brief": (a["学生回答"] or "未作答")[:60]})
     strengths = [it["label"] for it, s in zip(items, scores) if s and float(s["score"]) >= 75]
@@ -457,7 +475,18 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
         conn.close()
     return {"round_done": len(outline), "score": items[-1]["score"] if items else None,
             "finished": True, "total": facts["total"], "report": report, "gaps": gaps,
-            "items": items}
+            "items": items, "sources": [_source_row(o) for o in outline]}
+
+
+def _source_row(q: Mapping[str, Any]) -> dict[str, Any]:
+    """报告页用：每轮的题型 + 题目 + 出处（题库命中给链接，模板题明确标注）。"""
+    src = q.get("source") or {"kind": "template"}
+    return {"round": q.get("round"), "type": q.get("type"),
+            "label": QUESTION_LABELS.get(str(q.get("type")), str(q.get("type"))),
+            "question": q.get("question"),
+            "kind": src.get("kind", "template"),
+            "name": src.get("name") or ("模板出题" if src.get("kind") != "bank" else ""),
+            "url": src.get("url"), "bank_id": src.get("id")}
 
 
 @router.get("/{sid}")

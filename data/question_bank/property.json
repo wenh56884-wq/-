@@ -1,0 +1,117 @@
+{
+  "family": "property",
+  "label": "物业 / 房地产 / 商业中心",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "prop-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择物业管家？你理解的物业管家每天主要做什么？",
+      "keywords": ["服务", "业主", "报事", "巡检", "协调"],
+      "answer_hint": "围绕业主服务、报事闭环、巡检和跨条线协调说明岗位理解与动机。",
+      "difficulty": 1,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/516392702.html",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-mot-002",
+      "qtype": "motivation",
+      "question": "物业管家需要面对大量投诉，你为什么觉得自己能做好？",
+      "keywords": ["耐心", "沟通", "共情", "责任", "抗压"],
+      "answer_hint": "用具体经历证明耐心、共情和抗压，不要只表态。",
+      "difficulty": 1,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/516392702.html",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-major-001",
+      "qtype": "major",
+      "question": "物业管理的“四保一服”指什么？管家和这些条线怎么配合？",
+      "keywords": ["保洁", "安保", "绿化", "维修", "客服"],
+      "answer_hint": "说清保洁、安保、绿化、维修和客户服务，再讲管家如何派单、跟进和回访。",
+      "difficulty": 2,
+      "source_name": "book118",
+      "source_url": "https://max.book118.com/html/2024/1031/7112121155006165.shtm",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-major-002",
+      "qtype": "major",
+      "question": "物业费收缴率和业主满意度是核心指标，你会怎么提升？",
+      "keywords": ["服务", "透明", "沟通", "分类", "回访"],
+      "answer_hint": "先做服务和公示透明，再分类沟通、解决遗留问题，用回访闭环提升信任。",
+      "difficulty": 2,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzU4MTA0MjQ0Nw==&mid=2247483796&idx=1&sn=d0edd117cfe5f46307b666b13c4e8f28",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-scenario-001",
+      "qtype": "scenario",
+      "question": "业主投诉电梯故障多日未修，情绪激动，你怎么处理？",
+      "keywords": ["安抚", "核实", "临时方案", "跟进", "公示"],
+      "answer_hint": "先安抚并核实，给临时方案和时间表，持续公示进度并回访。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/516392702.html",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-scenario-002",
+      "qtype": "scenario",
+      "question": "业主以“服务不到位”为由拒缴物业费，你怎么沟通？",
+      "keywords": ["倾听", "事实", "整改", "公约", "分期"],
+      "answer_hint": "先倾听并核对事实，能整改的给整改计划，再按公约/合同沟通缴费方案。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/516392702.html",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-scenario-003",
+      "qtype": "scenario",
+      "question": "楼上楼下因噪音或漏水发生冲突，你怎么协调？",
+      "keywords": ["中立", "分别沟通", "取证", "公约", "回访"],
+      "answer_hint": "保持中立、分别沟通、现场取证，再依据管理规约促成方案并回访。",
+      "difficulty": 2,
+      "source_name": "book118",
+      "source_url": "https://max.book118.com/html/2024/1031/7112121155006165.shtm",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-project-001",
+      "qtype": "project",
+      "question": "讲一次你处理复杂业主诉求或组织社区活动的经历和结果。",
+      "keywords": ["需求", "方案", "资源", "结果", "复盘"],
+      "answer_hint": "用 STAR 说清诉求/目标、协调了哪些资源、最终结果和复盘。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/516392702.html",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-stress-001",
+      "qtype": "stress",
+      "question": "停水停电突发，业主群情绪激烈，你作为管家怎么应对？",
+      "keywords": ["通知", "原因", "临时措施", "安抚", "恢复"],
+      "answer_hint": "第一时间发通知说明原因和预计恢复时间，给临时措施，持续播报并回访。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/516392702.html",
+      "job_family": "物业管家/客服"
+    },
+    {
+      "id": "prop-counter-001",
+      "qtype": "counter",
+      "question": "你觉得物业管家最难的地方是什么？你准备怎么面对？",
+      "keywords": ["情绪", "边界", "沟通", "成长", "团队"],
+      "answer_hint": "承认情绪劳动和边界管理难，讲清自己的调节方法和团队协作意识。",
+      "difficulty": 1,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzU4MTA0MjQ0Nw==&mid=2247483796&idx=1&sn=d0edd117cfe5f46307b666b13c4e8f28",
+      "job_family": "物业管家/客服"
+    }
+  ]
+}

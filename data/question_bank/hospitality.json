@@ -1,0 +1,117 @@
+{
+  "family": "hospitality",
+  "label": "酒店 / 旅游 / 餐饮 / 服务",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "hosp-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择酒店前台？你理解的岗位职责是什么？",
+      "keywords": ["服务", "入住", "退房", "沟通", "应变"],
+      "answer_hint": "从入住退房、咨询、投诉和跨部门协调说明岗位理解，再结合服务意识谈动机。",
+      "difficulty": 1,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzY5ODQwNjk0MQ==&mid=2247483816&idx=1&sn=63966fbcf61059cd99831d10a900b2ea",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-mot-002",
+      "qtype": "motivation",
+      "question": "前台需要倒班、长时间站立，你怎么看？",
+      "keywords": ["接受", "适应", "体力", "责任", "服务"],
+      "answer_hint": "坦诚说明对倒班/站立的认知，用经历证明适应力和服务意识。",
+      "difficulty": 1,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500602158.html",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-major-001",
+      "qtype": "major",
+      "question": "客人办理入住时发现预订房型与实际不符，你怎么处理？",
+      "keywords": ["核对", "房态", "升级", "补偿", "沟通"],
+      "answer_hint": "先核对预订与房态，能升级则升级，不能则给替代方案和补偿，并同步记录。",
+      "difficulty": 2,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzY5ODQwNjk0MQ==&mid=2247483816&idx=1&sn=63966fbcf61059cd99831d10a900b2ea",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-major-002",
+      "qtype": "major",
+      "question": "客人投诉房间卫生或噪音，要求换房或退款，你怎么处理？",
+      "keywords": ["道歉", "核实", "换房", "补偿", "回访"],
+      "answer_hint": "先道歉并核实，优先换房/处理噪音源，按权限给补偿，最后回访确认。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500602158.html",
+      "job_family": "酒店前台/客服"
+    },
+    {
+      "id": "hosp-scenario-001",
+      "qtype": "scenario",
+      "question": "夜里醉客在前台闹事，你怎么应对？",
+      "keywords": ["安全", "安抚", "保安", "报警", "记录"],
+      "answer_hint": "先保证自身与客人安全，安抚并呼叫保安/值班经理，必要时报警并完整记录。",
+      "difficulty": 3,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzY5ODQwNjk0MQ==&mid=2247483816&idx=1&sn=63966fbcf61059cd99831d10a900b2ea",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-scenario-002",
+      "qtype": "scenario",
+      "question": "满房情况下客人要求续住或升房，你怎么协调？",
+      "keywords": ["房态", "协调", "替代", "补偿", "沟通"],
+      "answer_hint": "先查房态和预订，协调其他分店/房型或给替代方案，说明原因并给合理补偿。",
+      "difficulty": 2,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzY5ODQwNjk0MQ==&mid=2247483816&idx=1&sn=63966fbcf61059cd99831d10a900b2ea",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-project-001",
+      "qtype": "project",
+      "question": "讲一次你处理客人投诉或参与大型接待的经历：背景、你的动作、结果。",
+      "keywords": ["需求", "协调", "结果", "复盘", "服务"],
+      "answer_hint": "用 STAR 说清客人需求、你协调了哪些资源、最终满意度和复盘。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500602158.html",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-stress-001",
+      "qtype": "stress",
+      "question": "繁忙时段同时有入住、退房、电话和投诉，你怎么排优先级？",
+      "keywords": ["优先级", "分流", "沟通", "效率", "准确"],
+      "answer_hint": "按紧急/重要分流，先处理在场客人并说明等待时间，电话/后台事务并行或转交。",
+      "difficulty": 2,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzY5ODQwNjk0MQ==&mid=2247483816&idx=1&sn=63966fbcf61059cd99831d10a900b2ea",
+      "job_family": "酒店前台/前厅"
+    },
+    {
+      "id": "hosp-stress-002",
+      "qtype": "stress",
+      "question": "客人坚持认为 mini bar 扣费有误，情绪激动，你怎么核实和处理？",
+      "keywords": ["核对", "账单", "证据", "道歉", "补偿"],
+      "answer_hint": "先安抚并调取消费记录/签字单，逐项核对；有误立即更正并道歉，无误也耐心解释。",
+      "difficulty": 3,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/500602158.html",
+      "job_family": "酒店前台/收银"
+    },
+    {
+      "id": "hosp-counter-001",
+      "qtype": "counter",
+      "question": "你了解我们酒店吗？最后有什么问题想问？",
+      "keywords": ["品牌", "服务", "团队", "成长"],
+      "answer_hint": "提前了解品牌定位/客群，问培训、晋升或服务标准，避免只问薪资。",
+      "difficulty": 1,
+      "source_name": "金锄头",
+      "source_url": "https://www.jinchutou.com/shtml/d009ca8b7b492733e73c9b16129b0a1e.html",
+      "job_family": "酒店前台/前厅"
+    }
+  ]
+}

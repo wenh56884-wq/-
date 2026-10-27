@@ -1,0 +1,117 @@
+{
+  "family": "education",
+  "label": "教育 / 培训 / 院校 / 教研",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "edu-mot-001",
+      "qtype": "motivation",
+      "question": "为什么选择当老师？你认为一名好老师最重要的品质是什么？",
+      "keywords": ["热爱", "责任", "耐心", "学生", "成长"],
+      "answer_hint": "把个人经历与教育理念结合，落到责任、耐心和对学生成长的关注。",
+      "difficulty": 1,
+      "source_name": "金标尺教育",
+      "source_url": "https://www.jinbiaochi.com/jszp/news_769546.html",
+      "job_family": "教师/培训"
+    },
+    {
+      "id": "edu-mot-002",
+      "qtype": "motivation",
+      "question": "如果让你接手一个成绩和纪律都比较差的班，你打算怎么开始？",
+      "keywords": ["了解", "规则", "信任", "家校", "目标"],
+      "answer_hint": "先了解学情和班情，再立规则、建信任、做家校沟通，最后设小目标逐步推进。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://www.jinbiaochi.com/jszp/news_769546.html",
+      "job_family": "教师/班主任"
+    },
+    {
+      "id": "edu-major-001",
+      "qtype": "major",
+      "question": "一堂好课的标准是什么？你会怎么设计一堂课？",
+      "keywords": ["目标", "学情", "互动", "评价", "反思"],
+      "answer_hint": "从目标明确、学情适配、互动生成、评价反馈和课后反思展开。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://www.jinbiaochi.com/jszp/news_769546.html",
+      "job_family": "教师/教研"
+    },
+    {
+      "id": "edu-major-002",
+      "qtype": "major",
+      "question": "“双减”政策下，你认为作业设计应该遵循哪些原则？",
+      "keywords": ["分层", "适量", "实践", "反馈", "减负"],
+      "answer_hint": "说到分层、适量、实践性、及时反馈和减负提质，最好结合学科举例。",
+      "difficulty": 2,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzkzNjkzOTc3NQ==&mid=2247490108&idx=1&sn=945698f836207bb6cdf04a2d55162dde",
+      "job_family": "教师/教研"
+    },
+    {
+      "id": "edu-scenario-001",
+      "qtype": "scenario",
+      "question": "上课时学生突然玩手机或传纸条，你会怎么处理？",
+      "keywords": ["冷静", "提醒", "课后", "沟通", "规则"],
+      "answer_hint": "先稳住课堂、轻处理，课后单独沟通并明确规则，避免当众激化。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://www.jinbiaochi.com/jszp/news_769546.html",
+      "job_family": "教师/班主任"
+    },
+    {
+      "id": "edu-scenario-002",
+      "qtype": "scenario",
+      "question": "家长打电话劈头盖脸责备你工作失职，你怎么应对？",
+      "keywords": ["倾听", "共情", "事实", "方案", "跟进"],
+      "answer_hint": "先倾听共情、不争辩，再核实事实、给出方案并持续跟进反馈。",
+      "difficulty": 3,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzYyMzUxOTUy==&mid=2247484518&idx=1&sn=e722327fa672ce32e42ab60e7ebe99bc",
+      "job_family": "教师/班主任"
+    },
+    {
+      "id": "edu-project-001",
+      "qtype": "project",
+      "question": "讲一次你设计或改进教学方案并看到效果的案例：背景、做法、结果。",
+      "keywords": ["学情", "设计", "实施", "数据", "效果"],
+      "answer_hint": "用 STAR 说清学情诊断、教学设计、实施过程和可量化的效果。",
+      "difficulty": 2,
+      "source_name": "人人文库",
+      "source_url": "https://www.renrendoc.com/paper/468495869.html",
+      "job_family": "教师/教研"
+    },
+    {
+      "id": "edu-stress-001",
+      "qtype": "stress",
+      "question": "你的教学设计被领导批评“过于传统”，你怎么回应和改进？",
+      "keywords": ["接受", "反思", "课标", "创新", "试讲"],
+      "answer_hint": "先接受反馈并追问标准，再对照课标/学情重构设计，用小范围试讲验证。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://www.jinbiaochi.com/jszp/news_769546.html",
+      "job_family": "教师/教研"
+    },
+    {
+      "id": "edu-stress-002",
+      "qtype": "stress",
+      "question": "如果学生当堂质疑你的观点，你会怎么处理？",
+      "keywords": ["尊重", "讨论", "证据", "引导", "课后"],
+      "answer_hint": "尊重质疑、鼓励证据和讨论，课堂内把握节奏，课后可继续深聊。",
+      "difficulty": 2,
+      "source_name": "金标尺教育",
+      "source_url": "https://www.jinbiaochi.com/jszp/news_769546.html",
+      "job_family": "教师"
+    },
+    {
+      "id": "edu-counter-001",
+      "qtype": "counter",
+      "question": "最后你有什么问题想问学校？",
+      "keywords": ["教研", "成长", "考核", "团队"],
+      "answer_hint": "问教研支持、青年教师成长路径、考核方式或团队分工。",
+      "difficulty": 1,
+      "source_name": "微信公众号",
+      "source_url": "http://mp.weixin.qq.com/s?__biz=MzkzNjkzOTc3NQ==&mid=2247490108&idx=1&sn=945698f836207bb6cdf04a2d55162dde",
+      "job_family": "教师/培训"
+    }
+  ]
+}

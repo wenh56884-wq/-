@@ -33,6 +33,9 @@ _TEMPLATES: dict[str, list[str]] = {
     "major": [
         "简历里提到你学过{course}，请讲讲它和{job_title}的关系。",
         "这个岗位要求{skill}，说说你通过什么课程或自学掌握了它？",
+        # 岗位没有技能标签时用这条：不去硬扯「课程与岗位的关系」，
+        # 否则会出现「数据库原理与资深计划物控的关系」这种荒谬问法。
+        "简历里提到你学过{course}，请讲讲你掌握到什么程度，做过哪些练习或项目。",
     ],
     "project": [
         "请具体讲一下「{proj}」：你承担的角色、遇到的最大困难、最终结果。",
@@ -84,8 +87,16 @@ def _norm(text: str) -> str:
 # ----------------------------------------------------------------
 def build_outline(job: Mapping[str, Any] | None,
                   resume: Mapping[str, Any],
-                  max_rounds: int = _MAX_ROUNDS) -> list[dict[str, Any]]:
+                  max_rounds: int = _MAX_ROUNDS,
+                  use_bank: bool = True) -> list[dict[str, Any]]:
     """按证据决定考什么题：有项目经历→项目深挖；岗位有技能→专业+情景。
+
+    出题来源两级（题库优先、模板兜底）：
+      1. 先从 `engine/question_bank.py` 的 RAG 题库按「行业族 + 题型」检索，
+         命中则用题库原题面 + 题库自带考点，并附 source（题目编号/来源/链接）。
+      2. 题库没覆盖这个行业族或题型 → 回落到本模块的机械模板，source=None。
+    题库题面一律原样使用，不做占位符替换——题库里的题本身就是完整问句，
+    任何改写都可能把考点改掉，也会让「可回溯」失效。
 
     顺序固定：动机→专业→项目→情景→抗压→反问（真实面试的常规推进），
     不足 max_rounds 时按题型权重从低到高裁剪（反问环节永远保留）。
@@ -122,13 +133,146 @@ def build_outline(job: Mapping[str, Any] | None,
             proj = unused[0]
             used_proj.add(proj.get("name"))
             placeholders["proj"] = str(proj.get("name") or "项目经历")
+
+        bank_hit = _bank_pick(job, qtype, resume) if use_bank else None
+        if bank_hit:
+            raw = bank_hit["question"]
+            # 项目深挖题必须锚定学生自己的项目：题库给的是「问法」，
+            # 只问"讲一次你解决难题的经历"就成了泛泛行为题，深挖价值归零。
+            # 这里只加一句锚点前缀，考点与问法保持题库原样；原文另存 question_raw。
+            question = raw
+            if qtype == "project" and placeholders.get("proj"):
+                question = f"围绕你简历里的「{placeholders['proj']}」来回答：{raw}"
+            outline.append({
+                "round": rnd, "type": qtype,
+                "question": question,
+                "rubric": rubric_from_bank(bank_hit),
+                "source": {
+                    "kind": "bank", "id": bank_hit["id"],
+                    "name": bank_hit["source_name"], "url": bank_hit["source_url"],
+                    "pool": bank_hit["pool"], "family": bank_hit["family"],
+                    "family_label": bank_hit.get("family_label"),
+                    "score": bank_hit["score"], "matched_by": bank_hit["matched_by"],
+                    "question_raw": raw,
+                },
+            })
+            continue
+
         q = _TEMPLATES[qtype][0]
+        if qtype == "major":
+            # 有岗位技能才问「课程与岗位的关系」；没有就只问掌握程度，
+            # 避免把毫不相干的课程硬套到岗位上。
+            q = _TEMPLATES["major"][0 if job_skills else 2]
         for k, v in placeholders.items():
             q = q.replace("{" + k + "}", v)
         outline.append({"round": rnd, "type": qtype,
                         "question": q,
-                        "rubric": rubric_of(qtype, job_skills)})
+                        "rubric": rubric_of(qtype, job_skills),
+                        "source": {"kind": "template"}})
     return outline
+
+
+def _bank_query(job: Mapping[str, Any] | None,
+                resume: Mapping[str, Any] | None) -> str:
+    """检索用的查询串：岗位侧 + 简历侧。
+
+    只带岗位名/行业/技能时，同一个岗位的所有学生拿到同一道专业题；
+    把简历里的课程与技能并进来，题目才会贴着学生自己学过的东西走
+    （例如同样投后端，学过「数据库原理」的人更容易抽到 SQL 相关题）。
+    """
+    job = job or {}
+    resume = resume or {}
+    parts: list[str] = [
+        str(job.get("title") or ""), str(job.get("industry") or ""),
+        " ".join(str(s) for s in (job.get("skill_tags") or [])),
+        " ".join(str(s) for s in (resume.get("skills") or [])),
+        " ".join(str(c) for c in (resume.get("courses") or [])),
+        " ".join(str(e.get("name") or "") for e in (resume.get("experiences") or [])),
+        str(resume.get("self") or resume.get("自我评价") or ""),
+    ]
+    return " ".join(p.strip() for p in parts if p and p.strip())
+
+
+def _resume_terms(resume: Mapping[str, Any] | None) -> list[str]:
+    """简历里可用于比对的锚点词：课程、技能、项目名。只取长度≥2 的，避免单字噪声。"""
+    resume = resume or {}
+    raw: list[str] = []
+    raw += [str(s) for s in (resume.get("skills") or [])]
+    raw += [str(c) for c in (resume.get("courses") or [])]
+    raw += [str(e.get("name") or "") for e in (resume.get("experiences") or [])]
+    return [t.strip() for t in raw if len(t.strip()) >= 2]
+
+
+def _term_hit(term: str, text_grams: set[str], threshold: float = 0.6) -> bool:
+    """锚点词是否命中：用 2-gram 覆盖率判定，容忍词形被拆开。
+
+    「数据库原理」和题面「数据库索引的原理」整串不相等，但 2-gram 覆盖
+    3/4，应算命中；「计算机网络」对同一题面覆盖率 0，不算。
+    """
+    t = _norm(term)
+    if len(t) < 2:
+        return False
+    if t in text_grams:      # text_grams 里额外存了整串，整串直接命中
+        return True
+    grams = {t[i:i + 2] for i in range(len(t) - 1)}
+    if not grams:
+        return False
+    return len(grams & text_grams) / len(grams) >= threshold
+
+
+def _resume_affinity(hit: Mapping[str, Any], resume: Mapping[str, Any] | None) -> float:
+    """这道题和简历的贴合度：简历锚点词有多少命中题面或考点（0~1）。
+
+    作用：同一岗位下，学过「数据库原理」的学生应更容易抽到索引/事务类的题，
+    而不是所有人拿到同一道。纯 TF-IDF 对简历侧信号太弱（岗位族命中占 0.30
+    权重会把它压平），所以在提纲层做一次二次重排。
+    """
+    terms = _resume_terms(resume)
+    if not terms:
+        return 0.0
+    text = _norm(str(hit.get("question") or "") + "".join(str(k) for k in (hit.get("keywords") or [])))
+    if len(text) < 2:
+        return 0.0
+    grams = {text[i:i + 2] for i in range(len(text) - 1)}
+    grams.add(text)
+    return sum(1 for t in terms if _term_hit(t, grams)) / len(terms)
+
+
+def _bank_pick(job: Mapping[str, Any] | None, qtype: str,
+               resume: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    """从题库取一道题；题库不可用/未覆盖 → None（由模板兜底）。
+
+    取回若干候选后按「检索分 + 简历贴合度」二次重排，让题目贴着学生自己
+    学过的东西走。重排不改题库题面与考点，只改选哪一道。
+    候选窗口取 8：只取 5 时，简历最相关的那道题常常进不了窗口（例如投后端、
+    学过 Spring 的人，Spring 题初始排名可能在第 6~8 位），重排就无从发力。
+    """
+    try:
+        from engine import question_bank as _qb
+        hits = _qb.retrieve_for_job(job, qtype, k=8, query_text=_bank_query(job, resume))
+    except Exception:  # 题库缺失或依赖异常绝不能阻断面试主流程
+        return None
+    if not hits:
+        return None
+    if len(hits) > 1 and resume:
+        # 分数降序 → 同分保持题库原序（确定性），取第一个
+        ranked = sorted(
+            enumerate(hits),
+            key=lambda kv: (-round(float(kv[1].get("score") or 0.0)
+                                   + 0.35 * _resume_affinity(kv[1], resume), 6), kv[0]),
+        )
+        return ranked[0][1]
+    return hits[0]
+
+
+def rubric_from_bank(hit: Mapping[str, Any]) -> dict[str, Any]:
+    """题库题目的评分要点：考点用题库自带的，结构/深度口径与模板题保持一致。"""
+    kws = [str(k) for k in (hit.get("keywords") or []) if str(k).strip()]
+    qtype = str(hit.get("qtype") or "major")
+    meta = QUESTION_TYPES.get(qtype, {"weight": 0.2, "label": qtype})
+    return {"keywords": kws, "struct_marks": list(_STRUCT_MARKS),
+            "weight": meta["weight"], "label": meta["label"],
+            "bank_id": hit.get("id")}
 
 
 def rubric_of(qtype: str, job_skills: Sequence[str]) -> dict[str, Any]:

@@ -191,3 +191,82 @@ cd web; npm run build
 - **CodeBuddy 交叉验收**：独立复跑 `npm run build`、抽查 8 张截图、确认无横向溢出/无嵌套 el-card/主按钮非蓝色；发现问题按文件归属登记。
 - 每页改造前先在看板登记；同一文件同一时间只允许一个 owner 改；改完 `npm run build` 并把截图/构建输出贴回本节。
 - 规则：外层 `.bento-page`、内层 `.bento-grid`；大卡 `span-2 row-2`、中卡 `span-2`、小卡 1×1；统一 gap 20；不在 `bento-card` 里再套 `el-card`；主按钮不用 Element 蓝。
+
+## 10. 题库 RAG 覆盖扩展（2026-10-27 19:20，Claude Code 配合 WorkBuddy）
+
+### 用户目标
+全国岗位面试题做成 RAG；模拟面试贴近真实场景。
+
+### 现状（WorkBuddy 已完成，20:00 前）
+- `engine/question_bank.py`：8 行业族 / 147 题 / 17 个公开来源；TF-IDF(char 2-3)+岗位族+考点三路排序；无出处不入库；题库优先、模板兜底。
+- 题库表 `面试题库`/`面试题库导入日志`、加载/评测脚本、`/qb/*` API、前端出处展示。
+- 测试 30 passed；评测：可回溯 100%、岗位覆盖 78.67%、检索命中 100%、题面一致 100%。
+
+### Claude Code 接管范围（不碰 WorkBuddy 文件）
+- `engine/question_bank.py`：新增行业族（物流/教育/新媒体设计/物业/酒店/通信/农业/法律/公共事业）+ **空行业按岗位名推断族**（当前 600 个岗位行业为空，多为开发/测试，全部落到 general）。
+- `data/question_bank/`：新增上述行业族的可回溯语料（每题带 source_url/考点/答案要点）。
+- 新增测试：行业推断 / 新族检索 / 空行业覆盖。
+- **不改** `engine/interview.py`、`app/routers/interview.py`、`db/*`、`web/*`；这些由 WorkBuddy 继续。
+- 下一步交接 WorkBuddy：`_bank_pick(job, qtype)` 增加 resume 参数做简历感知排序；答题后按得分/漏点决定是否追问（可用题库同族 probe 题）。
+
+### 10.1 扩展结果（Claude Code，2026-10-27 19:25）
+- 题库从 147 → **234 题**，行业族 8 → **17**（新增物流/教育/新媒体设计/物业/酒店/通信/农业/法律/公共事业 + IT 补题），来源 **28** 个。
+- `engine/question_bank.py`：新增 9 个行业族规则 + `infer_family()`（行业为空时按岗位名/技能推断）；`retrieve_for_job` 已接入推断。WorkBuddy 的 `query_text` 简历感知检索保留。
+- `engine/interview_probe.py`（新增）：真实追问决策模块——`should_probe()` 判断浅答/漏考点，`pick_probe()` 从同族题库取未用过的题，`probe_plan()` 返回可直接落库的追问（含 source_url）。8 条测试通过；环境开关 `INTERVIEW_PROBE`。
+- `scripts/eval_question_bank.py`：职位覆盖率改用 `infer_family`（与线上海选口径一致）。
+- `data/question_bank/`：新增 10 个语料文件（含 `it_extra.json`），每题带 source_url/考点/答案要点。
+- MySQL `面试题库` 已导入 **234 条**；服务已重启，`/qb/stats` 线上返回 234/17/28。
+
+### 10.2 评测（排他）
+- 可回溯率 100%；覆盖矩阵 **96/96 = 100%**；职位覆盖 **99.87%**（1512/1514）；检索命中 ≥4 轮 100%（200 样本）；平均 **6.00/6** 轮来自题库；题面一致 100%；0 个岗位拿不到题。
+- 仅剩 2 个 general 岗位（空标题/多元化集团）无专项族；不影响主流程。
+
+### 10.3 交接 WorkBuddy（必须接，否则“真实场景”只完成一半）
+1. **追问接线**：`app/routers/interview.py::interview_answer` 在 `item = score_answer(...)` 后调用
+   `plan = interview_probe.probe_plan(job_snapshot, q["type"], item, answer, used_ids=[...])`；
+   命中则把 `plan["question"]` 作为下一题返回（`问题类型='probe'`，来源写 `bank_id/source_url`），
+   同一主问题最多追问 1 次（需在 `面试会话` 加 `追问次数` 或按 QA 行推断）。
+2. **岗位池扩展**：`/interview/jobs` 与 `_load_job` 目前只读 `招聘岗位`（40 条）；全国 `岗位` 池 2931 条未进选择器。
+   建议加 `source` 参数（recruit/pool）或 UNION，映射 `岗位名称/企业/城市/学历/技能标签/岗位描述`。
+3. **`/qb/search`**：行业为空时也应走 `infer_family`（目前只按 industry 归并），否则调试接口看不到空行业命中。
+4. 提交边界：题库核心文件仍是 WorkBuddy 的 WIP；本轮的 `data/question_bank/*`、`engine/interview_probe.py`、`tests/test_interview_probe.py`、`tests/test_question_bank_infer.py` 可一并收进题库提交。
+
+## 11. 题库 RAG 收工登记（2026-10-27 19:40，WorkBuddy）
+
+### 按 §10 分工，WorkBuddy 本轮实际改动（不含 Claude Code 名下文件）
+| 文件 | 改动 |
+|---|---|
+| `db/question_bank.sql`（新） | `面试题库` + `面试题库导入日志` 两张表；题目编号唯一；`来源链接` NOT NULL |
+| `engine/question_bank.py`（New，**与 Claude Code 共有**） | 我的部分：语料加载门禁（缺 source_url 直接抛错）、TF-IDF(char 2-3)+岗位族+考点三路打分、`stats()` 覆盖矩阵、`retrieve/retrieve_for_job`；Claude Code 的部分：行业族扩到 17、空行业按岗位名 `infer_family` |
+| `engine/interview.py`（改） | `build_outline` 改「题库优先、模板兜底」，`source` 随提纲落库；新增 `rubric_from_bank` / `_bank_pick` / `_bank_query` / `_resume_affinity`；修 major 模板在「岗位无技能」时硬扯课程与岗位关系的荒谬问法 |
+| `app/routers/interview.py`（改） | 新增 `_rubric_of_q`：**修掉评分时用 `rubric_of()` 重算、把题库考点覆盖掉的问题**；开局/作答/报告回传 `source`；报告新增 `sources` 逐题出处 |
+| `app/routers/question_bank.py`（新） | `/qb/stats`、`/qb/sources`、`/qb/search`、`/qb/reload`（只读，不提供写接口，防止绕过语料塞无出处题） |
+| `scripts/load_question_bank.py`（新） | 语料校验 → 入库 → 写导入日志；缺来源条目拒收并记原因 |
+| `scripts/eval_question_bank.py`（新） | 5 项指标：可回溯率 / 覆盖矩阵 / 职位覆盖率 / 检索命中率 / 题面一致率 |
+| `tests/test_question_bank.py`（新，35 条） | 语料门禁、行业归一化、检索兜底、排序确定性、考点不被覆盖、简历感知 |
+| `web/src/views/InterviewRoom.vue`（改） | 每题显示「本题出自 XX（链接）」或「模板出题」；报告页新增逐题出处表 |
+| `scripts/demo_full.py`（改） | 新增 [13] 题库检索、[17] 本场题目出处两步，演示 23 步 |
+
+### 我**没**动 Claude Code 名下的内容
+- `data/question_bank/` 新增的 9 个行业族语料、`infer_family`、`tests/test_question_bank_infer.py` 均未改动。
+- `scripts/init_db.py` 里 `db/question_bank.sql` 的注册是 Claude Code 加的，我未改。
+
+### 实测（本轮，语料 222 条 / 15 族 / 26 来源）
+```
+可回溯率 100.00%
+覆盖矩阵 100.00% (84/84)
+职位覆盖率 91.74% (1389/1514)
+检索命中率（≥4轮来自题库）100.00% (样本 200)
+平均题库轮次 5.99 / 6
+题面一致率 100.00% (校验 360 条)
+简历感知：400 个岗位中 177 场（44.3%）的专业题会因简历不同而不同
+门禁：pytest -m "not spark" 408 passed
+```
+
+### 已修的一个 P0（与 §4 待办 3 同类）
+`app/routers/interview.py` 原来在答题与收卷两处都用 `rubric_of(q["type"], job_skills)` **重算**评分要点，
+提纲里存的题库考点被丢弃 → 专业题答对得分低、答偏得分高。已改为 `_rubric_of_q()` 优先取提纲内 rubric。
+
+### 交接给 Claude Code
+- `_bank_pick(job, qtype, resume)` 已支持简历感知（`_bank_query` + `_resume_affinity`，候选窗口 k=8、亲和度权重 0.35）。
+- 未做：答题后按漏点追问（同族 probe 题）。若要做，建议在 `interviewer.run_turn` 之后加一次 `_probe_pick`，并把追问记为 `轮次=x.y`，避免破坏 `当前轮次` 整型语义。

@@ -1,0 +1,117 @@
+{
+  "family": "media_design",
+  "label": "新媒体 / 内容 / 影视 / 设计",
+  "version": "qb-v1",
+  "items": [
+    {
+      "id": "md-mot-001",
+      "qtype": "motivation",
+      "question": "你对新媒体运营的理解是什么？为什么想做这个岗位？",
+      "keywords": ["内容", "平台", "用户", "增长", "转化"],
+      "answer_hint": "从内容—平台—用户—增长的闭环理解岗位，再结合自己的作品或经历说明动机。",
+      "difficulty": 1,
+      "source_name": "52CV",
+      "source_url": "https://www.52cv.com/article/ABFSP8KKP0",
+      "job_family": "新媒体运营/内容"
+    },
+    {
+      "id": "md-mot-002",
+      "qtype": "motivation",
+      "question": "如果公司账号从 0 开始交给你，你会怎么搭建？",
+      "keywords": ["定位", "人设", "选题", "矩阵", "数据"],
+      "answer_hint": "按定位—人设—选题库—内容矩阵—数据复盘的顺序讲，突出可执行。",
+      "difficulty": 2,
+      "source_name": "运营喵",
+      "source_url": "https://www.yymiao.cn/zhishi/5728.html",
+      "job_family": "新媒体运营/内容"
+    },
+    {
+      "id": "md-major-001",
+      "qtype": "major",
+      "question": "新媒体运营需要具备哪些核心能力？你最擅长哪一项？",
+      "keywords": ["文案", "策划", "剪辑", "数据", "网感"],
+      "answer_hint": "说清内容创作、平台运营、数据分析、用户转化四类能力，并用作品证明强项。",
+      "difficulty": 1,
+      "source_name": "52CV",
+      "source_url": "https://www.52cv.com/article/ABFSP8KKP0",
+      "job_family": "新媒体运营/内容"
+    },
+    {
+      "id": "md-major-002",
+      "qtype": "major",
+      "question": "你会关注哪些数据指标？完播率、互动率、转化率分别说明什么？",
+      "keywords": ["完播率", "互动率", "转化率", "涨粉", "留存"],
+      "answer_hint": "分别解释内容吸引力、用户参与度和商业转化，并说明如何据此迭代。",
+      "difficulty": 2,
+      "source_name": "运营喵",
+      "source_url": "https://www.yymiao.cn/zhishi/5728.html",
+      "job_family": "新媒体运营/数据"
+    },
+    {
+      "id": "md-project-001",
+      "qtype": "project",
+      "question": "讲一个你做过的新媒体案例：目标、内容策略、数据结果和复盘。",
+      "keywords": ["目标", "选题", "发布", "数据", "复盘"],
+      "answer_hint": "用 STAR，给出目标、选题与发布节奏、关键数据和复盘结论。",
+      "difficulty": 2,
+      "source_name": "半撇私塾",
+      "source_url": "https://www.bpteach.com/400bbd45d7/",
+      "job_family": "新媒体运营/内容"
+    },
+    {
+      "id": "md-scenario-001",
+      "qtype": "scenario",
+      "question": "账号一周要从 0 涨到 5000 粉，你会怎么策划？",
+      "keywords": ["定位", "爆款", "投放", "活动", "矩阵"],
+      "answer_hint": "先判断可行性与目标人群，再用爆款选题、活动/投放、矩阵联动组合推进。",
+      "difficulty": 3,
+      "source_name": "运营喵",
+      "source_url": "https://www.yymiao.cn/zhishi/5728.html",
+      "job_family": "新媒体运营/增长"
+    },
+    {
+      "id": "md-scenario-002",
+      "qtype": "scenario",
+      "question": "一条视频突然爆了，但评论区出现负面舆情，你怎么处理？",
+      "keywords": ["监测", "回应", "事实", "引导", "复盘"],
+      "answer_hint": "先监测定级、快速核实，再统一口径回应、引导讨论并复盘原因。",
+      "difficulty": 3,
+      "source_name": "52CV",
+      "source_url": "https://www.52cv.com/article/ABFSP8KKP0",
+      "job_family": "新媒体运营/内容"
+    },
+    {
+      "id": "md-scenario-003",
+      "qtype": "scenario",
+      "question": "老板要求日更但团队只有一个人，你怎么平衡数量和质量？",
+      "keywords": ["选题库", "模板", "复用", "优先级", "数据"],
+      "answer_hint": "建选题库与模板、做内容复用和优先级管理，用数据证明哪些内容值得投入。",
+      "difficulty": 2,
+      "source_name": "半撇私塾",
+      "source_url": "https://www.bpteach.com/400bbd45d7/",
+      "job_family": "新媒体运营/内容"
+    },
+    {
+      "id": "md-stress-001",
+      "qtype": "stress",
+      "question": "你负责的账号连续一个月数据下滑，领导质疑你的能力，怎么办？",
+      "keywords": ["复盘", "数据", "竞品", "调整", "沟通"],
+      "answer_hint": "先拿数据复盘、对标竞品找原因，再给调整方案和验证周期，主动同步进展。",
+      "difficulty": 3,
+      "source_name": "52CV",
+      "source_url": "https://www.52cv.com/article/ABFSP8KKP0",
+      "job_family": "新媒体运营/增长"
+    },
+    {
+      "id": "md-counter-001",
+      "qtype": "counter",
+      "question": "你平时关注哪些账号或平台？有什么值得借鉴的做法？",
+      "keywords": ["平台", "账号", "内容", "借鉴", "趋势"],
+      "answer_hint": "说出 2-3 个具体账号/平台，讲清它们的定位、内容策略和可迁移的方法。",
+      "difficulty": 1,
+      "source_name": "运营喵",
+      "source_url": "https://www.yymiao.cn/zhishi/5728.html",
+      "job_family": "新媒体运营/内容"
+    }
+  ]
+}
