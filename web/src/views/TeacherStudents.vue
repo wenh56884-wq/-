@@ -1,6 +1,7 @@
 <template>
-  <div class="page">
-    <el-card shadow="never" class="filter-bar">
+  <div class="page bento-page">
+    <div class="bento-grid">
+    <el-card shadow="never" class="filter-bar bento-span-4">
       <el-form inline @submit.prevent>
         <el-form-item label="学院">
           <el-select
@@ -76,7 +77,7 @@
       </el-form>
     </el-card>
 
-    <div v-if="overview.career_intent?.total" class="intent-bar">
+    <div v-if="overview.career_intent?.total" class="intent-bar bento-span-4">
       <span class="intent-bar-label">职业目标</span>
       <span
         v-for="item in intentItems"
@@ -91,9 +92,7 @@
       </span>
     </div>
 
-    <el-row :gutter="12">
-      <el-col :span="9">
-        <el-card shadow="never">
+        <el-card shadow="never" class="bento-span-2 list-card">
           <div class="card-title">学生名单（{{ rows.length }} 人 / 全班 {{ classmates }} 人）</div>
           <el-skeleton :rows="6" animated v-if="firstLoading" />
           <template v-else>
@@ -120,10 +119,8 @@
             <el-empty v-if="!listLoading && !rows.length" description="该筛选条件下没有学生" />
           </template>
         </el-card>
-      </el-col>
 
-      <el-col :span="15">
-        <el-card shadow="never">
+        <el-card shadow="never" class="bento-span-2 detail-card">
           <el-empty v-if="!activeNo" description="先在左侧点一名学生，或在顶部输入学号直接查询" />
           <el-skeleton :rows="10" animated v-else-if="detailLoading" />
           <template v-else-if="detail.student_no">
@@ -205,8 +202,7 @@
               :title="`班级整体瞄准的就业方向：${gap.target_direction || '—'}（班级样本 ${gap.sample_cnt ?? '-'} 条浏览），个人匹配度请参考上面的画像与预警`" />
           </template>
         </el-card>
-      </el-col>
-    </el-row>
+    </div>
   </div>
 </template>
 
@@ -431,6 +427,8 @@ async function loadDetail(studentNo) {
       params: { term: term.value }
     })
     detail.value = data || {}
+    // 先撤掉骨架，等详情 DOM（含图表容器）真正渲染后再 init ECharts
+    detailLoading.value = false
     await nextTick()
     renderRadar(detail.value)
     renderTrend(detail.value)
@@ -566,7 +564,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .filter-bar {
-  margin-bottom: 12px;
+  margin-bottom: 0;
+  padding: 16px 18px;
+}
+
+.filter-bar :deep(.el-form-item) {
+  margin-bottom: 10px;
 }
 
 .intent-bar {
@@ -574,12 +577,17 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
-  padding: 8px 12px;
+  margin-bottom: 0;
+  padding: 12px 16px;
   background: var(--qh-surface, #fff);
-  border: 1px solid var(--qh-border, #e5e6eb);
-  border-radius: var(--qh-radius-lg, 8px);
+  border: 1px solid #f4f4f5;
+  border-radius: 16px;
   font-size: 13px;
+  transition: box-shadow 260ms var(--qh-ease);
+}
+
+.intent-bar:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
 }
 
 .intent-bar-label {
