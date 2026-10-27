@@ -3,11 +3,7 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
-
-os.environ.setdefault("AGENT_LLM_DRAFT", "0")  # 引擎级测试不依赖外部 LLM
 
 from agents import interviewer  # noqa: E402
 from engine.interview import (  # noqa: E402
@@ -24,6 +20,16 @@ from engine.interview import (  # noqa: E402
 )
 
 pytestmark = pytest.mark.interview
+
+
+@pytest.fixture(autouse=True)
+def _no_llm_draft(monkeypatch):
+    """引擎级测试不依赖外部 LLM。
+
+    逐条 monkeypatch 而非模块级 ``os.environ.setdefault``：后者会在 import 阶段
+    污染同一 pytest 进程内的其他测试模块（协作文档 §4 待办 1）。
+    """
+    monkeypatch.setenv("AGENT_LLM_DRAFT", "0")
 
 _RESUME = {
     "skills": ["Java", "MySQL", "Spring Boot"], "certs": [{"name": "CET-6", "level": "568"}],

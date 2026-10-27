@@ -1,13 +1,20 @@
-# scripts/_smoke_interview.py — 面试模块端到端冒烟（临时脚本）
+# scripts/demo_interview.py — 面试模块端到端演示（需先启动后端）
+"""模拟面试官端到端演示：登录 → 简历 → 诊断 → 开局 → 多轮作答 → 报告。
+
+前置：后端已启动（默认 http://127.0.0.1:8001，可用环境变量 DEMO_BASE 覆盖）。
+用法：python scripts/demo_interview.py
+"""
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
-sys.path.insert(0, r"D:\qihang")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.sync_recruit import _connect  # noqa: E402
 
-BASE = "http://127.0.0.1:8001"
+BASE = os.getenv("DEMO_BASE", "http://127.0.0.1:8001").rstrip("/")
 
 conn = _connect()
 with conn.cursor() as cur:
