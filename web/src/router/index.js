@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import ShellLayout from '../layout/ShellLayout.vue'
 import ExamNotices from '../views/ExamNotices.vue'
+import InterviewRoom from '../views/InterviewRoom.vue'
 import JobList from '../views/JobList.vue'
 import Login from '../views/Login.vue'
 import StudentHome from '../views/StudentHome.vue'
@@ -29,6 +30,7 @@ const routes = [
     children: [
       { path: '', name: 'student-home', component: StudentHome },
       { path: 'jobs', name: 'student-jobs', component: JobList },
+      { path: 'interview', name: 'student-interview', component: InterviewRoom },
       { path: 'exams', name: 'student-exams', component: ExamNotices }
     ]
   },

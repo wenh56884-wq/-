@@ -138,7 +138,9 @@ const ICONS = {
   // 招考：卷轴/公告形态（纸 + 折角 + 两行正文）
   doc: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4',
   // 岗位：公文包（把手 + 箱体）
-  briefcase: 'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20'
+  briefcase: 'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20',
+  // 面试：麦克风（话筒头 + 支架）
+  mic: 'M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v4M8 22h8'
 }
 
 // 侧栏宽度：规范上限 280px，统一 256px；折叠态 64px
@@ -163,7 +165,8 @@ const MENUS = {
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
-    { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' }
+    { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
+    { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' }
   ]
 }
 
