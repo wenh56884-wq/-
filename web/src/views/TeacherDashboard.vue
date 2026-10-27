@@ -324,7 +324,7 @@
     </el-dialog>
 
     <el-drawer v-model="drawer" :title="`${profile.name || ''}（${profile.student_no || ''}）画像`" size="45%">
-      <div v-loading="profileLoading">
+      <div v-loading="profileLoading" class="drawer-panel">
         <el-empty v-if="!profile.student_no && !profileLoading" description="未加载到画像" />
         <template v-else>
           <el-descriptions :column="2" border size="small">

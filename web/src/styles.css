@@ -145,3 +145,50 @@ p {
     transform: none;
   }
 }
+
+/* ---------- 侧边抽屉（el-drawer）内统一排版 ----------
+   抽屉比页面窄，el-descriptions 的标签列会被挤到一字宽，
+   「学历/专业/年龄」竖排成一字一行、表格还限宽留白。
+   这里统一：标签不折行 + 淡灰底 + 整体圆角铺满；区块标题加品牌色竖条。 */
+.el-drawer .drawer-panel .el-descriptions__body {
+  max-width: none;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.el-drawer .drawer-panel .el-descriptions__label.el-descriptions__cell {
+  width: 1%;
+  white-space: nowrap;
+  background: #fafafa;
+  color: var(--qh-text-sub);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.el-drawer .drawer-panel .el-descriptions__content.el-descriptions__cell {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--qh-text-sub);
+  word-break: break-word;
+}
+
+.el-drawer .drawer-panel .sec-title,
+.el-drawer .drawer-panel .card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--qh-text);
+}
+
+.el-drawer .drawer-panel .sec-title::before,
+.el-drawer .drawer-panel .card-title::before {
+  content: '';
+  flex: 0 0 3px;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: #2563eb;
+}

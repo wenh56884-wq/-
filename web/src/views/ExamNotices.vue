@@ -126,7 +126,7 @@
 
     <!-- 详情抽屉：原文全文 + 官网链接 -->
     <el-drawer v-model="drawer" :title="detail?.title || '公告详情'" size="640px">
-      <div v-if="detail" class="detail">
+      <div v-if="detail" class="detail drawer-panel">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="类型">{{ detail.exam_type_label }}</el-descriptions-item>
           <el-descriptions-item label="地区">{{ detail.region || '—' }}</el-descriptions-item>
@@ -153,7 +153,7 @@
         </div>
 
         <h4 class="sec-title">公告原文</h4>
-        <div class="raw-text">{{ detail.raw_text || '（未抓到正文，请点下方链接查看原文）' }}</div>
+        <div class="raw-text">{{ decodeEntities(detail.raw_text) || '（未抓到正文，请点下方链接查看原文）' }}</div>
 
         <el-button
           v-if="detail.detail_url"
@@ -175,6 +175,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import http from '../api/http'
+import { decodeEntities } from '../utils/text'
 
 const EXAM_TYPE_TAG = { civil: 'danger', institution: 'warning', postgraduate: 'success' }
 

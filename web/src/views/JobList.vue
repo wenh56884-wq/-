@@ -153,7 +153,7 @@
 
     <!-- 详情抽屉：完整 JD + 投递原文链接 -->
     <el-drawer v-model="drawer" :title="detail?.title || '岗位详情'" size="620px">
-      <div v-if="detail" class="detail">
+      <div v-if="detail" class="detail drawer-panel">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="招聘单位">{{ detail.company }}</el-descriptions-item>
           <el-descriptions-item label="行业">{{ detail.industry || '未标注' }}</el-descriptions-item>
@@ -176,7 +176,7 @@
         <p v-else class="missing">该岗位原文未提及可识别的技能关键词。</p>
 
         <h4 class="sec-title">职位介绍</h4>
-        <div class="jd-text">{{ detail.description || '（未抓到职位介绍，请点下方链接查看原文）' }}</div>
+        <div class="jd-text">{{ decodeEntities(detail.description) || '（未抓到职位介绍，请点下方链接查看原文）' }}</div>
 
         <el-button
           v-if="detail.apply_url"
@@ -198,6 +198,7 @@
 import { onMounted, ref } from 'vue'
 
 import http from '../api/http'
+import { decodeEntities } from '../utils/text'
 
 const keyword = ref('')
 const industry = ref('')

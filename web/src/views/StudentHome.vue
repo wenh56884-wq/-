@@ -221,7 +221,7 @@
 
     <!-- 岗位详情抽屉：完整打分 + 建议 + 需要做的 + 该参加的比赛 -->
     <el-drawer v-model="detailOpen" :size="drawerSize" direction="rtl" :with-header="false">
-      <div v-if="active" class="detail-shell">
+      <div v-if="active" class="detail-shell drawer-panel">
         <header class="detail-head">
           <div class="detail-head-text">
             <div class="detail-title" :title="active.title">{{ active.title }}</div>
@@ -328,7 +328,7 @@
 
     <!-- 竞赛通知中心：官方一发布即推送 -->
     <el-drawer v-model="noticeOpen" :size="drawerSize" direction="rtl" :with-header="false">
-      <div class="detail-shell">
+      <div class="detail-shell drawer-panel">
         <header class="detail-head">
           <div class="detail-head-text">
             <div class="detail-title">竞赛通知</div>
