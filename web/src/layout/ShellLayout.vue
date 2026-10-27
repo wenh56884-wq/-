@@ -140,7 +140,9 @@ const ICONS = {
   // 岗位：公文包（把手 + 箱体）
   briefcase: 'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20',
   // 面试：麦克风（话筒头 + 支架）
-  mic: 'M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v4M8 22h8'
+  mic: 'M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v4M8 22h8',
+  // 图谱：三节点连线
+  graph: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 17l3.5-2M17 9.5l-3.5 8M17.5 8 8 17'
 }
 
 // 侧栏宽度：规范上限 280px，统一 256px；折叠态 64px
@@ -160,13 +162,15 @@ const MENUS = {
     { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
     { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' },
     { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
-    { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' }
+    { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
+    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
   ],
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
     { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
-    { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' }
+    { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
+    { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
   ]
 }
 

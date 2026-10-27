@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ShellLayout from '../layout/ShellLayout.vue'
 import ExamNotices from '../views/ExamNotices.vue'
 import InterviewRoom from '../views/InterviewRoom.vue'
+import KgView from '../views/KgView.vue'
 import JobList from '../views/JobList.vue'
 import Login from '../views/Login.vue'
 import StudentHome from '../views/StudentHome.vue'
@@ -20,7 +21,8 @@ const routes = [
       { path: '', name: 'teacher-overview', component: TeacherDashboard },
       { path: 'students', name: 'teacher-students', component: TeacherStudents },
       { path: 'jobs', name: 'teacher-jobs', component: JobList },
-      { path: 'exams', name: 'teacher-exams', component: ExamNotices }
+      { path: 'exams', name: 'teacher-exams', component: ExamNotices },
+      { path: 'kg', name: 'teacher-kg', component: KgView }
     ]
   },
   {
@@ -31,7 +33,8 @@ const routes = [
       { path: '', name: 'student-home', component: StudentHome },
       { path: 'jobs', name: 'student-jobs', component: JobList },
       { path: 'interview', name: 'student-interview', component: InterviewRoom },
-      { path: 'exams', name: 'student-exams', component: ExamNotices }
+      { path: 'exams', name: 'student-exams', component: ExamNotices },
+      { path: 'kg', name: 'student-kg', component: KgView }
     ]
   },
   // 智能助手已改为右下角悬浮抽屉，这里保留旧地址做重定向，避免历史链接白屏
