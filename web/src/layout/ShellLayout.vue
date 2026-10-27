@@ -161,12 +161,14 @@ const MENUS = {
   teacher: [
     { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
     { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' },
+    { path: '/teacher/grades', label: '成绩单', hint: '按学年看全部成绩', icon: 'doc' },
     { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
     { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
     { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
   ],
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
+    { path: '/student/grades', label: '成绩单', hint: '每学年课程成绩', icon: 'doc' },
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
     { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },

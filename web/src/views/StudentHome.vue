@@ -135,6 +135,10 @@
         <div class="card-title" style="margin: 0">快捷入口</div>
       </template>
       <div class="quick-grid">
+        <router-link to="/student/grades" class="quick-item">
+          <span class="quick-name">成绩单</span>
+          <span class="quick-desc">每学年课程成绩</span>
+        </router-link>
         <router-link to="/student/interview" class="quick-item">
           <span class="quick-name">模拟面试</span>
           <span class="quick-desc">简历出题 · 逐题点评</span>

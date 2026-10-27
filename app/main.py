@@ -27,6 +27,7 @@ from app.auth import (
 from app.config import get_settings
 from app.routers import career as career_router
 from app.routers import exam as exam_router
+from app.routers import grades as grades_router
 from app.routers import interview as interview_router
 from app.routers import job as job_router
 from app.routers import kg as kg_router
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
     app.include_router(career_router.router)
+    app.include_router(grades_router.router)
     app.include_router(exam_router.router)
     app.include_router(job_router.router)
     app.include_router(interview_router.router)

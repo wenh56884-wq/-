@@ -270,3 +270,24 @@ cd web; npm run build
 ### 交接给 Claude Code
 - `_bank_pick(job, qtype, resume)` 已支持简历感知（`_bank_query` + `_resume_affinity`，候选窗口 k=8、亲和度权重 0.35）。
 - 未做：答题后按漏点追问（同族 probe 题）。若要做，建议在 `interviewer.run_turn` 之后加一次 `_probe_pick`，并把追问记为 `轮次=x.y`，避免破坏 `当前轮次` 整型语义。
+
+## 11. 成绩单（2026-10-27 19:45，Claude Code）
+
+### 目标
+Web 端学生/教师都能看学生**每一学年、每一学期、每一门课的全部成绩**。
+
+### 实现
+- `engine/grades.py`：纯函数聚合——学年/学期/课程分组；同课多次记录逐条保留；课程汇总取最高分；学期/学年/总汇总给平均分、学分加权均分、学分、课程数、挂科数；缺失不补 0。
+- `app/routers/grades.py`：
+  - `GET /grades/me`（学生，学号只来自 JWT）；
+  - `GET /grades/student/{student_no}`（教师，复用 `tools._fetch_student` 的租户 + 任教范围校验）；
+  - 审计 `grades.view`，越权 403。
+- `web/src/views/GradeReport.vue`：Bento 汇总卡 + 学期均分趋势 + 学年 tabs + 每学期全量成绩表（课程代码/名称/学分/成绩/第几次/重修/状态）。
+- 入口：学生/教师侧栏「成绩单」、学生首页快捷入口、教师学生档案「查看成绩单」。
+- 测试：`tests/test_grades.py` 3 条 + `tests/test_grades_api.py` 4 条；`npm run build` 通过（13.17s）。
+- 截图：`logs/screenshots/09-teacher-grades.png`、`10-student-grades.png`。
+
+### 口径
+- 同一课程同一学期多次记录**逐条展示**（第几次按录入顺序）；
+- 课程汇总取最高分；学期/学年加权均分按学分；
+- 挂科按课程最高分判断（通过重修后不再计挂科）；缺失不出现在任何汇总里补 0。

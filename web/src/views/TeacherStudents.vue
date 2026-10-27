@@ -135,8 +135,11 @@
                   风险分 <count-number :value="activeRow?.risk_score" />
                 </el-tag>
               </div>
-              <div class="detail-source">
-                数据源 {{ detail.source || '-' }} · 画像版本 {{ detail.calc_version || '-' }}
+              <div class="detail-side">
+                <el-button size="small" type="primary" plain @click="openGrades">查看成绩单</el-button>
+                <div class="detail-source">
+                  数据源 {{ detail.source || '-' }} · 画像版本 {{ detail.calc_version || '-' }}
+                </div>
               </div>
             </div>
 
@@ -208,6 +211,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
@@ -246,6 +250,13 @@ const firstLoading = ref(false)
 const detailLoading = ref(false)
 const detail = ref({})
 const activeNo = ref('')
+const router = useRouter()
+
+function openGrades() {
+  const no = detail.value?.student_no
+  if (!no) return
+  router.push({ path: '/teacher/grades', query: { student_no: no } })
+}
 const lastLoadAt = ref(null)
 const autoRefresh = ref(false)
 const radarRef = ref(null)
@@ -633,6 +644,13 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.detail-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .detail-name {

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import ShellLayout from '../layout/ShellLayout.vue'
 import ExamNotices from '../views/ExamNotices.vue'
+import GradeReport from '../views/GradeReport.vue'
 import InterviewRoom from '../views/InterviewRoom.vue'
 import KgView from '../views/KgView.vue'
 import JobList from '../views/JobList.vue'
@@ -20,6 +21,7 @@ const routes = [
     children: [
       { path: '', name: 'teacher-overview', component: TeacherDashboard },
       { path: 'students', name: 'teacher-students', component: TeacherStudents },
+      { path: 'grades', name: 'teacher-grades', component: GradeReport },
       { path: 'jobs', name: 'teacher-jobs', component: JobList },
       { path: 'exams', name: 'teacher-exams', component: ExamNotices },
       { path: 'kg', name: 'teacher-kg', component: KgView }
@@ -31,6 +33,7 @@ const routes = [
     meta: { role: 'student' },
     children: [
       { path: '', name: 'student-home', component: StudentHome },
+      { path: 'grades', name: 'student-grades', component: GradeReport },
       { path: 'jobs', name: 'student-jobs', component: JobList },
       { path: 'interview', name: 'student-interview', component: InterviewRoom },
       { path: 'exams', name: 'student-exams', component: ExamNotices },
