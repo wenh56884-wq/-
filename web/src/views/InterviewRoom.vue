@@ -66,11 +66,11 @@
               <el-button size="small" :loading="diagLoading" @click="runDiagnosis">简历诊断</el-button>
             </div>
           </template>
-          <div class="kv"><span class="k">教育</span>{{ (resume.educations || []).map(e => e['学校'] + '｜' + (e['专业'] || '')).join('；') || '（无）' }}</div>
+          <div class="kv"><span class="k">教育</span>{{ (resume.educations || []).map(e => e.school + '｜' + (e.major || '')).join('；') || '（无）' }}</div>
           <div class="kv"><span class="k">技能</span>{{ (resume.skills || []).join('、') || '（无）' }}</div>
           <div class="kv"><span class="k">证书</span>{{ (resume.certs || []).map(c => c.name + (c.level ? ' ' + c.level : '')).join('、') || '（无）' }}</div>
           <div class="kv"><span class="k">经历</span>
-            <div v-for="(e, i) in resume.experiences || []" :key="i" class="exp-item">{{ e['名称'] }}</div>
+            <div v-for="(e, i) in resume.experiences || []" :key="i" class="exp-item">{{ e.name }}</div>
             <span v-if="!(resume.experiences || []).length">（无）</span>
           </div>
         </el-card>

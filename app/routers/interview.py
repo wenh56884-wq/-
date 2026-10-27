@@ -9,7 +9,7 @@ import json
 import re
 import zipfile
 from datetime import datetime
-from typing import Any
+from typing import Any, Mapping
 
 import pymysql
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -53,6 +53,40 @@ def _one(cur, sql: str, params: tuple) -> dict[str, Any] | None:
 
 
 # ----------------------------------------------------------------
+# 数据契约：MySQL JSON 列 / 评分证据（答题与收卷必须同口径）
+# ----------------------------------------------------------------
+def _json_list(raw: Any) -> list[str]:
+    """把 MySQL JSON 列统一解析成字符串列表。
+
+    pymysql 对 JSON 列（FIELD_TYPE 245）没有转换器，取出来是 str；
+    直接迭代会把 '["数据结构"]' 拆成单字符（曾导致专业题问「你学过[」）。
+    空值 / 坏 JSON 一律返回 []，不编造。
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+    if isinstance(raw, (list, tuple)):
+        return [str(x) for x in raw if str(x).strip()]
+    return []
+
+
+def _evidence(resume: Mapping[str, Any], job_snapshot: Mapping[str, Any] | None) -> list[str]:
+    """防虚构 / 评分共用的证据集：简历原文（或自评）+ 岗位技能 + 经历描述。
+
+    逐题答题与收卷报告必须走同一个函数，否则 evidence_score 口径不同，
+    报告逐题分会与答题时返回、落库的 `面试问答.评分` 对不上。
+    """
+    evidence = [str(resume.get("简历原文") or resume.get("self") or resume.get("自我评价") or "")]
+    evidence += [str(t) for t in (job_snapshot or {}).get("skill_tags") or []]
+    evidence += [str(e.get("desc") or "") for e in resume.get("experiences") or [] if e.get("desc")]
+    return [e for e in evidence if e.strip()]
+
+
+# ----------------------------------------------------------------
 # 简历：载入 / 保存
 # ----------------------------------------------------------------
 def _load_resume(cur, resume_id: int, tenant_id: int) -> dict[str, Any] | None:
@@ -82,10 +116,7 @@ def _load_resume(cur, resume_id: int, tenant_id: int) -> dict[str, Any] | None:
                   for x in r["skills_certs"] if x["type"] != "skill"]
     r["courses"] = []
     for e in r["educations"]:
-        try:
-            r["courses"] += [str(c) for c in (e.get("courses") or [])]
-        except TypeError:
-            pass
+        r["courses"] += _json_list(e.get("courses"))
     return r
 
 
@@ -348,14 +379,12 @@ def interview_answer(sid: int, inp: AnswerIn,
             q = outline[rnd]
             answer = (inp.text or "").strip()[:_MAX_ANSWER] or None
 
-            # 证据 = 简历原文 + 岗位快照（防虚构比对源）
+            # 证据与收卷共用同一口径（防虚构比对源 + 评分 evidence_score）
+            job_snapshot = json.loads(sess["岗位要求快照"] or "null") or {}
             resume = _load_resume(cur, int(sess["简历编号"]), ctx.tenant_id)
-            evidence = [str(resume.get("简历原文") or resume.get("self") or "")]
-            evidence += [str(t) for t in (json.loads(sess["岗位要求快照"] or "null") or {}).get("skill_tags", [])]
-            evidence += [str(e.get("desc") or "") for e in resume.get("experiences") or [] if e.get("desc")]
-            evidence = [e for e in evidence if e.strip()]
+            evidence = _evidence(resume, job_snapshot)
 
-            rubric = rubric_of(q["type"], evidence and (json.loads(sess["岗位要求快照"] or "null") or {}).get("skill_tags", []))
+            rubric = rubric_of(q["type"], job_snapshot.get("skill_tags") or [])
             item = score_answer(answer, rubric, evidence)
             turn = interviewer.run_turn(q["question"], q["type"], answer, item, evidence)
 
@@ -394,11 +423,13 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
         job_snapshot = json.loads(sess["岗位要求快照"] or "null") or {}
         job = {"title": job_snapshot.get("title"), "skill_tags": job_snapshot.get("skill_tags") or [],
                "education": job_snapshot.get("education")}
+        # 与答题时同一证据集，否则报告分会和逐题落库分不一致
+        evidence = _evidence(resume, job_snapshot)
     finally:
         conn.close()
 
     scores = [score_answer(a["学生回答"], rubric_of(str(o["type"]), job.get("skill_tags") or []),
-                           [str(resume.get("简历原文") or "")]) for a, o in zip(answers, outline)]
+                           evidence) for a, o in zip(answers, outline)]
     total = aggregate(scores, outline)
     gaps = gap_list(resume, job, scores, outline)
     items = []

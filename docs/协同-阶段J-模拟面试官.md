@@ -39,10 +39,8 @@
 - ✅ 离线评测 20 条 **5/5 PASS**（18:05）：提纲 20/20、防虚构 20/20、合法引文 17/17、一致性 20/20、差距 16/16。
 - ✅ `tests/test_interview.py` 20 条引擎测试通过（与我的 7 条同跑 27 passed）。
 - ✅ P0-2 部分修复：`_load_resume()` 已用 SQL `AS` 英文别名对齐引擎键（18:12）。
-- ❌ **P0-2 残留：`主修课程` 仍是 JSON 字符串**。pymysql 2.2.8 对 JSON 列（type 245）无转换器，返回 `str`；现写法 `for c in (e.get("courses") or [])` 会逐字符拆开，专业题变成「你学过[」。修法：`json.loads(e.get("courses") or "[]")`。
-  **已在真实库复现**：`面试会话 #5` 的提纲第 2 题原文 =「简历里提到你学过[，请讲讲它和目标岗位的关系。」
-- ❌ **P0-3 未修：`_finish()` 重算分数仍只传 `简历原文`**，比答题时少了 JD 技能标签 + 经历描述，报告逐题分可能与答题时返回/落库的 `面试问答.评分` 不一致。
-  **已在真实库复现**：`面试会话 #5` 落库分数 54.57 / 30.50 / 36.25，报告里却是 54.07 / 25.5 / 35.75。
+- ✅ **P0-2 已修（Claude Code 接管，18:22）**：新增 `_json_list()`，`主修课程` 先 `json.loads` 再取列表；空/坏 JSON → `[]`。真实库复核：`_load_resume()` 的 `courses=[]`，提纲不再出现「你学过[」。
+- ✅ **P0-3 已修（Claude Code 接管，18:22）**：新增 `_evidence()`，答题与收卷共用同一证据集（简历原文/自评 + 岗位技能 + 经历描述）。真实库复核：`面试会话 #5` 重算分 54.57 / 30.5 / 36.25，与落库分逐题一致。
 - ⚠️ `tests/test_interview.py` 在 import 时执行 `os.environ.setdefault("AGENT_LLM_DRAFT","0")`，会污染同一 pytest 进程里的其他测试模块；建议改成 `autouse` fixture + `monkeypatch.setenv`。
 - ⚠️ `tests/test_interview.py` 使用未注册的 `pytest.mark.interview`，pytest 会告警；建议在 `pytest.ini` 注册 marker（共享文件，登记后再改）。
 
@@ -50,16 +48,14 @@
 - ✅ `tests/test_interviewer.py` 7 条离线测试：未答不计分、合法引文一次过、编造引文重试→降级、重试 prompt 带驳回原因、LLM 不可用立即降级、环境开关、报告数字原样引用。
 - ✅ 修 `agents/interviewer.py` 两个缺陷：重试不带 feedback（空转）、`generate_reply()` 返回 `None` 被 `str()` 成 `"None"`（白跑重试）。
 - ✅ 解决测试串扰：我的测试在 `_fake_llm()` 里显式 `monkeypatch.setenv("AGENT_LLM_DRAFT","1")`，与 WorkBuddy 的模块级 `0` 共存。
-- ✅ 与 WorkBuddy 的 20 条测试同跑：**27 passed**（仅剩 marker 告警）。
+- ✅ 与 WorkBuddy 的 20 条测试同跑：**27 passed**（marker 已由 WorkBuddy 注册）。
+- ✅ **18:21 接管 P0 修复**（用户授权，单独提交）：`_json_list()` / `_evidence()` + 前端两处显示字段；新增 `tests/test_interview_router_contract.py` 5 条回归测试。**32 passed**。
 
 ### CodeBuddy
 - ✅ `web/src/views/InterviewRoom.vue` 已产出：简历三路径（粘贴/上传/问卷）、诊断、岗位选择、逐题问答、报告、历史。
 - ✅ `web/src/layout/ShellLayout.vue` 已加「模拟面试」菜单（`/student/interview`）。
 - ✅ **构建阻断已解除**：`web/src/router/index.js:33` 的逗号已于 18:14:45 补上；`npm run build` 于 18:15:12 产出新的 `web/dist/index.html`。
-- ❌ **P1 显示字段漂移（后端 18:12 改英文别名后前端未跟上）**：
-  - 第 69 行 `resume.educations.map(e => e['学校'] ...)` → 现在行里是 `school/major`，页面会显示 `undefined｜`；
-  - 第 73 行 `e['名称']` → 现在行里是 `name`，经历标题会空白。
-  - 修法：`e.school`、`e.major`、`e.name`（`resume.certs` 已经是 `{name, level}`，无需改）。
+- ✅ **P1 显示字段漂移已修（Claude Code 接管，18:22）**：`InterviewRoom.vue` 第 69/73 行改用 `e.school / e.major / e.name`；`npm run build` 通过。
 - ✅ API 契约与后端一致（已逐项核对：start 返回 `session_id/total_rounds/round/question...`；answer 返回 `score/comment/next` 或 `finished/report`；history 用中文键 `编号/状态/总分`）。
 
 ## 4. 接口契约（后端已注册 `/interview`；8000 端口 uvicorn 无 `--reload`，改后端需重启）
@@ -92,14 +88,17 @@
 | 18:16 | Claude Code | 复核 `主修课程` JSON 仍被逐字符拆开（pymysql 无 JSON 转换器）；真实库会话 #5 提纲已出现「你学过[」 | **待修（WorkBuddy）** |
 | 18:17 | Claude Code | 复核 `_finish()` evidence 仍未统一；真实库会话 #5 落库分与报告分全部不一致 | **待修（WorkBuddy）** |
 | 18:15 | CodeBuddy | `npm run build` 成功，`web/dist` 已更新 | 完成 |
-| 18:18 | Claude Code | 发现前端简历展示仍用中文键（`e['学校']/e['名称']`），与后端英文别名漂移 | **待修（CodeBuddy）** |
+| 18:18 | Claude Code | 发现前端简历展示仍用中文键（`e['学校']/e['名称']`），与后端英文别名漂移 | 18:22 已修 |
+| 18:21 | Claude Code | **接管声明**：用户授权，冻结 `app/routers/interview.py`、`web/src/views/InterviewRoom.vue` 至 fix commit 完成；WorkBuddy/CodeBuddy 这两个文件暂停改动 | 完成 |
+| 18:21 | WorkBuddy | 全量 pytest 结束；转做知识图谱，新增 `engine/kg.py`、`app/routers/kg.py`、`scripts/build_kg.py`、`data/kg/`（新 WIP，不属于面试提交） | 进行中 |
+| 18:22 | Claude Code | 修 P0-2/P0-3 + 前端显示字段；新增 5 条路由契约测试；32 passed、eval 5/5、build PASS | 完成，待提交 |
 
 ### 待办队列（按优先级）
-1. **[WorkBuddy]** `_load_resume()` 的 `courses` 用 `json.loads`；`_finish()` 与答题路径共用 `_evidence()`（或直接复用 `面试问答.评分`）。
-2. **[CodeBuddy]** `InterviewRoom.vue` 第 69/73 行改用 `e.school / e.major / e.name`；改完重新 build。
-3. **[WorkBuddy]** `tests/test_interview.py` 的环境变量改为 autouse fixture；在 `pytest.ini` 注册 `interview` marker（共享文件，先登记）。
-4. **[Claude Code]** 等 P0-2/P0-3 修完，补一条 router→engine 数据形状回归测试 + 点评数值校验（铁律 1）。
-5. **[全员]** 全量 `pytest tests\ -q` 排他复跑一次；`scripts/demo_interview.py` 走通后再提交。
+1. **[WorkBuddy]** `tests/test_interview.py` 的环境变量改为 autouse fixture（模块级 `setdefault` 会污染同进程其他测试；我的测试已隔离，但其他模块仍可能中招）。
+2. **[WorkBuddy]** `scripts/demo_interview.py` 头部仍写 `_smoke_interview.py`，且 `sys.path.insert(0, r"D:\qihang")` 写死盘符；演示前改成 `Path(__file__).resolve().parent.parent`。
+3. **[Claude Code]** 点评数值校验（铁律 1）：`verify_comment()` 目前只校验引文，不校验「引擎分被写成别的数字」；下一轮加数值白名单。
+4. **[全员]** 全量 `pytest tests\ -q` 排他复跑一次（WorkBuddy 18:15 那轮已跑完，结论以排他复跑为准）。
+5. **[全员]** 提交纪律：`git add -A` 已在 18:16 的提交里把三方改动混在一起；后续一律按路径 stage，知识图谱 WIP 不得混入面试提交。
 
 ## 6. 验证门禁（每次交付必须贴完整输出）
 
@@ -117,14 +116,16 @@ cd web; npm run build
 .venv\Scripts\python.exe -m pytest tests\ -q
 ```
 
-**当前门禁结果（18:18）**
-- `pytest tests/test_interview.py tests/test_interviewer.py -q` → **27 passed, 1 warning**（warning = 未注册 marker）。
+**当前门禁结果（18:22，P0 修复后）**
+- `pytest tests/test_interview.py tests/test_interviewer.py tests/test_interview_router_contract.py -q` → **32 passed**。
 - `scripts/eval_interview.py` → **5/5 PASS**。
-- `npm run build` → **PASS**（18:15:12 产出新 dist）。
-- 全量回归 → 未跑（等 P0 修完、排他执行）。
+- `npm run build` → **PASS**（18:22:35 产出新 dist，9.98s）。
+- 真实库只读复核：会话 #5 重算分 = 落库分（54.57 / 30.5 / 36.25）；`courses=[]`。
+- 全量回归 → WorkBuddy 18:15 那轮已结束；修复后需排他复跑一次。
 
 ## 7. 已知风险
 
-- 8000 端口仍是 15:02 启动的旧进程（无 `--reload`），`/interview` 要重启才生效；8001 是 18:12 起的新服务，联调以 8001 为准。
-- 面试相关表目前无真实数据；e2e 脚本会写库，跑之前先确认没有别人在重灌/演示。
-- `scripts/demo_interview.py` 头部注释还写着 `_smoke_interview.py`，且 `sys.path.insert` 写死 `D:\qihang`；演示前统一改成 `Path(__file__).resolve().parent.parent`。
+- 8000 端口仍是 15:02 启动的旧进程（无 `--reload`），`/interview` 要重启才生效；8001 临时服务已停止。演示/联调前用新进程启一次。
+- 面试表已有 e2e 数据：6 份简历、5 场会话、21 条问答；e2e 脚本会继续写库，跑之前先确认没有别人在重灌/演示。
+- `scripts/demo_interview.py` 头部注释与写死路径问题仍在（见待办 2），演示前修。
+- WorkBuddy 的知识图谱 WIP（`engine/kg.py`、`app/routers/kg.py`、`scripts/build_kg.py`、`data/kg/`、`app/main.py`）不在本次面试 fix 提交范围内，提交时按路径排除。
