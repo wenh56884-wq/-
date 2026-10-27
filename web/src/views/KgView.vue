@@ -1,21 +1,27 @@
 <template>
-  <div class="page">
-    <el-alert class="trust-bar" type="success" :closable="false" show-icon
+  <div class="page bento-page">
+    <div class="bento-grid">
+    <el-alert class="trust-bar bento-span-4" type="success" :closable="false" show-icon
       title="图谱由真实库表构建：专业—开设→课程—培养→技能 ←要求—岗位；每条边可回溯到库表" />
 
-    <div class="stat-row">
-      <el-card v-for="s in statCards" :key="s.label" shadow="never" class="stat-card">
-        <div class="stat-num">{{ s.value }}</div>
-        <div class="stat-label">{{ s.label }}</div>
-      </el-card>
-      <el-card shadow="never" class="stat-card built">
-        <div class="stat-num" style="font-size: 13px; line-height: 38px">{{ builtAt || '…' }}</div>
-        <div class="stat-label">构建时间</div>
-      </el-card>
-    </div>
+    <el-card
+      v-for="(s, i) in statCards"
+      :key="s.label"
+      shadow="never"
+      class="stat-card"
+      :class="i === 0 || i >= 3 ? 'bento-span-2' : ''"
+    >
+      <div class="stat-num">{{ s.value }}</div>
+      <div class="stat-label">{{ s.label }}</div>
+    </el-card>
 
-    <el-card shadow="never" class="block-card">
-      <template #header><span class="card-title">以技能为中心的邻接子图</span></template>
+    <el-card shadow="never" class="block-card bento-span-2 bento-row-2">
+      <template #header>
+        <div class="head-row">
+          <span class="card-title">以技能为中心的邻接子图</span>
+          <span class="muted">构建于 {{ builtAt || '…' }}</span>
+        </div>
+      </template>
       <div class="ctrl-row">
         <el-select v-model="skill" filterable placeholder="选择技能（按岗位需求量排序）" class="sel">
           <el-option v-for="s in skills" :key="s[0]" :value="s[0]" :label="`${s[0]}（${s[1]} 个岗位）`" />
@@ -55,8 +61,7 @@
       </div>
     </el-card>
 
-    <div class="two-col">
-      <el-card shadow="never" class="block-card">
+      <el-card shadow="never" class="block-card bento-span-2">
         <template #header>
           <span class="card-title">技能 → 岗位（{{ jobsBySkill.total }}）</span>
         </template>
@@ -74,7 +79,7 @@
         </el-table>
       </el-card>
 
-      <el-card shadow="never" class="block-card">
+      <el-card shadow="never" class="block-card bento-span-2">
         <template #header><span class="card-title">专业 → 课程 → 技能（{{ skillsByMajor.total }} 项）</span></template>
         <div v-if="skillsByMajor.skills" class="chain-list">
           <div v-for="s in skillsByMajor.skills" :key="s.skill" class="chain-item">
@@ -84,9 +89,8 @@
           <div v-if="!skillsByMajor.skills.length" class="muted">先在上方选择专业</div>
         </div>
       </el-card>
-    </div>
 
-    <el-card v-if="explain" shadow="never" class="block-card">
+    <el-card v-if="explain" shadow="never" class="block-card bento-span-4">
       <template #header>
         <div class="head-row"><span class="card-title">解释链：{{ explain.major }} → {{ explain.job }}</span>
           <el-tag type="success">{{ explain.summary }}</el-tag>
@@ -106,6 +110,7 @@
       <el-alert v-if="explain.missing.length" type="warning" :closable="false" class="mt8"
         :title="`缺口技能（${explain.missing.length} 项）：${explain.missing.join('、')}`" />
     </el-card>
+    </div>
   </div>
 </template>
 
@@ -207,23 +212,26 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.trust-bar { border-radius: 8px; }
-.block-card { border-radius: 10px; }
+.page { display: block; }
+.trust-bar { border-radius: 16px; margin-bottom: 0; }
 .card-title { font-weight: 600; }
-.stat-row { display: flex; gap: 10px; }
-.stat-card { flex: 1; text-align: center; }
-.stat-num { font-size: 22px; font-weight: 700; }
-.stat-label { font-size: 12px; color: var(--el-text-color-secondary); }
-.built { flex: 1.4; }
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-height: 112px;
+  text-align: center;
+}
+.stat-num { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 12px; color: var(--bento-mute); }
+.muted { color: var(--bento-mute); font-size: 12px; }
 .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sel { width: 280px; }
 .viz-wrap { display: flex; flex-direction: column; align-items: center; }
 .viz { width: 100%; max-width: 720px; color: var(--el-text-color-primary); }
 .viz-legend { display: flex; gap: 16px; font-size: 12px; color: var(--el-text-color-secondary); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
-.two-col { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
-@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } .stat-row { flex-wrap: wrap; } }
 .chain-list { max-height: 320px; overflow: auto; }
 .chain-item { margin: 6px 0; font-size: 13px; }
 .via { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }

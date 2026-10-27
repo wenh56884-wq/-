@@ -180,12 +180,14 @@ cd web; npm run build
 - **岗位库**：4 个指标瓦片 + 全宽筛选卡 + 全宽行业分布 + 全宽列表；查询/分页/详情抽屉逻辑不变。
 - **招考信息**：全部/考公/考编/考研 4 个可点选指标卡（全部=合计）+ 全宽筛选卡 + 全宽公告列表；筛选/分页/详情抽屉逻辑不变。
 - **学生档案**：全宽筛选 + 职业目标条 + 学生名单 2×1 + 画像详情 2×1（雷达/成绩趋势）；顺带修 `loadDetail()` 在骨架未撤时初始化 ECharts 导致图表空白的 bug。
+- **模拟面试**：两个 tab 内各一层 Bento 网格；录入 2×2、当前题 2×2、报告/历史全宽；新增常驻「怎么练」引导卡填充右侧。
+- **知识图谱**：5 个统计卡按 2/1/1 + 2/2 跨列，邻接图 2×2，技能→岗位 / 专业→课程链各 2×1，解释链全宽。
 - **全局 Bento 化**：其他页面的 `el-card` 立即获得 20px 圆角、Bento 阴影与悬停，不必逐页重写。
-- 视觉截图（不入库）：`logs/screenshots/01-login.png`、`02-teacher-dashboard.png`、`03-student-home.png`、`04-student-jobs.png`、`05-student-exams.png`、`06-teacher-students.png`。
+- 视觉截图（不入库）：`logs/screenshots/01-login.png` ~ `08-student-kg.png`（登录/教师看板/学生首页/岗位/招考/学生档案/面试/图谱）。
 - 构建：`npm run build` 通过（15.89s）。
 
 ### Phase 2 分工（防打架）
-- **已完成（Claude Code）**：`JobList.vue`、`ExamNotices.vue`（18:55）、`TeacherStudents.vue`（18:58，构建 8.80s）。
-- **剩余（CodeBuddy）**：`InterviewRoom.vue` / `KgView.vue`——用现有 `.bento-page / .bento-grid / .bento-card / .bento-span-*` 改造；Claude Code 负责验收与共享 CSS 调整。
+- **全部页面完成（Claude Code）**：登录、教师看板、学生档案、学生首页、岗位库、招考信息、模拟面试、知识图谱；最终 `npm run build` 通过（9.50s）。
+- **CodeBuddy 交叉验收**：独立复跑 `npm run build`、抽查 8 张截图、确认无横向溢出/无嵌套 el-card/主按钮非蓝色；发现问题按文件归属登记。
 - 每页改造前先在看板登记；同一文件同一时间只允许一个 owner 改；改完 `npm run build` 并把截图/构建输出贴回本节。
 - 规则：外层 `.bento-page`、内层 `.bento-grid`；大卡 `span-2 row-2`、中卡 `span-2`、小卡 1×1；统一 gap 20；不在 `bento-card` 里再套 `el-card`；主按钮不用 Element 蓝。

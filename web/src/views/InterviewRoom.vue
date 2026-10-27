@@ -1,12 +1,13 @@
 <template>
-  <div class="page">
+  <div class="page bento-page">
     <el-alert class="trust-bar" type="success" :closable="false" show-icon
       title="评分与差距由确定性引擎计算；点评中的「引文」逐字校验，模型不可编造" />
 
     <el-tabs v-model="tab" class="iv-tabs">
       <!-- ============ 简历 ============ -->
       <el-tab-pane label="我的简历" name="resume">
-        <el-card shadow="never" class="block-card">
+        <div class="bento-grid">
+        <el-card shadow="never" class="block-card bento-span-2 bento-row-2">
           <template #header><span class="card-title">录入简历</span></template>
           <el-radio-group v-model="entryMode">
             <el-radio-button value="paste">粘贴文本</el-radio-button>
@@ -45,7 +46,7 @@
           </template>
         </el-card>
 
-        <el-card v-if="parsed" shadow="never" class="block-card">
+        <el-card v-if="parsed" shadow="never" class="block-card bento-span-2">
           <template #header>
             <div class="head-row"><span class="card-title">解析结果（确认后保存）</span>
               <el-button type="primary" size="small" :loading="saving" @click="saveParsed">保存为当前简历</el-button>
@@ -60,7 +61,7 @@
           </div>
         </el-card>
 
-        <el-card v-if="resume" shadow="never" class="block-card">
+        <el-card v-if="resume" shadow="never" class="block-card bento-span-2">
           <template #header>
             <div class="head-row"><span class="card-title">当前简历（v{{ resume['版本号'] }}，{{ resume['来源'] === 'upload' ? '上传' : '自填' }}）</span>
               <el-button size="small" :loading="diagLoading" @click="runDiagnosis">简历诊断</el-button>
@@ -75,7 +76,7 @@
           </div>
         </el-card>
 
-        <el-card v-if="diagnosis" shadow="never" class="block-card">
+        <el-card v-if="diagnosis" shadow="never" class="block-card bento-span-2">
           <template #header><span class="card-title">简历诊断（{{ diagnosis.issues.length }} 个问题）</span></template>
           <div v-for="(iss, i) in diagnosis.issues" :key="i" class="diag-item">
             <el-tag size="small" type="warning">{{ issueLabel(iss.kind) }}</el-tag>
@@ -84,11 +85,22 @@
           </div>
           <div v-if="!diagnosis.issues.length" class="muted">未发现明显问题</div>
         </el-card>
+
+        <el-card shadow="never" class="block-card bento-span-2">
+          <template #header><span class="card-title">怎么练</span></template>
+          <ol class="howto">
+            <li><b>录入简历</b>：粘贴 / 上传 / 问卷任选，解析后确认保存。</li>
+            <li><b>选择岗位</b>：到「面试演练」选目标岗位开局。</li>
+            <li><b>逐题作答</b>：6 轮问答，点评引文逐字校验，最后出报告与差距清单。</li>
+          </ol>
+        </el-card>
+        </div>
       </el-tab-pane>
 
       <!-- ============ 面试 ============ -->
       <el-tab-pane label="面试演练" name="interview">
-        <el-card v-if="!session && !report" shadow="never" class="block-card">
+        <div class="bento-grid">
+        <el-card v-if="!session && !report" shadow="never" class="block-card bento-span-2">
           <template #header><span class="card-title">选择目标岗位开局</span></template>
           <el-select v-model="jobId" filterable placeholder="搜索或选择岗位" class="job-select">
             <el-option v-for="j in jobs" :key="j.id" :value="j.id"
@@ -100,7 +112,7 @@
           <div class="muted mt8">默认 6 轮：动机 → 专业 → 项目 → 情景 → 抗压 → 反问（按简历证据自动裁剪）</div>
         </el-card>
 
-        <el-card v-if="session && !report" shadow="never" class="block-card">
+        <el-card v-if="session && !report" shadow="never" class="block-card bento-span-2 bento-row-2">
           <template #header>
             <div class="head-row">
               <span class="card-title">第 {{ session.round }} / {{ session.total }} 题 · {{ session.label }}</span>
@@ -116,7 +128,7 @@
           </div>
         </el-card>
 
-        <el-card v-if="lastComment && !report" shadow="never" class="block-card">
+        <el-card v-if="lastComment && !report" shadow="never" class="block-card bento-span-2">
           <template #header>
             <div class="head-row"><span class="card-title">上一题点评</span>
               <el-tag size="small" :type="lastComment.version === 'comment-fallback-v1' ? 'info' : 'success'">
@@ -128,7 +140,7 @@
           <div class="comment">{{ lastComment.text }}</div>
         </el-card>
 
-        <el-card v-if="report" shadow="never" class="block-card">
+        <el-card v-if="report" shadow="never" class="block-card bento-span-4">
           <template #header>
             <div class="head-row"><span class="card-title">面试报告</span>
               <el-tag type="danger" effect="dark">总分 {{ report.total }}</el-tag>
@@ -138,7 +150,7 @@
           <pre class="report">{{ report.report }}</pre>
         </el-card>
 
-        <el-card shadow="never" class="block-card">
+        <el-card shadow="never" class="block-card bento-span-4">
           <template #header><span class="card-title">历史场次</span></template>
           <el-table :data="history" size="small" @row-click="openHistory">
             <el-table-column prop="编号" label="场次" width="80" />
@@ -151,6 +163,7 @@
             <el-table-column prop="创建时间" label="时间" width="170" />
           </el-table>
         </el-card>
+        </div>
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -351,9 +364,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.trust-bar { border-radius: 8px; }
-.block-card { border-radius: 10px; }
+.page { display: block; }
+.trust-bar { border-radius: 16px; margin-bottom: 20px; }
 .card-title { font-weight: 600; }
 .mt8 { margin-top: 8px; }
 .ml8 { margin-left: 8px; }
@@ -367,6 +379,8 @@ onMounted(async () => {
 .report { white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.8; margin: 0; }
 .diag-item { margin: 10px 0; font-size: 13px; line-height: 1.6; }
 .rewrite { color: var(--el-color-success); margin-top: 4px; }
+.howto { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); }
+.howto b { color: var(--el-text-color-primary); }
 .job-select { width: 360px; }
-.iv-tabs :deep(.el-tabs__header) { margin-bottom: 12px; }
+.iv-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 </style>
