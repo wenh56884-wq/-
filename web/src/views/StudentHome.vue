@@ -178,6 +178,9 @@
             >+{{ (item.hit_items || []).length + (item.gap_items || []).length - 3 }}</span>
           </div>
           <div class="cell-advice" :title="item.advice || ''">建议：{{ item.advice || '—' }}</div>
+          <div v-if="item.peer_count" class="cell-peer" :title="item.reasons?.potential || ''">
+            同段位 {{ item.peer_count }} 人关注 · 协同 {{ item.cf_score }}
+          </div>
         </div>
       </div>
       <div class="engine-line">
@@ -214,6 +217,10 @@
               <div class="kpi-value small">{{ active.min_gpa ?? '-' }} 分</div>
             </div>
             <div class="kpi">
+              <div class="kpi-label">同伴热度</div>
+              <div class="kpi-value small">{{ active.peer_count ?? '—' }} 人</div>
+            </div>
+            <div class="kpi">
               <div class="kpi-label">岗位方向</div>
               <div class="kpi-value small">{{ active.direction || '-' }}</div>
             </div>
@@ -225,6 +232,16 @@
               <span class="dim-name">{{ DIM_TEXT[key] || key }}</span>
               <span class="dim-bar"><i :style="{ width: `${Math.round(Number(value || 0) * 100)}%` }" /></span>
               <span class="dim-value">{{ fmtScore(value) }}</span>
+            </div>
+          </div>
+
+          <div v-if="active.reasons" class="sec-title">三段式理由（内容 / 课程链 / 同伴证据）</div>
+          <div v-if="active.reasons" class="reason-block">
+            <div class="reason-row"><span class="rk">内容匹配</span><span>{{ active.reasons.knowledge }}</span></div>
+            <div class="reason-row"><span class="rk">课程链</span><span>{{ active.reasons.skill }}</span></div>
+            <div class="reason-row"><span class="rk">同伴证据</span><span>{{ active.reasons.potential }}</span></div>
+            <div v-if="active.cf_score != null" class="reason-row">
+              <span class="rk">协同权重</span><span>{{ active.cf_score }}（召回B，0.7×内容 + 0.3×协同）</span>
             </div>
           </div>
 
@@ -827,6 +844,16 @@ onBeforeUnmount(() => {
   cursor: help;
 }
 
+.cell-peer {
+  font-size: 11px;
+  color: var(--el-color-success);
+  margin-top: 2px;
+}
+.reason-block { font-size: 13px; line-height: 1.7; }
+.reason-row { display: flex; gap: 8px; margin: 4px 0; }
+.reason-row .rk {
+  flex: none; width: 64px; color: var(--el-text-color-secondary); font-size: 12px;
+}
 .cell-advice {
   font-size: 12px;
   color: var(--qh-text-sub);

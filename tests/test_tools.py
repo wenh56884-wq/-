@@ -16,7 +16,7 @@ import pytest  # noqa: E402
 
 from agents import tools  # noqa: E402
 from agents.tools import ToolContext  # noqa: E402
-from engine import recommend  # noqa: E402
+from engine import hybrid, recommend  # noqa: E402
 
 TERM = "2025-2026-2"
 TENANT_A = 1
@@ -340,7 +340,8 @@ def test_student_only_sees_self(audit_sink):
     recs = tools.my_recommendations(ctx, TERM, top_n=3)
     assert recs["student_no"] == str(row["student_no"])
     # P9 已实现：不再是占位结构，返回真实推荐且每条字段齐全
-    assert recs["recommend_version"] == recommend.RECOMMEND_ENGINE_VERSION
+    # 二期C：工具层已切到 engine.hybrid，版本随混合引擎走
+    assert recs["recommend_version"] == hybrid.HYBRID_ENGINE_VERSION
     assert isinstance(recs["items"], list)
     for item in recs["items"]:
         assert set(("job_id", "title", "company", "final_score",

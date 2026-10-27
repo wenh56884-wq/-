@@ -1138,14 +1138,23 @@ def my_recommendations(ctx: ToolContext, term: str | None = None,
 
 
 def _hybrid_reasons(item: Mapping[str, Any], cf_active: bool) -> dict[str, str]:
-    """三段式理由（全部来自引擎字段，无模型参与）。"""
+    """三段式理由（全部来自引擎字段，无模型参与）。
+
+    成绩门槛是内容召回的 gpa_fit 维度，与课程/技能缺口不是一个口径：
+    engine.recommend 把两者都塞进了 gap_items，这里按前缀拆开——
+    成绩类归 knowledge（内容匹配），课程技能类才归 skill（KG 课程链）。
+    """
     hits = [str(x) for x in (item.get("hit_items") or [])]
+    gaps = [str(x) for x in (item.get("gap_items") or [])]
+    gpa_gaps = [g for g in gaps if g.startswith("成绩")]
+    skill_gaps = [g for g in gaps if not g.startswith("成绩")]
+    if gpa_gaps:
+        hits = hits + gpa_gaps[:1]
     knowledge = "；".join(hits[:3]) if hits else "内容匹配分来自专业方向与成绩门槛"
     kgx = item.get("kg_explain") or {}
     skill = str(kgx.get("summary") or "") if kgx else ""
     if not skill:
-        gaps = [str(x) for x in (item.get("gap_items") or [])]
-        skill = "需补：" + "、".join(gaps[:3]) if gaps else "技能匹配良好"
+        skill = "需补：" + "、".join(skill_gaps[:3]) if skill_gaps else "技能匹配良好"
     peers = item.get("peer_count")
     if peers:
         potential = f"{peers} 位同专业同成绩段同学关注过该岗位（协同权重 {item.get('cf_score')}）"
