@@ -1,9 +1,10 @@
 <template>
-  <div class="page">
-    <el-alert class="trust-bar" type="success" :closable="false" show-icon
+  <div class="page bento-page">
+    <div class="bento-grid">
+    <el-alert class="trust-bar bento-span-4" type="success" :closable="false" show-icon
       title="所有数值来自确定性引擎，经 Critic 审核通过" />
 
-    <div class="live-bar">
+    <div class="live-bar bento-span-4">
       <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
       <el-switch v-model="autoRefresh" size="small" active-text="30 秒自动刷新" />
       <el-button size="small" :loading="warningLoading || recLoading" @click="reloadAll">立即刷新</el-button>
@@ -24,7 +25,7 @@
       <span class="live-tip">不想问？点右下角 AI 小人直接提问</span>
     </div>
 
-    <el-card v-loading="guideLoading" shadow="never" class="guide-card">
+    <el-card v-loading="guideLoading" shadow="never" class="guide-card bento-span-2 bento-row-2">
       <template #header>
         <div class="guide-head">
           <span class="card-title" style="margin: 0">生涯规划</span>
@@ -90,7 +91,7 @@
       </template>
     </el-card>
 
-    <el-card v-loading="warningLoading" shadow="never" class="info-card">
+    <el-card v-loading="warningLoading" shadow="never" class="info-card bento-span-2">
       <div class="card-title">本人信息</div>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="学号">{{ warning.student_no || '-' }}</el-descriptions-item>
@@ -129,7 +130,31 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="rec-card">
+    <el-card shadow="never" class="quick-card bento-span-2">
+      <template #header>
+        <div class="card-title" style="margin: 0">快捷入口</div>
+      </template>
+      <div class="quick-grid">
+        <router-link to="/student/interview" class="quick-item">
+          <span class="quick-name">模拟面试</span>
+          <span class="quick-desc">简历出题 · 逐题点评</span>
+        </router-link>
+        <router-link to="/student/jobs" class="quick-item">
+          <span class="quick-name">岗位库</span>
+          <span class="quick-desc">按方向筛选岗位</span>
+        </router-link>
+        <router-link to="/student/exams" class="quick-item">
+          <span class="quick-name">招考信息</span>
+          <span class="quick-desc">考公 / 考编 / 考研</span>
+        </router-link>
+        <router-link to="/student/kg" class="quick-item">
+          <span class="quick-name">知识图谱</span>
+          <span class="quick-desc">专业—课程—岗位</span>
+        </router-link>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="rec-card bento-span-4">
       <template #header>
         <div class="rec-head">
           <span class="card-title" style="margin: 0">岗位推荐</span>
@@ -188,6 +213,7 @@
         <span v-if="recs.note" class="err">{{ recs.note }}</span>
       </div>
     </el-card>
+    </div>
 
     <!-- 岗位详情抽屉：完整打分 + 建议 + 需要做的 + 该参加的比赛 -->
     <el-drawer v-model="detailOpen" :size="drawerSize" direction="rtl" :with-header="false">
@@ -568,7 +594,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .trust-bar {
-  margin-bottom: 12px;
+  margin-bottom: 0;
   font-weight: 600;
 }
 
@@ -576,22 +602,64 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   font-size: 12px;
   color: #86909c;
   background: #fff;
-  border: 1px solid #e5e6eb;
-  border-radius: 6px;
-  padding: 6px 12px;
+  border: 1px solid #f4f4f5;
+  border-radius: 14px;
+  padding: 8px 14px;
 }
 
 .live-tip {
   margin-left: auto;
 }
 
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid #f4f4f5;
+  border-radius: 16px;
+  background: #fafafa;
+  text-decoration: none;
+  transition:
+    transform 220ms var(--qh-ease),
+    background-color 220ms var(--qh-ease),
+    color 220ms var(--qh-ease);
+}
+
+.quick-item:hover {
+  transform: translateY(-2px);
+  background: #18181b;
+  color: #fff;
+}
+
+.quick-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quick-desc {
+  font-size: 12px;
+  color: #71717a;
+}
+
+.quick-item:hover .quick-desc {
+  color: rgba(255, 255, 255, 0.76);
+}
+
 .guide-card,
-.info-card {
-  margin-bottom: 12px;
+.info-card,
+.rec-card {
+  margin-bottom: 0;
 }
 
 .guide-head {

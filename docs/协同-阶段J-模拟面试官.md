@@ -170,11 +170,12 @@ cd web; npm run build
 ### 已完成（Phase 1）
 - **登录页**：2×2 品牌渐变卡 + 2×2 登录卡 + 4 个 1×1 能力卡；演示账号更新为 `T001 / teacher@123`、`AI20230001 / AI20230001`。
 - **教师看板**：全宽筛选卡 + 4 个指标瓦片 + 2×2 班级概貌（风险分段条/图例/快捷入口）+ 2×1 图表 + 2×1 高风险 Top5 + 全宽职业目标分布 + 全宽预警名单（新增归因摘要列）。
+- **学生首页**：生涯规划 2×2 大卡 + 本人信息卡 + 快捷入口（面试/岗位/招考/图谱）+ 全宽岗位推荐；原业务逻辑与混合推荐字段不动。
 - **全局 Bento 化**：其他页面的 `el-card` 立即获得 20px 圆角、Bento 阴影与悬停，不必逐页重写。
 - 视觉截图（不入库）：`logs/screenshots/01-login.png`、`02-teacher-dashboard.png`、`03-student-home.png`。
 - 构建：`npm run build` 通过（15.89s）。
 
 ### Phase 2 分工（防打架）
-- `web/src/views/StudentHome.vue`：CodeBuddy 当前 WIP（混合推荐 +27 行）——**等它提交后**由 Claude Code 按 `bento.css` 重构；期间 CodeBuddy 不要再改这个文件。
 - `TeacherStudents.vue` / `JobList.vue` / `ExamNotices.vue` / `InterviewRoom.vue` / `KgView.vue`：优先 CodeBuddy 用现有 `.bento-page / .bento-grid / .bento-card / .bento-span-*` 改造；Claude Code 负责验收与共享 CSS 调整。
+- 每页改造前先在看板登记；同一文件同一时间只允许一个 owner 改；改完 `npm run build` 并把截图/构建输出贴回本节。
 - 规则：外层 `.bento-page`、内层 `.bento-grid`；大卡 `span-2 row-2`、中卡 `span-2`、小卡 1×1；统一 gap 20；不在 `bento-card` 里再套 `el-card`；主按钮不用 Element 蓝。
