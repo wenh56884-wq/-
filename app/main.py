@@ -26,14 +26,17 @@ from app.auth import (
 )
 from app.config import get_settings
 from app.routers import career as career_router
+from app.routers import chat as chat_router
 from app.routers import exam as exam_router
 from app.routers import grades as grades_router
 from app.routers import interview as interview_router
 from app.routers import job as job_router
+from app.routers import kb as kb_router
 from app.routers import kg as kg_router
 from app.routers import question_bank as qb_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
+from app.routers import workflow as workflow_router
 from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
 
 APP_TITLE = "启航 · 学业预警与职业发展助手 API"
@@ -65,28 +68,31 @@ def _check_duckdb() -> str:
         return "down"
 
 
-def _run_chat(ctx: ToolContext, body: ChatIn) -> tuple[str, bool]:
-    """调 LangGraph 对话入口；图未就绪或异常时降级成无数值话术（degraded=True）。"""
-    term = body.term
+def _run_chat(ctx: ToolContext, body: ChatIn) -> dict:
+    """跑一次对话，返回完整结果（answer / degraded / session_id / citations）。
+
+    优先走 chat_service（会落库、带多轮记忆）；落库层不可用时退回纯图调用，
+    回答照常给，只是这一轮不留痕——不因为存储问题让用户拿不到答案。
+    """
+    try:
+        from app import chat_service
+
+        return chat_service.handle(ctx, body.query, body.term, body.session_id, body.history)
+    except Exception:
+        pass
     try:
         from agents.graph import run_chat  # 延迟导入：P7 接入后即生效
     except Exception:
-        return ("智能体编排尚未启用，暂无法回答该问题。"
-                "你可以先查看「预警列表」与「个人画像」中的结构化数据。", True)
+        return {"answer": "智能体编排尚未启用，暂无法回答该问题。"
+                          "你可以先查看「预警列表」与「个人画像」中的结构化数据。",
+                "degraded": True, "session_id": None, "tool_name": "", "citations": []}
     try:
-        result = run_chat(ctx, body.query, term=term,
-                          history=[{"role": turn.role, "text": turn.text}
-                                   for turn in (body.history or [])])
-    except NotImplementedError:
-        return ("智能体编排尚未启用，暂无法回答该问题。"
-                "你可以先查看「预警列表」与「个人画像」中的结构化数据。", True)
+        return run_chat(ctx, body.query, term=body.term,
+                        history=[{"role": turn.role, "text": turn.text}
+                                 for turn in (body.history or [])])
     except Exception:
-        return "智能体处理失败，已降级为安全话术（不提供任何未经核对的数值）。", True
-    answer = str((result or {}).get("answer") or "").strip()
-    degraded = bool((result or {}).get("degraded"))
-    if not answer:
-        return "未得到可用答复，已降级为安全话术。", True
-    return answer, degraded
+        return {"answer": "智能体处理失败，已降级为安全话术（不提供任何未经核对的数值）。",
+                "degraded": True, "session_id": None, "tool_name": "", "citations": []}
 
 
 def create_app() -> FastAPI:
@@ -112,6 +118,9 @@ def create_app() -> FastAPI:
     app.include_router(interview_router.router)
     app.include_router(kg_router.router)
     app.include_router(qb_router.router)
+    app.include_router(kb_router.router)
+    app.include_router(chat_router.router)
+    app.include_router(workflow_router.router)
 
     @app.middleware("http")
     async def audit_middleware(request: Request, call_next):
@@ -203,14 +212,23 @@ def create_app() -> FastAPI:
         身份只从 get_current_ctx 取（已校验角色与租户），不再手工解析 claims。
         """
         trace_id = uuid.uuid4().hex[:12]
-        answer, degraded = _run_chat(ctx, body)
+        result = _run_chat(ctx, body)
+        answer = str(result.get("answer") or "").strip()
+        degraded = bool(result.get("degraded"))
+        if not answer:
+            answer, degraded = "未得到可用答复，已降级为安全话术。", True
         audit_event(actor_type=ctx.actor_type,
                     actor_id=ctx.student_id or ctx.teacher_id or 0,
                     action="api.chat", target=trace_id,
                     detail={"query": body.query[:120], "term": body.term,
+                            "session_id": result.get("session_id"),
+                            "tool": result.get("tool_name"),
+                            "citations": len(result.get("citations") or []),
                             "degraded": degraded})
         return ChatOut(answer=answer, trace_id=trace_id, term=body.term,
-                       degraded=degraded)
+                       degraded=degraded, session_id=result.get("session_id"),
+                       tool=str(result.get("tool_name") or ""),
+                       citations=list(result.get("citations") or []))
 
     # --- 静态托管（P10-3）：构建产物存在才挂，已注册路由与 /api 不受影响 ---
     dist = get_settings().frontend_dist_obj

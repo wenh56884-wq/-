@@ -28,6 +28,7 @@ _MYSQL_SQL_FILES = (
     _ROOT / "db" / "recruit_tables.sql",
     _ROOT / "db" / "interview_tables.sql",
     _ROOT / "db" / "question_bank.sql",
+    _ROOT / "db" / "rag_tables.sql",
 )
 _DUCKDB_SQL = _ROOT / "db" / "duckdb_schema.sql"
 

@@ -17,6 +17,9 @@ import pymysql
 from agents.career import context as career_context
 from app.config import Settings, get_settings
 from engine import career_guide, competition, hybrid, job_search, profile, recommend, warning
+from engine import kb_store, rag
+from engine import web_search as web_engine
+from engine import workflow as workflow_engine
 from engine.career_rules import CAREER_ENGINE_VERSION
 from engine.rules import LEVELS
 from engine.store import DuckDBStore
@@ -1458,3 +1461,103 @@ STUDENT_TOOLS: tuple[str, ...] = (
     "my_warning", "my_recommendations", "job_search",
     "career_guide", "save_career_intent",
 )
+
+
+# ----------------------------------------------------------------
+# 知识库（RAG）与联网搜索：两类「外部事实」入口
+# ----------------------------------------------------------------
+def kb_search(ctx: ToolContext, query: str = "", top_k: int = 4,
+              doc_id: int | None = None) -> dict[str, Any]:
+    """在企业知识库里检索企业制度/流程/FAQ，返回块级命中（带文档名与页码）。
+
+    查不到就返回空 hits，并在 note 里说明——绝不用模型记忆补一段「知识库内容」。
+    """
+    ctx = _check_ctx(ctx)
+    q = str(query or "").strip()
+    if not q:
+        return {"query": q, "total": 0, "hits": [], "citations": [],
+                "engine_version": rag.RAG_VERSION, "note": "查询为空"}
+    try:
+        conn = _connect()
+    except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
+        print(f"[tools] MySQL 连接失败：{exc}", file=sys.stderr)
+        return {"query": q, "total": 0, "hits": [], "citations": [],
+                "engine_version": rag.RAG_VERSION, "note": "知识库暂时不可用"}
+    try:
+        hits = kb_store.search(conn, ctx.tenant_id, q,
+                               top_k=max(1, min(int(top_k or 4), 10)), doc_id=doc_id)
+    except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
+        print(f"[tools] 知识库检索失败：{exc}", file=sys.stderr)
+        return {"query": q, "total": 0, "hits": [], "citations": [],
+                "engine_version": rag.RAG_VERSION, "note": "知识库暂时不可用"}
+    finally:
+        conn.close()
+    _audit_call(ctx, "tool.kb_search", "kb", {"query": q[:80], "hits": len(hits)})
+    return {"query": q, "total": len(hits), "hits": hits,
+            "citations": rag.as_citations(hits), "engine_version": rag.RAG_VERSION,
+            "note": "" if hits else "知识库里没有检索到相关内容"}
+
+
+def web_search(ctx: ToolContext, query: str = "", top_k: int = 5) -> dict[str, Any]:
+    """联网搜索（需配置 SERPER_API_KEY / BING_SEARCH_KEY）。
+
+    未配置时 configured=False + 明确原因：宁可说「没有联网能力」，也不编搜索结果。
+    """
+    ctx = _check_ctx(ctx)
+    res = web_engine.search(query, top_k=max(1, min(int(top_k or 5), 10)))
+    res["citations"] = web_engine.as_citations(res.get("results") or [])
+    _audit_call(ctx, "tool.web_search", "web",
+                {"query": str(query or "")[:80], "configured": res.get("configured"),
+                 "results": len(res.get("results") or [])})
+    return res
+
+
+def run_workflow(ctx: ToolContext, name: str = "", inputs: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """按名称执行本租户的工作流；不带名称时只列出可用流程（不执行）。
+
+    执行用的是调用者自己的 ctx，所以学生跑「我的求职体检」只会拿到自己的数据，
+    即便这个工作流是教师定义的。
+    """
+    ctx = _check_ctx(ctx)
+    rows = _query("SELECT `编号`,`名称`,`描述`,`步骤` FROM `工作流定义`"
+                  " WHERE `租户编号`=%s AND `是否启用`=1 ORDER BY `编号`", (ctx.tenant_id,))
+    if not rows:
+        return {"mode": "workflow", "status": "empty", "available": [],
+                "summary": "当前没有可用的工作流。教师可以先在「工作流」里定义一个。"}
+    if not str(name or "").strip():
+        items = [{"id": int(r["编号"]), "name": r["名称"], "description": r.get("描述")}
+                 for r in rows]
+        return {"mode": "workflow", "status": "list", "available": items,
+                "summary": "可用工作流：" + "、".join(i["name"] for i in items)}
+
+    target = None
+    for r in rows:                       # 全等优先，其次包含，保持确定性
+        if str(r["名称"]) == str(name).strip():
+            target = r
+            break
+    if target is None:
+        for r in rows:
+            if str(name).strip() in str(r["名称"]):
+                target = r
+                break
+    if target is None:
+        return {"mode": "workflow", "status": "not_found", "available": [],
+                "summary": f"没有找到名为「{name}」的工作流。"}
+
+    steps = []
+    try:
+        raw = target["步骤"]
+        steps = json.loads(raw) if isinstance(raw, str) else list(raw or [])
+    except (TypeError, ValueError):
+        steps = []
+    try:
+        result = workflow_engine.run_default(steps, ctx)
+    except workflow_engine.WorkflowError as exc:
+        return {"mode": "workflow", "status": "invalid", "summary": f"工作流定义有问题：{exc}"}
+    _audit_call(ctx, "tool.run_workflow", str(target["编号"]),
+                {"name": target["名称"], "status": result["status"],
+                 "steps": len(result.get("steps") or [])})
+    return {"mode": "workflow", "status": result["status"], "name": target["名称"],
+            "steps": result["steps"], "outputs": result.get("outputs") or {},
+            "sources": [], "engine_version": result["engine_version"],
+            "summary": workflow_engine.render_summary(result)}

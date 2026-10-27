@@ -450,6 +450,22 @@ def retrieve_for_job(job: Mapping[str, Any] | None, qtype: str, k: int = 2,
     return _retrieve_family(infer_family(job), query, qtype, k=k, bank_dir=bank_dir)
 
 
+def get_item(item_id: str, bank_dir: Path | str = BANK_DIR) -> dict[str, Any] | None:
+    """按编号取一条题目（追问链路要用它的考点做评分口径）。
+
+    取不到返回 None —— 追问侧据此放弃本次追问，绝不拿空考点硬评。
+    走 _bank_index 的进程级缓存，不重复读盘。
+    """
+    target = str(item_id or "").strip()
+    if not target:
+        return None
+    items, _ = _bank_index(str(bank_dir))
+    for it in items:
+        if it.id == target:
+            return it.as_dict()
+    return None
+
+
 # ----------------------------------------------------------------
 # 统计（给 /qb/stats 与评测脚本用）
 # ----------------------------------------------------------------

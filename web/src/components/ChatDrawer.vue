@@ -18,6 +18,10 @@
             <div class="chat-sub">LangGraph 多智能体 · 数值经 Critic 回查</div>
           </div>
         </div>
+        <button class="icon-btn" type="button" aria-label="新对话" title="新对话"
+          :disabled="!messages.length" @click="newSession">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
         <button class="icon-btn" type="button" aria-label="关闭助手" @click="close">
           <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
@@ -45,7 +49,18 @@
           <div class="avatar">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
           <div class="bubble">
             <div class="bubble-text">{{ msg.text }}</div>
+            <div v-if="msg.citations && msg.citations.length" class="cite-list">
+              <div class="cite-title">引用（点开可核对原文）</div>
+              <div v-for="c in msg.citations" :key="c.no" class="cite-item">
+                <span class="cite-no">[{{ c.no }}]</span>
+                <a v-if="c.url" :href="c.url" target="_blank" rel="noopener">{{ c.title }}</a>
+                <span v-else class="cite-doc">{{ c.title }}</span>
+                <span v-if="c.page" class="cite-pos">第 {{ c.page }} 页</span>
+                <span v-else-if="c.chunk_no" class="cite-pos">第 {{ c.chunk_no }} 段</span>
+              </div>
+            </div>
             <div v-if="msg.role === 'assistant'" class="bubble-foot">
+              <span v-if="msg.tool" class="chip">{{ msg.tool }}</span>
               <span class="chip">trace {{ msg.trace_id }}</span>
               <span class="chip">{{ msg.term }}</span>
               <span class="chip">{{ msg.cost }} ms</span>
@@ -118,12 +133,16 @@ const EXAMPLES = {
     '有哪些班级可以看？',
     'RJ2201 班有哪些红色预警学生？',
     '给我班级的整体学业情况',
-    '班级学生的岗位兴趣和需求差距在哪？'
+    '班级学生的岗位兴趣和需求差距在哪？',
+    '公司制度里报销的住宿标准是多少？',
+    '帮我跑一遍班级周报'
   ],
   student: [
     '我这学期的学业预警情况怎么样？',
     '有哪些岗位适合我？为什么？',
-    '我和目标岗位之间差哪些能力？'
+    '我和目标岗位之间差哪些能力？',
+    '报销的住宿标准是多少？',
+    '跑一遍求职体检'
   ]
 }
 
@@ -148,11 +167,17 @@ const term = ref('2025-2026-2')
 const query = ref('')
 const sending = ref(false)
 const messages = ref([])
+const sessionId = ref(null)   // 后端会话：关掉抽屉再打开还能接着聊
 const listRef = ref(null)
 let seq = 0
 
 function close() {
   visible.value = false
+}
+
+function newSession() {
+  sessionId.value = null
+  messages.value = []
 }
 
 function push(roleName, text, extra = {}) {
@@ -184,12 +209,16 @@ async function send(text) {
     const { data } = await http.post('/chat', {
       query: content,
       term: term.value || null,
+      session_id: sessionId.value,
       history
     })
+    if (data?.session_id) sessionId.value = data.session_id
     push('assistant', data?.answer || '（本次没有返回内容）', {
       trace_id: data?.trace_id || '-',
       term: data?.term || term.value,
       degraded: Boolean(data?.degraded),
+      tool: data?.tool || '',
+      citations: data?.citations || [],
       cost: Math.round(performance.now() - started)
     })
   } catch (err) {
@@ -210,7 +239,7 @@ async function send(text) {
 }
 
 function clearChat() {
-  messages.value = []
+  newSession()
 }
 </script>
 
@@ -403,6 +432,21 @@ function clearChat() {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+.cite-list {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 2px solid #bfdbfe;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+.cite-title { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+.cite-item { font-size: 12px; color: #334155; line-height: 1.7; }
+.cite-no { color: #2563eb; margin-right: 4px; }
+.cite-doc { font-weight: 600; }
+.cite-pos { color: #64748b; margin-left: 6px; }
+.cite-item a { color: #2563eb; text-decoration: none; }
+.cite-item a:hover { text-decoration: underline; }
 
 .chip {
   padding: 1px 6px;

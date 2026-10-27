@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import zipfile
 from datetime import datetime
@@ -19,6 +20,7 @@ from agents import interviewer
 from app.audit import audit_event
 from app.auth import require_student
 from app.config import get_settings
+from engine import question_bank as qbank
 from engine.interview import (
     INTERVIEW_ENGINE_VERSION,
     QUESTION_TYPES,
@@ -28,9 +30,11 @@ from engine.interview import (
     gap_list,
     parse_resume,
     parse_resume as parse_resume_engine,
+    rubric_from_bank,
     rubric_of,
     score_answer,
 )
+from engine.interview_probe import probe_plan
 from engine.recommend import clean_skill_tags
 from agents.tools import ToolContext
 
@@ -40,6 +44,16 @@ QUESTION_LABELS = {k: v["label"] for k, v in QUESTION_TYPES.items()}
 
 # 提纲之外允许的上下文长度（回答与证据传给模型前截断，防 prompt 爆炸）
 _MAX_ANSWER = 2000
+
+# 岗位池：national=全国岗位库（岗位表，2931 条，无租户）；tenant=租户在招池（招聘岗位表）
+_JOB_POOLS = ("national", "tenant")
+# 追问预算：一场面试最多追加几道追问（不含在开局的 max_rounds 里）
+_PROBE_MAX = max(0, int(os.getenv("INTERVIEW_PROBE_MAX", "2")))
+
+
+def _probe_enabled() -> bool:
+    """追问总开关（与 engine.interview_probe.enabled 同一环境变量）。"""
+    return str(os.getenv("INTERVIEW_PROBE", "1")).strip().lower() not in ("0", "false", "off", "no")
 
 
 def _conn() -> pymysql.connections.Connection:
@@ -268,43 +282,123 @@ def resume_me(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
 # ----------------------------------------------------------------
 # 简历诊断（独立入口）与岗位候选
 # ----------------------------------------------------------------
-def _load_job(cur, job_id: int) -> dict[str, Any] | None:
-    j = _one(cur, "SELECT `编号` AS id,`岗位名称` AS title,`招聘单位` AS company,`城市` AS city,"
-                  "`学历要求` AS education,`经验要求` AS experience,`技能标签` AS skill_tags,"
-                  "`职位描述` AS description,`投递链接` AS url"
-                  " FROM `招聘岗位` WHERE `编号`=%s", (job_id,))
-    if not j:
-        return None
-    j["skill_tags"] = clean_skill_tags(j.get("skill_tags"))
-    return j
+def _load_job(cur, job_id: int, pool: str | None = None) -> dict[str, Any] | None:
+    """按池取岗位。
+
+    - national：全国岗位库（`岗位` 表，2931 条，无租户维度，字段最全）
+    - tenant：租户在招池（`招聘岗位` 表，含投递链接与状态）
+    - pool=None：先全国后租户（与岗位选择器的默认池一致）
+
+    两张表的 `编号` 各自独立、会撞号，所以池必须显式传；这里不做「猜池」。
+    """
+    order = [pool] if pool in _JOB_POOLS else ["national", "tenant"]
+    for p in order:
+        if p == "national":
+            j = _one(cur, "SELECT `编号` AS id,`岗位名称` AS title,`企业` AS company,"
+                          "`行业` AS industry,`城市` AS city,`学历` AS education,"
+                          "`技能标签` AS skill_tags,`岗位描述` AS description,"
+                          "`最低薪资` AS salary_min,`最高薪资` AS salary_max"
+                          " FROM `岗位` WHERE `编号`=%s", (job_id,))
+        else:
+            j = _one(cur, "SELECT `编号` AS id,`岗位名称` AS title,`招聘单位` AS company,"
+                          "`行业` AS industry,`城市` AS city,`学历要求` AS education,"
+                          "`技能标签` AS skill_tags,`职位描述` AS description,"
+                          "`最低薪资` AS salary_min,`最高薪资` AS salary_max,`投递链接` AS url"
+                          " FROM `招聘岗位` WHERE `编号`=%s", (job_id,))
+        if j:
+            j["skill_tags"] = clean_skill_tags(j.get("skill_tags"))
+            j["pool"] = p
+            return j
+    return None
 
 
 @router.get("/jobs")
-def job_candidates(keyword: str | None = None, limit: int = 30,
+def job_candidates(keyword: str | None = None, city: str | None = None,
+                   industry: str | None = None, pool: str = "national",
+                   limit: int = 50, offset: int = 0,
                    ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
-    """可练习的岗位池：在招 + 有关键词的可搜。"""
+    """可练习的岗位池（默认全国 2931 条），支持关键词 / 城市 / 行业过滤与分页。
+
+    返回真实 total（过滤后的总数），前端据此显示「共 N 个岗位」并做远程搜索。
+    排序：有关键词时岗位名称命中优先；其余按编号升序（分页稳定、无随机）。
+    """
+    pool = pool if pool in _JOB_POOLS else "national"
+    limit = max(1, min(int(limit), 200))
+    offset = max(0, int(offset))
+
+    if pool == "national":
+        table, title_col, comp_col, edu_col, desc_col = "岗位", "岗位名称", "企业", "学历", "岗位描述"
+        base = " FROM `岗位` WHERE 1=1"
+        select = ("SELECT `编号` AS id,`岗位名称` AS title,`企业` AS company,`行业` AS industry,"
+                  "`城市` AS city,`学历` AS education,`技能标签` AS skill_tags,"
+                  "`最低薪资` AS salary_min,`最高薪资` AS salary_max" + base)
+    else:
+        base = " FROM `招聘岗位` WHERE `租户编号`=%s AND `状态`<>'closed'"
+        select = ("SELECT `编号` AS id,`岗位名称` AS title,`招聘单位` AS company,`行业` AS industry,"
+                  "`城市` AS city,`学历要求` AS education,`技能标签` AS skill_tags,"
+                  "`最低薪资` AS salary_min,`最高薪资` AS salary_max" + base)
+
+    where, params = "", ([] if pool == "national" else [ctx.tenant_id])
+    if keyword:
+        kw = f"%{keyword}%"
+        if pool == "national":
+            where += " AND (`岗位名称` LIKE %s OR `技能标签` LIKE %s OR `企业` LIKE %s" \
+                     " OR `行业` LIKE %s OR `城市` LIKE %s)"
+            params += [kw] * 5
+        else:
+            where += " AND (`岗位名称` LIKE %s OR `技能标签` LIKE %s)"
+            params += [kw, kw]
+    if city:
+        where += " AND `城市` LIKE %s"
+        params.append(f"%{city}%")
+    if industry:
+        where += " AND `行业` LIKE %s"
+        params.append(f"%{industry}%")
+
+    order = " ORDER BY `编号` ASC"
+    params_count = list(params)       # COUNT 只要过滤参数，不带 ORDER BY 的那个
+    if keyword and pool == "national":
+        order = " ORDER BY (`岗位名称` LIKE %s) DESC, `编号` ASC"
+        params = list(params) + [f"%{keyword}%"]
+
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            sql = ("SELECT `编号` AS id,`岗位名称` AS title,`招聘单位` AS company,`城市` AS city,"
-                   "`学历要求` AS education,`技能标签` AS skill_tags"
-                   " FROM `招聘岗位` WHERE `租户编号`=%s AND `状态`<>'closed'")
-            params: list[Any] = [ctx.tenant_id]
-            if keyword:
-                sql += " AND (`岗位名称` LIKE %s OR `技能标签` LIKE %s)"
-                params += [f"%{keyword}%", f"%{keyword}%"]
-            sql += " ORDER BY `发布日期` DESC, `编号` DESC LIMIT %s"
-            params.append(max(1, min(int(limit), 100)))
-            rows = _rows(cur, sql, tuple(params))
+            cur.execute("SELECT COUNT(*) AS c" + base + where, tuple(params_count))
+            total = int((cur.fetchone() or {}).get("c") or 0)
+            rows = _rows(cur, select + where + order + " LIMIT %s OFFSET %s",
+                         tuple(params) + (limit, offset))
         for r in rows:
             r["skill_tags"] = clean_skill_tags(r.get("skill_tags"))
-        return {"total": len(rows), "items": rows}
+            r["pool"] = pool
+        return {"pool": pool, "total": total, "offset": offset, "limit": limit, "items": rows}
+    finally:
+        conn.close()
+
+
+@router.get("/jobs/facets")
+def job_facets(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """岗位选择器的筛选项：行业与城市分布（按岗位数降序）。"""
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS c FROM `岗位`")
+            total = int((cur.fetchone() or {}).get("c") or 0)
+            cur.execute("SELECT `行业` AS name, COUNT(*) AS cnt FROM `岗位`"
+                        " WHERE `行业` IS NOT NULL AND `行业`<>''"
+                        " GROUP BY `行业` ORDER BY cnt DESC, name ASC")
+            industries = [{"name": r["name"], "count": int(r["cnt"])} for r in cur.fetchall()]
+            cur.execute("SELECT `城市` AS name, COUNT(*) AS cnt FROM `岗位`"
+                        " WHERE `城市` IS NOT NULL AND `城市`<>''"
+                        " GROUP BY `城市` ORDER BY cnt DESC, name ASC")
+            cities = [{"name": r["name"], "count": int(r["cnt"])} for r in cur.fetchall()]
+        return {"total": total, "industries": industries, "cities": cities}
     finally:
         conn.close()
 
 
 @router.get("/resume/diagnosis")
-def resume_diagnosis(job_id: int | None = None,
+def resume_diagnosis(job_id: int | None = None, job_pool: str | None = None,
                      ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     conn = _conn()
     try:
@@ -315,7 +409,7 @@ def resume_diagnosis(job_id: int | None = None,
             if not row:
                 raise HTTPException(404, "还没有简历：请先上传或问卷自填")
             resume = _load_resume(cur, int(row["编号"]), ctx.tenant_id)
-            job = _load_job(cur, job_id) if job_id else None
+            job = _load_job(cur, job_id, job_pool) if job_id else None
         result = diagnose(resume, job)
         audit_event(actor_type="student", actor_id=ctx.student_id, action="resume.diagnosis",
                     target=str(row["编号"]), detail={"job_id": job_id, "issues": len(result["issues"])})
@@ -329,6 +423,7 @@ def resume_diagnosis(job_id: int | None = None,
 # ----------------------------------------------------------------
 class StartIn(BaseModel):
     job_id: int | None = None
+    job_pool: str | None = None      # national（默认，全国池）/ tenant（租户在招池）
     resume_id: int | None = None
     max_rounds: int = 6
 
@@ -350,12 +445,16 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
                 if not row:
                     raise HTTPException(404, "还没有简历：请先上传或问卷自填（简历是出题依据）")
                 resume = _load_resume(cur, int(row["编号"]), ctx.tenant_id)
-            job = _load_job(cur, inp.job_id) if inp.job_id else None
+            job = _load_job(cur, int(inp.job_id), inp.job_pool) if inp.job_id else None
+            if inp.job_id and not job:
+                raise HTTPException(404, f"岗位不存在（池 {inp.job_pool or 'national'}）")
             outline = build_outline(job, resume, max_rounds=max_rounds)
             if not outline:
                 raise HTTPException(422, "简历信息不足以出题（连基本经历都没有），请先补全简历")
+            # 行业要进快照：追问/题库检索都靠 industry 归族，缺了就只能落 general
             job_snapshot = {"title": job["title"], "skill_tags": job["skill_tags"],
-                            "education": job.get("education")} if job else None
+                            "education": job.get("education"), "industry": job.get("industry"),
+                            "city": job.get("city"), "pool": job.get("pool")} if job else None
             cur.execute(
                 "INSERT INTO `面试会话`(`租户编号`,`学生编号`,`简历编号`,`岗位编号`,`岗位名称`,`岗位要求快照`,"
                 "`状态`,`提纲`,`当前轮次`,`最大轮次`,`引擎版本`) VALUES (%s,%s,%s,%s,%s,%s,'ongoing',%s,0,%s,%s)",
@@ -376,6 +475,73 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
 
 class AnswerIn(BaseModel):
     text: str | None = None   # None=跳过本题
+
+
+# ----------------------------------------------------------------
+# 追问（浅答/漏考点时从同族题库补一道更深的题，插在本题之后）
+# ----------------------------------------------------------------
+def _used_bank_ids(outline: Sequence[Mapping[str, Any]]) -> list[str]:
+    """本场已经出过的题库题号（含追问）：追问不得重复出题。"""
+    used: list[str] = []
+    for o in outline:
+        src = o.get("source") or {}
+        if src.get("kind") == "bank" and src.get("id"):
+            used.append(str(src["id"]))
+        probe = o.get("probe") or {}
+        if probe.get("bank_id"):
+            used.append(str(probe["bank_id"]))
+    return list(dict.fromkeys(used))
+
+
+def _probe_count(outline: Sequence[Mapping[str, Any]]) -> int:
+    return sum(1 for o in outline if o.get("probe_of"))
+
+
+def _build_probe_entry(plan: Mapping[str, Any], answered_round: int) -> dict[str, Any] | None:
+    """把追问计划落成提纲里的一轮。
+
+    取不到题库考点就放弃追问 —— 宁可少问一句，也不拿空 rubric 硬评。
+    追问条目的 rubric 来自题库，与模板题的评分口径（结构/深度/证据）保持一致。
+    """
+    item = qbank.get_item(str(plan.get("bank_id") or ""))
+    if not item:
+        return None
+    qtype = str(plan.get("qtype") or item.get("qtype") or "project")
+    return {
+        "round": answered_round + 1,
+        "type": qtype,
+        "question": plan["question"],
+        "question_raw": plan.get("question_raw"),
+        "rubric": rubric_from_bank({**item, "qtype": qtype}),
+        "probe_of": answered_round,
+        "probe_version": plan.get("engine_version"),
+        "probe": {"bank_id": plan.get("bank_id"), "trigger": "shallow_or_missed_keywords"},
+        "source": {"kind": "bank", "id": plan.get("bank_id"),
+                   "name": plan.get("source_name"), "url": plan.get("source_url"),
+                   "pool": "probe", "family": plan.get("family"),
+                   "family_label": qbank.family_label(str(plan.get("family") or "")),
+                   "matched_by": [f"第 {answered_round} 题追问"]},
+    }
+
+
+def _job_for_outline(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """快照 → 出题/追问用的岗位字典（行业是题库归族的关键，不能丢）。"""
+    return {"title": snapshot.get("title"), "industry": snapshot.get("industry"),
+            "skill_tags": snapshot.get("skill_tags") or [],
+            "education": snapshot.get("education")}
+
+
+def _insert_probe(outline: list[dict[str, Any]], index: int,
+                  entry: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """把追问插到第 index 题之后，并把全表轮次重排成 1..N 连续整数。
+
+    轮次必须是整数且连续：收卷时 `zip(answers, outline)` 靠顺序对齐，
+    一旦出现 x.y 小数轮次或空洞，逐题得分就会串行错位。
+    """
+    outline.insert(index + 1, dict(entry))
+    for i, o in enumerate(outline, start=1):
+        o["round"] = i
+    return outline
 
 
 @router.post("/{sid}/answer")
@@ -413,7 +579,24 @@ def interview_answer(sid: int, inp: AnswerIn,
                  json.dumps([f"「{x}」" for x in (item.get("keyword_hits") or [])], ensure_ascii=False) if item else None,
                  turn["comment_version"]))
             nxt = rnd + 1
-            cur.execute("UPDATE `面试会话` SET `当前轮次`=%s WHERE `编号`=%s", (nxt, sid))
+
+            # 追问：答得浅/漏考点 → 从同族题库补一道更深的题插到本轮之后。
+            # 追问是「额外一轮」而不是 x.y 小数轮次：轮次保持整型，
+            # 提纲重排后与质问答的 `轮次` 一一对应，收卷 zip 不会错位。
+            probed = False
+            if _probe_enabled() and _probe_count(outline) < _PROBE_MAX:
+                plan = probe_plan(_job_for_outline(job_snapshot), q["type"], item, answer,
+                                  used_ids=_used_bank_ids(outline))
+                entry = _build_probe_entry(plan, int(q.get("round") or rnd + 1)) if plan else None
+                if entry:
+                    _insert_probe(outline, rnd, entry)
+                    probed = True
+
+            if probed:
+                cur.execute("UPDATE `面试会话` SET `当前轮次`=%s,`最大轮次`=%s,`提纲`=%s WHERE `编号`=%s",
+                            (nxt, len(outline), json.dumps(outline, ensure_ascii=False), sid))
+            else:
+                cur.execute("UPDATE `面试会话` SET `当前轮次`=%s WHERE `编号`=%s", (nxt, sid))
         conn.commit()
     finally:
         conn.close()
@@ -423,8 +606,10 @@ def interview_answer(sid: int, inp: AnswerIn,
         nq = outline[nxt]
         return {"round_done": rnd + 1, "score": item["score"] if item else None,
                 "comment": turn["comment"], "comment_version": turn["comment_version"],
+                "total_rounds": len(outline), "probed": probed,
                 "next": {"round": nxt + 1, "question": nq["question"], "question_type": nq["type"],
-                         "source": nq.get("source")}}
+                         "source": nq.get("source"), "is_probe": bool(nq.get("probe_of")),
+                         "probe_of": nq.get("probe_of")}}
     return _finish(sid, ctx)
 
 
@@ -452,12 +637,17 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
     gaps = gap_list(resume, job, scores, outline)
     items = []
     for o, a, s in zip(outline, answers, scores):
-        items.append({"round": o["round"], "label": _rubric_of_q(o, job.get("skill_tags") or [])["label"],
+        label = _rubric_of_q(o, job.get("skill_tags") or [])["label"]
+        is_probe = bool(o.get("probe_of"))
+        items.append({"round": o["round"],
+                      "label": f"{label}（追问）" if is_probe else label,
                       "score": s["score"] if s else None,
+                      "is_probe": is_probe,
                       "brief": (a["学生回答"] or "未作答")[:60]})
     strengths = [it["label"] for it, s in zip(items, scores) if s and float(s["score"]) >= 75]
     facts = {"total": total["total"] if total else None, "answered": total["answered"] if total else 0,
              "skipped": total["skipped"] if total else len(outline),
+             "probes": _probe_count(outline),
              "items": items, "strengths": strengths, "gaps": gaps}
     report = interviewer.render_report(facts)
 
@@ -474,7 +664,8 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
     finally:
         conn.close()
     return {"round_done": len(outline), "score": items[-1]["score"] if items else None,
-            "finished": True, "total": facts["total"], "report": report, "gaps": gaps,
+            "finished": True, "total": facts["total"], "probes": facts["probes"],
+            "report": report, "gaps": gaps,
             "items": items, "sources": [_source_row(o) for o in outline]}
 
 
@@ -486,7 +677,9 @@ def _source_row(q: Mapping[str, Any]) -> dict[str, Any]:
             "question": q.get("question"),
             "kind": src.get("kind", "template"),
             "name": src.get("name") or ("模板出题" if src.get("kind") != "bank" else ""),
-            "url": src.get("url"), "bank_id": src.get("id")}
+            "url": src.get("url"), "bank_id": src.get("id"),
+            "is_probe": bool(q.get("probe_of")), "probe_of": q.get("probe_of"),
+            "question_raw": q.get("question_raw")}
 
 
 @router.get("/{sid}")

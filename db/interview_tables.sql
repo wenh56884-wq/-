@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS `简历教育经历` (
   `成绩排名`    VARCHAR(60)  NULL COMMENT '原文照抄，如 前10%',
   `主修课程`    JSON         NULL COMMENT '主修课程列表，如 ["数据结构","数据库"]',
   `排序号`      INT          NOT NULL DEFAULT 0,
-  KEY idx_redum ( `简历编号` )
+  KEY idx_reedu ( `简历编号` )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='简历·教育经历';
 
 -- 3. 简历技能证书 -------------------------------------------------

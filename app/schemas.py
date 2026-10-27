@@ -41,8 +41,9 @@ class ChatIn(BaseModel):
 
     query: str = Field(min_length=1, description="用户提问")
     term: str | None = None
+    session_id: int | None = Field(default=None, description="续聊会话编号；不传则新开会话")
     history: list[ChatTurn] = Field(default_factory=list, max_length=8,
-                                    description="最近几轮对话，用于追问语境")
+                                    description="最近几轮对话，用于追问语境（无会话时使用）")
 
 
 class ChatOut(BaseModel):
@@ -52,6 +53,10 @@ class ChatOut(BaseModel):
     trace_id: str
     term: str | None = None
     degraded: bool = Field(default=False, description="True 表示走了降级话术，不保证含数值")
+    session_id: int | None = Field(default=None, description="本轮所属会话，续聊时回传")
+    tool: str = Field(default="", description="本轮命中的能力：kb_search / web_search / ...")
+    citations: list[dict] = Field(default_factory=list,
+                                  description="引用清单：知识库给页码，联网给 URL")
 
 
 class HealthOut(BaseModel):

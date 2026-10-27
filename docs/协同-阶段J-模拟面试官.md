@@ -291,3 +291,96 @@ Web 端学生/教师都能看学生**每一学年、每一学期、每一门课�
 - 同一课程同一学期多次记录**逐条展示**（第几次按录入顺序）；
 - 课程汇总取最高分；学期/学年加权均分按学分；
 - 挂科按课程最高分判断（通过重修后不再计挂科）；缺失不出现在任何汇总里补 0。
+
+## 12. 追问接入 + 全国岗位池 + 对话六项能力（2026-10-27 19:55，WorkBuddy）
+
+> 本轮三件事：① 把 `engine/interview_probe.py` 追问引擎接进答题链路；② 岗位选择器从租户 40 条扩到全国 2931 条；③ `/chat` 从 7 个校园工具扩到六项能力（ChatBot / RAG 知识库 / PDF 问答 / 多轮记忆 / 联网+工具调用 / 工作流）。第 ③ 项是用户当轮改口后的最终口径，原提的「Agent 自动任务执行」「代码生成与分析」两项用户自己划掉了。
+
+### 12.1 追问：为什么插一轮而不是记 `x.y`
+
+原交接建议（§11 末尾）是把追问记成 `轮次=x.y`。**没有采纳**，因为收卷时 `zip(answers, outline)` 靠顺序对齐，小数轮次或空洞会让逐题得分串行错位。改为：
+
+- `_insert_probe(outline, index, entry)` 插到本题之后，再把全表 `round` 重排成 `1..N` 连续整数；
+- 追问预算 `_PROBE_MAX`（`INTERVIEW_PROBE_MAX`，默认 2）；`_used_bank_ids()` 用 `dict.fromkeys` 保序去重，同一考点不追问两次；
+- `_build_probe_entry()` 取不到题库考点就返回 `None` 放弃追问——**不拿空 rubric 硬评**；
+- 收卷 `items` 带 `is_probe`，`facts` 带 `probes`；报告 `sources` 里追问行有标记。
+
+### 12.2 岗位池：双表并存，不猜池
+
+| 池 | 表 | 规模 | 用途 |
+|---|---|---|---|
+| `national` | `岗位` | 2931 条 | 无租户维度、字段最全，选择器默认池 |
+| `tenant` | `招聘岗位` | 租户在招池（演示库 40 条） | 含投递链接/状态，原有链路 |
+
+两表 `编号` 各自独立会撞号，所以 `_load_job(cur, job_id, pool=None)` 必须显式传 `pool`（`None` = 先全国后租户的兼容路径），**不做「猜池」**。`GET /interview/jobs` 新增 `city/industry/pool/limit/offset` 并返回真实 `total`；新增 `GET /interview/jobs/facets` 给筛选下拉。`StartIn` 增 `job_pool`，`job_snapshot` 增 `industry/city/pool`（`industry` 必须保留，它是归族关键）。
+
+### 12.3 六项能力：引擎定数，模型说话
+
+新增模块（全部纯函数，可离线单测）：
+
+| 文件 | 职责 |
+|---|---|
+| `engine/rag.py`（新，~420 行） | 类型白名单、按页抽取、切块、检索、**引用三道闸**、原文兜底 |
+| `engine/kb_store.py`（新） | 路由与对话工具共用的取块口径，避免两处 SQL 漂移 |
+| `engine/web_search.py`（新） | Serper → Bing 适配层，未配置如实降级 |
+| `engine/workflow.py`（新） | 9 工具白名单、`validate/run/run_default`、`{{steps.x.y}}` 只取值 |
+| `app/chat_service.py`（新） | 会话落库、`RECENT_TURNS=8`、`SUMMARY_TRIGGER=12`、`last_tool` 继承 |
+| `db/rag_tables.sql`（新） | 6 张表：知识库文档/分块、对话会话/消息、工作流定义/运行 |
+
+**引用三道闸**（`verify_citations`）：① 回答必须有 `[n]`；② `[n]` 必须在检索结果范围内；③ **带 `[n]` 的句子里出现的数字，必须能在被引分块原文里找到**，引号内文字必须逐字存在。第 ③ 条专治「引用是真的、数字是编的」。
+
+**无命中反向约束**：知识库/联网都没命中时，回答里出现任何数字即判不通过，且必须说明「没有/未/查不到」——不许用模型记忆补一段看着合理的内容。
+
+**不引向量库的理由**：本机 DeepSeek 只有 chat、无 embedding API，也没有 jieba/faiss/sentence-transformers。改用 sklearn TF-IDF(`char_wb`, 2-4 gram) + 2-gram 关键词覆盖，中文免分词、完全离线、同输入同排序。检索除绝对阈值 `min_score=0.03` 外，再按「低于首条 45% 视为噪声」过滤，解决 PDF 一页一块时无关页被带进引用。
+
+### 12.4 本轮踩到的坑（都是真 bug，已修）
+
+| 现象 | 根因 | 修法 |
+|---|---|---|
+| 第 2 页内容被标成第 1 页 | 跨页 overlap 把上页文字挂到下一页块 | `flush(carry=False)`；尾块合并仅在同页时做 |
+| 引用编号合法但数字编造仍判通过 | 只校验了 `[n]` 范围 | 逐句数字核对；再把 `第 N 页/块` 剔掉避免误伤页码 |
+| 引用里全角标点变半角 | `_clean` 里做了 NFKC | NFKC 只留在 `_norm()` 匹配阶段 |
+| docx 整篇粘成一行 | 直接取 `<w:t>` 没切段 | 先按 `</w:p>` 切段再取 `<w:t>` |
+| `/kb/docs` 列表 500 | COUNT 查询漏拼 `where` | `"SELECT COUNT(*) AS c" + base + where`，`params_count` 提前取 |
+| 建表脚本 `created: []` | 首行 `--` 注释吃掉第一条 DDL | 先剔 `--` 行再按 `;` 切分 |
+| 制度原文换行导致残句 | 按 `\n` 切句 | 先把 `\s*\n\s*` 折空再按句末标点切；截断**不补句号**（补了就不是原文子串，引用校验会驳回） |
+| 改 `engine/` 后接口行为不变 | uvicorn 无 `--reload` | 每次改引擎必须 `Stop-Process` 再启 |
+
+### 12.5 实测（本轮，演示库）
+
+```
+追问端到端：浅答「我会认真做。」→ 触发 probed，插入追问带上一轮原话锚点
+  整场 4 轮开局 → 2 次追问 → 收卷 6 题
+  轮次序列 [1,2,3,4,5,6] / is_probe [F,T,T,F,F,F] / probes=2 / sources=6，zip 对齐无错位
+
+岗位池：GET /interview/jobs?pool=national → total=2931
+        GET /interview/jobs/facets → 行业 81、城市 163
+
+六项能力（scripts/demo_chat.py 九步）：
+  [01] ChatBot / RAG(4 文档 5 块) / PDF / 记忆 / 工作流(2 个) = 可用
+       联网搜索 = 未就绪（未配置密钥，如实说明）
+  [03] 「报销的住宿标准是多少？」→ 能力=kb_search，引用 [1]《员工报销制度》第 1 块
+  [04] 「那超标了怎么办」→ 沿用 kb_search，命中同一块「超标部分由个人自理」
+  [05] PDF 问答 → 引用精确到「第 1 页」，无关第 2 页已被相对过滤掉
+  [06] 联网 → 「当前没有配置联网搜索，我查不了实时信息。」（未编结果）
+  [07] 「跑一遍求职体检」→ ✅ 本人学业预警 / ✅ 岗位推荐
+  [08] 会话 4 条消息全部落库，assistant 带 [kb_search] 标记
+  [09] 知识库自检：文档 4 / 分块 5 / 页数 5 / {'txt':2,'md':1,'pdf':1}
+
+教师端工作流带参：POST /workflow/defs/2/run {class_name, term} → success
+  三步 ✅ 班级概览(709ms) / ✅ 预警名单(414ms) / ✅ 能力差距(15788ms)，/workflow/runs 留痕
+
+门禁：pytest -m "not spark" 454 passed, 10 deselected in 40.41s
+      npm run build ✓ 12.92s（index 2,290.84 kB，仅 chunk 体积告警）
+```
+
+### 12.6 已知限制（不美化）
+
+1. **联网搜索当前未就绪**：`/chat/capabilities` 明写 `[未就绪] 未配置密钥（SERPER_API_KEY / BING_SEARCH_KEY）`。代码路径已通（未配置时诚实降级、不编结果），但**真实搜索结果未验证**，需用户提供密钥后才能实测。
+2. **PDF 样本是 ASCII 夹具**：`data/samples/reimbursement_policy.pdf` 由 `scripts/make_sample_pdf.py`（Helvetica 内置字体）生成，只验证「按页抽取 + 页码引用」通道，**不代表带嵌入字体的中文 PDF 抽取效果**。该文件已进 `.gitignore`（生成物，`seed_chat_demo.py` 缺文件时自动生成）。
+3. 本轮未动 Claude Code 名下文件：`tests/test_question_bank_infer.py`、`data/question_bank/` 的新增语料、`infer_family` 均保持原样。
+
+### 12.7 未提交遗留（供下一轮判断归属）
+
+`scripts/start_qihang.bat`（mtime 18:54，早于本轮）有一行演示账号改动：大三 `AI20240001 刘杰 就业` → `AI20240004 孙鹏 考公`。**不是本轮改的，未纳入本次提交**，请 owner 认领。
+`db/interview_tables.sql` 的索引名 `idx_redum` → `idx_reedu` 属纯笔误修正，已随本轮提交。

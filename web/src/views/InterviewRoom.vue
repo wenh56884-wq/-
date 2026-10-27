@@ -101,21 +101,51 @@
       <el-tab-pane label="面试演练" name="interview">
         <div class="bento-grid">
         <el-card v-if="!session && !report" shadow="never" class="block-card bento-span-2">
-          <template #header><span class="card-title">选择目标岗位开局</span></template>
-          <el-select v-model="jobId" filterable placeholder="搜索或选择岗位" class="job-select">
+          <template #header>
+            <div class="head-row">
+              <span class="card-title">选择目标岗位开局</span>
+              <el-tag size="small" type="info" effect="plain">
+                全国岗位池 {{ jobTotal || '…' }} 条
+              </el-tag>
+            </div>
+          </template>
+          <div class="job-filters">
+            <el-input v-model="jobKeyword" placeholder="搜索岗位 / 技能 / 企业" clearable
+              class="job-kw" @keyup.enter="loadJobs" @clear="loadJobs" />
+            <el-select v-model="jobIndustry" placeholder="行业" clearable filterable
+              class="job-filter" @change="loadJobs">
+              <el-option v-for="i in facets.industries" :key="i.name" :value="i.name"
+                :label="`${i.name} (${i.count})`" />
+            </el-select>
+            <el-select v-model="jobCity" placeholder="城市" clearable filterable
+              class="job-filter" @change="loadJobs">
+              <el-option v-for="c in facets.cities" :key="c.name" :value="c.name"
+                :label="`${c.name} (${c.count})`" />
+            </el-select>
+            <el-button :loading="jobLoading" @click="loadJobs">搜索</el-button>
+          </div>
+          <el-select v-model="jobId" filterable placeholder="选择岗位（可先按条件过滤）"
+            class="job-select" :loading="jobLoading">
             <el-option v-for="j in jobs" :key="j.id" :value="j.id"
-              :label="`${j.title} · ${j.company || ''}`" />
+              :label="`${j.title} · ${j.company || ''} · ${j.city || ''}`" />
           </el-select>
           <el-button type="primary" class="ml8" :loading="starting" :disabled="!jobId || !resume"
             @click="startInterview">开始模拟面试</el-button>
           <div v-if="!resume" class="muted mt8">还没有简历：请先在「我的简历」页录入</div>
-          <div class="muted mt8">默认 6 轮：动机 → 专业 → 项目 → 情景 → 抗压 → 反问（按简历证据自动裁剪）</div>
+          <div class="muted mt8">
+            默认 6 轮：动机 → 专业 → 项目 → 情景 → 抗压 → 反问（按简历证据自动裁剪）；
+            答得浅或漏考点时，面试官会追加 1–2 道追问
+          </div>
         </el-card>
 
         <el-card v-if="session && !report" shadow="never" class="block-card bento-span-2 bento-row-2">
           <template #header>
             <div class="head-row">
-              <span class="card-title">第 {{ session.round }} / {{ session.total }} 题 · {{ session.label }}</span>
+              <span class="card-title">
+                第 {{ session.round }} / {{ session.total }} 题 · {{ session.label }}
+                <el-tag v-if="session.isProbe" size="small" type="warning" effect="dark"
+                  class="probe-tag">追问</el-tag>
+              </span>
               <el-tag size="small">{{ jobTitle }}</el-tag>
             </div>
           </template>
@@ -169,7 +199,12 @@
             <div class="muted">本场题目出处（每道题都能回到来源页面核对）</div>
             <el-table :data="reportSources" size="small" class="mt8">
               <el-table-column prop="round" label="轮次" width="70" />
-              <el-table-column prop="label" label="题型" width="100" />
+              <el-table-column label="题型" width="120">
+                <template #default="{ row }">
+                  {{ row.label }}
+                  <el-tag v-if="row.is_probe" size="small" type="warning" effect="plain">追问</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column prop="name" label="来源" width="140" />
               <el-table-column prop="question" label="题目" min-width="240" show-overflow-tooltip />
               <el-table-column label="链接" width="90">
@@ -219,6 +254,13 @@ const form = ref({ self: '', intent: '', edu: '', skills: '', exp: '' })
 
 const jobs = ref([])
 const jobId = ref(null)
+const jobPool = ref('national')
+const jobTotal = ref(0)
+const jobKeyword = ref('')
+const jobCity = ref('')
+const jobIndustry = ref('')
+const jobLoading = ref(false)
+const facets = ref({ industries: [], cities: [] })
 const session = ref(null)
 const jobTitle = ref('')
 const answerText = ref('')
@@ -335,8 +377,23 @@ async function runDiagnosis() {
 }
 
 async function loadJobs() {
-  const { data } = await http.get('/interview/jobs?limit=50')
-  jobs.value = data.items
+  jobLoading.value = true
+  try {
+    const { data } = await http.get('/interview/jobs', {
+      params: { pool: jobPool.value, limit: 50, keyword: jobKeyword.value,
+        city: jobCity.value, industry: jobIndustry.value }
+    })
+    jobs.value = data.items
+    jobTotal.value = data.total
+  } finally {
+    jobLoading.value = false
+  }
+}
+
+async function loadFacets() {
+  const { data } = await http.get('/interview/jobs/facets')
+  facets.value = data
+  jobTotal.value = jobTotal.value || data.total
 }
 
 async function loadHistory() {
@@ -347,12 +404,14 @@ async function loadHistory() {
 async function startInterview() {
   starting.value = true
   try {
-    const { data } = await http.post('/interview/start', { job_id: jobId.value })
+    const { data } = await http.post('/interview/start', {
+      job_id: jobId.value, job_pool: jobPool.value
+    })
     const job = jobs.value.find((j) => j.id === jobId.value)
     jobTitle.value = job ? job.title : ''
     session.value = { round: data.round, total: data.total_rounds, question: data.question,
       type: data.question_type, label: data.question_label, id: data.session_id,
-      source: data.source || null }
+      source: data.source || null, isProbe: false }
     report.value = null
     lastComment.value = null
     answerText.value = ''
@@ -375,7 +434,10 @@ async function submitAnswer(real) {
     }
     lastComment.value = { text: data.comment, score: data.score, version: data.comment_version }
     session.value = { ...session.value, round: data.next.round, question: data.next.question,
-      type: data.next.question_type, source: data.next.source || null }
+      type: data.next.question_type, source: data.next.source || null,
+      total: data.total_rounds || session.value.total,
+      isProbe: !!data.next.is_probe, probeOf: data.next.probe_of || null }
+    if (data.probed) ElMessage.info('这道题答得比较浅，面试官追加了一道追问')
     answerText.value = ''
   } finally {
     answering.value = false
@@ -393,6 +455,7 @@ async function openHistory(row) {
       round: o.round, type: o.type, label: labelOf(o.type),
       question: o.question, kind: (o.source || {}).kind || 'template',
       name: (o.source || {}).name || '模板出题', url: (o.source || {}).url, bank_id: (o.source || {}).id,
+      is_probe: !!o.probe_of,
     })) }
   session.value = null
   lastComment.value = null
@@ -406,7 +469,7 @@ function resetInterview() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadResume(), loadJobs(), loadHistory()])
+  await Promise.all([loadResume(), loadJobs(), loadFacets(), loadHistory()])
 })
 </script>
 
@@ -433,5 +496,9 @@ onMounted(async () => {
 .howto { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); }
 .howto b { color: var(--el-text-color-primary); }
 .job-select { width: 360px; }
+.job-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.job-kw { width: 260px; }
+.job-filter { width: 160px; }
+.probe-tag { margin-left: 8px; vertical-align: 1px; }
 .iv-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 </style>
