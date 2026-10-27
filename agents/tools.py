@@ -16,7 +16,7 @@ import pymysql
 
 from agents.career import context as career_context
 from app.config import Settings, get_settings
-from engine import career_guide, competition, job_search, profile, recommend, warning
+from engine import career_guide, competition, hybrid, job_search, profile, recommend, warning
 from engine.career_rules import CAREER_ENGINE_VERSION
 from engine.rules import LEVELS
 from engine.store import DuckDBStore
@@ -1090,37 +1090,70 @@ def my_warning(ctx: ToolContext, term: str | None = None) -> dict[str, Any]:
 
 def my_recommendations(ctx: ToolContext, term: str | None = None,
                        top_n: int = 10) -> dict[str, Any]:
-    """本人岗位推荐 + 三段式理由：调 engine.recommend（规则版，无大模型无随机数）。"""
+    """本人岗位推荐 + 三段式理由：调 engine.hybrid（0.7 内容 + 0.3 协同过滤）。
+
+    三段式（与计划书口径一致）：
+      knowledge = 内容匹配证据（A 的命中点）
+      skill     = KG 课程链（学过X→掌握Y→满足Z）或技能缺口
+      potential = 协同过滤同伴证据（同专业同成绩段同学的行为）
+    """
     ctx = _check_ctx(ctx)
     _require_student(ctx, "my_recommendations", "self")
     term = _resolve_term(ctx, term)
     me = _resolve_self(ctx, "my_recommendations")
 
     try:
-        result = recommend.recommend_for_student(
-            ctx.tenant_id, me["student_no"], term, top_n=top_n)
+        result = hybrid.hybrid_recommend(
+            ctx.tenant_id, me["student_no"], term, top_n=top_n, student_id=ctx.student_id)
         note = ""
     except Exception as exc:  # 推荐失败不得让整个对话崩掉
         result = {"items": [], "cold_start": False, "candidate_cnt": 0}
         note = f"推荐引擎暂不可用：{exc}"
 
+    for item in result.get("items") or []:
+        item["reasons"] = _hybrid_reasons(item, bool(result.get("cf_active")))
+
     _audit_call(ctx, "my_recommendations", f"{me['student_no']}/{term}",
-                {"top_n": top_n, "recommend_version": recommend.RECOMMEND_ENGINE_VERSION})
+                {"top_n": top_n, "engine_version": hybrid.HYBRID_ENGINE_VERSION,
+                 "cf_active": bool(result.get("cf_active")),
+                 "neighbor_cnt": int(result.get("neighbor_cnt") or 0)})
     return {
         "student_no": me["student_no"],
         "name": str(me.get("name") or ""),
         "term": term,
         "top_n": int(top_n),
-        "recommend_version": recommend.RECOMMEND_ENGINE_VERSION,
+        "recommend_version": hybrid.HYBRID_ENGINE_VERSION,
         "cold_start": bool(result.get("cold_start")),
+        "cf_active": bool(result.get("cf_active")),
+        "neighbor_cnt": int(result.get("neighbor_cnt") or 0),
+        "weights": result.get("weights") or {"content": 0.7, "cf": 0.3},
         "candidate_cnt": int(result.get("candidate_cnt") or 0),
         "items": list(result.get("items") or []),
-        "reasons_schema": {"knowledge": "", "skill": "", "potential": ""},
+        "reasons_schema": {"knowledge": "内容匹配", "skill": "KG课程链", "potential": "同伴证据"},
         "note": note or str(result.get("note") or ""),
-        "engine_version": recommend.RECOMMEND_ENGINE_VERSION,
+        "engine_version": hybrid.HYBRID_ENGINE_VERSION,
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,
     }
+
+
+def _hybrid_reasons(item: Mapping[str, Any], cf_active: bool) -> dict[str, str]:
+    """三段式理由（全部来自引擎字段，无模型参与）。"""
+    hits = [str(x) for x in (item.get("hit_items") or [])]
+    knowledge = "；".join(hits[:3]) if hits else "内容匹配分来自专业方向与成绩门槛"
+    kgx = item.get("kg_explain") or {}
+    skill = str(kgx.get("summary") or "") if kgx else ""
+    if not skill:
+        gaps = [str(x) for x in (item.get("gap_items") or [])]
+        skill = "需补：" + "、".join(gaps[:3]) if gaps else "技能匹配良好"
+    peers = item.get("peer_count")
+    if peers:
+        potential = f"{peers} 位同专业同成绩段同学关注过该岗位（协同权重 {item.get('cf_score')}）"
+    elif cf_active:
+        potential = "同段位同学暂未关注该岗位，按内容匹配排序"
+    else:
+        potential = "暂无本人行为数据，协同过滤冷启动跳过"
+    return {"knowledge": knowledge, "skill": skill, "potential": potential}
 
 
 # ================================================================

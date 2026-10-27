@@ -490,7 +490,7 @@ def test_class_warning_thresholds_roundtrip(client, db):
             for row in before:
                 cur.execute(
                     "INSERT INTO `班级预警阈值` "
-                    "(tenant_id, class_name, metric, weight, red_value, orange_value, yellow_value) "
+                    "(`租户编号`, `班级`, `指标`, `权重`, `红色阈值`, `橙色阈值`, `黄色阈值`) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (TENANT, klass, row["metric"], row["weight"], row["red_value"],
                      row["orange_value"], row["yellow_value"]),
