@@ -176,7 +176,27 @@
         <p v-else class="missing">该岗位原文未提及可识别的技能关键词。</p>
 
         <h4 class="sec-title">职位介绍</h4>
-        <div class="jd-text">{{ decodeEntities(detail.description) || '（未抓到职位介绍，请点下方链接查看原文）' }}</div>
+        <div v-if="jdSections.length" class="jd-box">
+          <section v-for="(sec, si) in jdSections" :key="si" class="jd-sec">
+            <div v-if="sec.heading" class="jd-sec-head">
+              <span class="jd-sec-name">{{ sec.heading }}</span>
+              <em v-if="sec.items.some((i) => i.no)" class="jd-sec-count">
+                {{ sec.items.length }} 条
+              </em>
+            </div>
+            <ul class="jd-items">
+              <li v-for="(it, ii) in sec.items" :key="ii" class="jd-item">
+                <span v-if="it.no" class="jd-no">{{ it.no }}</span>
+                <div class="jd-copy">
+                  <p v-for="(p, pi) in it.parts" :key="pi" :class="['jd-p', { 'jd-en': p.en }]">
+                    {{ p.text }}
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </div>
+        <p v-else class="missing">（未抓到职位介绍，请点下方链接查看原文）</p>
 
         <el-button
           v-if="detail.apply_url"
@@ -195,10 +215,10 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import http from '../api/http'
-import { decodeEntities } from '../utils/text'
+import { parseJd } from '../utils/text'
 
 const keyword = ref('')
 const industry = ref('')
@@ -217,6 +237,9 @@ const lastSuccess = ref('')
 
 const drawer = ref(false)
 const detail = ref(null)
+
+// 职位介绍按「小标题 + 编号条目 + 中英分行」解析，纯展示层结构，不改写原文
+const jdSections = computed(() => parseJd(detail.value?.description))
 
 async function loadStats() {
   try {
@@ -409,16 +432,89 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
 }
-.jd-text {
-  white-space: pre-wrap;
+.jd-box {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 18px 18px;
+  background: #fff;
+  border: 1px solid #f1f1f3;
+  border-radius: 12px;
+}
+
+.jd-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #ececef;
+}
+
+.jd-sec-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #18181b;
+}
+
+.jd-sec-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-style: normal;
+  color: #a1a1aa;
+}
+
+.jd-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.jd-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.jd-no {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jd-copy {
+  min-width: 0;
+}
+
+.jd-p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: #3f3f46;
   word-break: break-word;
-  font-size: 13px;
-  line-height: 1.8;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--el-fill-color-lighter);
-  max-height: 46vh;
-  overflow-y: auto;
+}
+
+.jd-p + .jd-p {
+  margin-top: 2px;
+}
+
+.jd-p.jd-en {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a1a1aa;
 }
 .official-link {
   align-self: flex-start;
