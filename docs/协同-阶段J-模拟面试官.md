@@ -159,3 +159,22 @@ cd web; npm run build
 ### 已知非本次问题
 - `tests/test_api.py::test_student_sees_only_self` 当前失败：WorkBuddy 正在做的混合推荐把 `recommend_version` 改为 `hybrid-v1`，测试仍断言 `v1.0`。属并行 WIP，待 WorkBuddy 收口时同步测试。
 - 8000 旧进程（15:02 启动）不含 `/interview`、`/kg` 与考试修复，已重启为新进程。
+
+## 9. Bento 前端改造（2026-10-27 18:50，Claude Code 主导）
+
+### 设计系统（不引入 Tailwind，用项目内 CSS 等价实现）
+- `web/src/styles/bento.css`：4 列网格 / `bento-span-2|3|4` / `bento-row-2` / 22px 圆角 / 20px 一致 gap / hover `-4px + scale(1.01)` / 阴影 `0 8px 30px rgba(0,0,0,.08)` / 260ms ease-out / 图标 group-hover `scale(1.1)` / 平板 2 列、手机 1 列 / `prefers-reduced-motion` 降级。
+- `web/src/styles.css`：全站 `el-card` 20px 圆角 + Bento 阴影 + 悬停上浮；按钮/输入框 14px 圆角；主按钮 zinc-900；输入聚焦蓝环。
+- 禁用：Tailwind 依赖（未安装）、嵌套 `el-card`、紫蓝渐变、直角、gap-1/2/10/12。
+
+### 已完成（Phase 1）
+- **登录页**：2×2 品牌渐变卡 + 2×2 登录卡 + 4 个 1×1 能力卡；演示账号更新为 `T001 / teacher@123`、`AI20230001 / AI20230001`。
+- **教师看板**：全宽筛选卡 + 4 个指标瓦片 + 2×2 班级概貌（风险分段条/图例/快捷入口）+ 2×1 图表 + 2×1 高风险 Top5 + 全宽职业目标分布 + 全宽预警名单（新增归因摘要列）。
+- **全局 Bento 化**：其他页面的 `el-card` 立即获得 20px 圆角、Bento 阴影与悬停，不必逐页重写。
+- 视觉截图（不入库）：`logs/screenshots/01-login.png`、`02-teacher-dashboard.png`、`03-student-home.png`。
+- 构建：`npm run build` 通过（15.89s）。
+
+### Phase 2 分工（防打架）
+- `web/src/views/StudentHome.vue`：CodeBuddy 当前 WIP（混合推荐 +27 行）——**等它提交后**由 Claude Code 按 `bento.css` 重构；期间 CodeBuddy 不要再改这个文件。
+- `TeacherStudents.vue` / `JobList.vue` / `ExamNotices.vue` / `InterviewRoom.vue` / `KgView.vue`：优先 CodeBuddy 用现有 `.bento-page / .bento-grid / .bento-card / .bento-span-*` 改造；Claude Code 负责验收与共享 CSS 调整。
+- 规则：外层 `.bento-page`、内层 `.bento-grid`；大卡 `span-2 row-2`、中卡 `span-2`、小卡 1×1；统一 gap 20；不在 `bento-card` 里再套 `el-card`；主按钮不用 Element 蓝。

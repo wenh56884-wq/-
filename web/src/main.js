@@ -6,5 +6,6 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import App from './App.vue'
 import router from './router'
 import './styles.css'
+import './styles/bento.css'
 
 createApp(App).use(ElementPlus, { locale: zhCn }).use(router).mount('#app')

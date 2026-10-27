@@ -10,8 +10,9 @@
   --qh-text: #18181b;
   --qh-text-sub: #52525b;
   --qh-text-mute: #a1a1aa;
-  --qh-radius-lg: 8px;
-  --qh-radius-xl: 12px;
+  --qh-radius-lg: 14px;
+  --qh-radius-xl: 20px;
+  --qh-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 * {
@@ -47,21 +48,69 @@ body {
 /* 卡片（含 Element Plus 的 el-card）：白底 + 描边 + 12px 圆角；
    hover 仅允许 2px 抬升与轻量阴影扩散，保证阅读稳定 */
 .el-card {
-  border: 1px solid var(--qh-border) !important;
+  border: 1px solid #f4f4f5 !important;
   border-radius: var(--qh-radius-xl) !important;
   background: var(--qh-surface);
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04), 0 2px 10px rgba(24, 24, 27, 0.04);
+  transition:
+    transform 260ms var(--qh-ease),
+    box-shadow 260ms var(--qh-ease),
+    border-color 260ms var(--qh-ease);
 }
 
 .el-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(24, 24, 27, 0.08);
+  transform: translateY(-4px) scale(1.005);
+  border-color: #e4e4e7 !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* 全站按钮/输入框统一 Bento token */
+.el-button {
+  border-radius: 14px;
+  font-weight: 500;
+  transition:
+    transform 180ms var(--qh-ease),
+    box-shadow 180ms var(--qh-ease),
+    background-color 180ms var(--qh-ease);
+}
+
+.el-button:active {
+  transform: scale(0.97);
+}
+
+.el-button--primary {
+  --el-button-bg-color: #18181b;
+  --el-button-border-color: #18181b;
+  --el-button-hover-bg-color: #27272a;
+  --el-button-hover-border-color: #27272a;
+  --el-button-active-bg-color: #18181b;
+  --el-button-active-border-color: #18181b;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: 14px;
+  background: #fafafa;
+  box-shadow: 0 0 0 1px var(--qh-border) inset;
+  transition:
+    box-shadow 220ms var(--qh-ease),
+    background-color 220ms var(--qh-ease);
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  background: #fff;
+  box-shadow:
+    0 0 0 1px #3b82f6 inset,
+    0 0 0 4px rgba(59, 130, 246, 0.14) !important;
 }
 
 /* 路由切换动画：轻量淡入位移，不用弹性曲线 */
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 150ms ease, transform 150ms ease;
+  transition: opacity 240ms var(--qh-ease), transform 240ms var(--qh-ease);
 }
 
 .page-fade-enter-from {
@@ -91,7 +140,8 @@ p {
     animation-iteration-count: 1 !important;
   }
 
-  .el-card:hover {
+  .el-card:hover,
+  .el-button:active {
     transform: none;
   }
 }

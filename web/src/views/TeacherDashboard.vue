@@ -1,6 +1,7 @@
 <template>
-  <div class="page">
-    <el-card shadow="never" class="filter-bar">
+  <div class="page bento-page">
+    <div class="bento-grid">
+    <section class="bento-card bento-span-4 filter-bar">
       <el-form inline @submit.prevent>
         <el-form-item label="学院">
           <el-select
@@ -64,70 +65,138 @@
         <el-switch v-model="autoRefresh" size="small" active-text="自动刷新" class="auto-switch" />
         <router-link to="/teacher/students" class="to-files">看学生个人档案 →</router-link>
       </div>
-    </el-card>
+    </section>
 
-    <el-row :gutter="12" class="stat-row">
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-red">
-          <div class="stat-label">红色预警</div>
-          <div class="stat-value"><count-number :value="dist.red" /></div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-orange">
-          <div class="stat-label">橙色预警</div>
-          <div class="stat-value"><count-number :value="dist.orange" /></div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-yellow">
-          <div class="stat-label">黄色预警</div>
-          <div class="stat-value"><count-number :value="dist.yellow" /></div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card stat-normal">
-          <div class="stat-label">班级人数 / 均分</div>
-          <div class="stat-value small">
-            <count-number :value="overview.headcount" /> /
-            <count-number :value="overview.avg_gpa" :decimals="1" />
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <article class="bento-card stat-card stat-red">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z" /><path d="M12 9v4M12 16h.01" /></svg>
+        </span>
+        <span class="stat-label">红色预警</span>
+      </div>
+      <div class="bento-stat"><count-number :value="dist.red" /></div>
+    </article>
 
-    <el-row :gutter="12">
-      <el-col :span="10">
-        <el-card shadow="never" v-loading="loading">
-          <div class="card-title">预警等级分布</div>
-          <div ref="barRef" class="chart-box"></div>
-        </el-card>
-      </el-col>
-      <el-col :span="14">
-        <el-card shadow="never" v-loading="loading">
-          <div class="card-title">班级概貌</div>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="班级">{{ overview.class_name || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="学院">{{ currentCollege || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="学期">{{ overview.term || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="专业">{{ currentMajors || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="挂科人数">{{ overview.fail_students ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="挂科率">{{ fmtRate(overview.fail_rate) }}</el-descriptions-item>
-          </el-descriptions>
-          <div class="card-title" style="margin-top: 12px">高风险 Top5</div>
-          <el-empty v-if="!overview.top_risk_students?.length" description="暂无数据" />
-          <ul v-else class="risk-list">
-            <li v-for="s in overview.top_risk_students" :key="s.student_no">
-              <el-tag :type="levelType(s.level)" size="small">{{ s.student_no }}</el-tag>
-              <span class="risk-name">{{ s.name || '—' }}</span>
-              <span class="risk-score">{{ s.risk_score }}</span>
-            </li>
-          </ul>
-        </el-card>
-      </el-col>
-    </el-row>
+    <article class="bento-card stat-card stat-orange">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>
+        </span>
+        <span class="stat-label">橙色预警</span>
+      </div>
+      <div class="bento-stat"><count-number :value="dist.orange" /></div>
+    </article>
 
-    <el-card shadow="never" v-loading="loading" class="intent-card">
+    <article class="bento-card stat-card stat-yellow">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 4a6 6 0 0 0-6 6v4l-2 3h16l-2-3v-4a6 6 0 0 0-6-6z" /><path d="M10 19a2 2 0 0 0 4 0" /></svg>
+        </span>
+        <span class="stat-label">黄色预警</span>
+      </div>
+      <div class="bento-stat"><count-number :value="dist.yellow" /></div>
+    </article>
+
+    <article class="bento-card stat-card stat-normal">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 20a5 5 0 0 0-3-4.5" /></svg>
+        </span>
+        <span class="stat-label">班级人数 / 均分</span>
+      </div>
+      <div class="bento-stat">
+        <count-number :value="overview.headcount" />
+        <span class="stat-sep">/</span>
+        <count-number :value="overview.avg_gpa" :decimals="1" />
+      </div>
+    </article>
+
+    <section class="bento-card bento-span-2 bento-row-2 hero-card" v-loading="loading">
+      <div class="hero-head">
+        <div>
+          <p class="bento-eyebrow">班级概貌</p>
+          <h2 class="hero-class-name">{{ overview.class_name || '请选择班级' }}</h2>
+          <p class="bento-sub">{{ currentCollege || '—' }} · {{ currentMajors }}</p>
+        </div>
+        <el-tag size="small" effect="plain">{{ overview.term || term || '—' }}</el-tag>
+      </div>
+
+      <div class="hero-metrics">
+        <div>
+          <span>在册人数</span>
+          <b><count-number :value="overview.headcount" /></b>
+        </div>
+        <div>
+          <span>班级均分</span>
+          <b><count-number :value="overview.avg_gpa" :decimals="1" /></b>
+        </div>
+        <div>
+          <span>挂科率</span>
+          <b>{{ fmtRate(overview.fail_rate) }}</b>
+        </div>
+        <div>
+          <span>挂科人数</span>
+          <b><count-number :value="overview.fail_students" /></b>
+        </div>
+      </div>
+
+      <div class="hero-split">
+        <div class="split-bar" aria-hidden="true">
+          <span class="seg seg-red" :style="{ flex: dist.red || 0 }" />
+          <span class="seg seg-orange" :style="{ flex: dist.orange || 0 }" />
+          <span class="seg seg-yellow" :style="{ flex: dist.yellow || 0 }" />
+          <span class="seg seg-none" :style="{ flex: dist.none || 0 }" />
+        </div>
+        <div class="split-legend">
+          <span><i class="dot dot-red" />红 {{ dist.red || 0 }}</span>
+          <span><i class="dot dot-orange" />橙 {{ dist.orange || 0 }}</span>
+          <span><i class="dot dot-yellow" />黄 {{ dist.yellow || 0 }}</span>
+          <span><i class="dot dot-none" />正常 {{ dist.none || 0 }}</span>
+        </div>
+      </div>
+
+      <div class="hero-info">
+        <div><span>学院</span><b>{{ currentCollege || '-' }}</b></div>
+        <div><span>专业</span><b>{{ currentMajors || '-' }}</b></div>
+      </div>
+
+      <div class="hero-links">
+        <router-link to="/teacher/students" class="hero-link">学生档案</router-link>
+        <router-link to="/teacher/jobs" class="hero-link">岗位库</router-link>
+        <router-link to="/teacher/exams" class="hero-link">招考信息</router-link>
+        <router-link to="/teacher/kg" class="hero-link">知识图谱</router-link>
+      </div>
+
+      <div class="hero-foot">
+        {{ overview.term || term || '-' }} · 引擎 {{ warnings.engine_version || overview.engine_version || '-' }}
+        · 画像 {{ warnings.calc_version || overview.calc_version || '-' }} · 数据于 {{ clock.ago(lastLoadAt) }}
+      </div>
+    </section>
+
+    <section class="bento-card bento-span-2 chart-card" v-loading="loading">
+      <div class="card-head">
+        <h3 class="bento-title">预警等级分布</h3>
+        <span class="bento-eyebrow">按当前班级</span>
+      </div>
+      <div ref="barRef" class="chart-box"></div>
+    </section>
+
+    <section class="bento-card bento-span-2 risk-card">
+      <div class="card-head">
+        <h3 class="bento-title">高风险 Top5</h3>
+        <span class="bento-eyebrow">点击行看画像</span>
+      </div>
+      <el-empty v-if="!overview.top_risk_students?.length" description="暂无数据" />
+      <ul v-else class="risk-list">
+        <li v-for="s in overview.top_risk_students" :key="s.student_no">
+          <el-tag :type="levelType(s.level)" size="small">{{ s.student_no }}</el-tag>
+          <span class="risk-name">{{ s.name || '—' }}</span>
+          <span class="risk-score">{{ s.risk_score }}</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="bento-card bento-span-4 intent-card" v-loading="loading">
       <div class="intent-head">
         <span class="card-title" style="margin: 0">职业目标分布</span>
         <el-tag size="small" effect="plain">
@@ -147,9 +216,9 @@
           <div class="intent-rate">{{ item.rate }}</div>
         </div>
       </div>
-    </el-card>
+    </section>
 
-    <el-card shadow="never" class="table-card">
+    <section class="bento-card bento-span-4 table-card">
       <div class="card-title">预警名单（点击行看四维画像）</div>
       <el-table
         v-loading="loading"
@@ -178,6 +247,14 @@
           </template>
         </el-table-column>
         <el-table-column prop="risk_score" label="风险分" width="100" sortable />
+        <el-table-column label="归因摘要" min-width="280">
+          <template #default="{ row }">
+            <span v-if="row.reasons?.length" class="table-reason">
+              {{ row.reasons[0] }}<template v-if="row.reasons.length > 1"> 等 {{ row.reasons.length }} 项</template>
+            </span>
+            <span v-else class="table-reason muted">无触发项</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="90">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openProfile(row)">画像</el-button>
@@ -185,7 +262,8 @@
         </el-table-column>
       </el-table>
       <el-empty v-if="!loading && !(warnings.items || []).length" description="该班级暂无预警数据" />
-    </el-card>
+    </section>
+    </div>
 
     <el-dialog v-model="thresholdDialog" title="班级预警阈值" width="760px">
       <div class="threshold-head">
@@ -727,7 +805,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .filter-bar {
-  margin-bottom: 12px;
+  padding: 16px 18px;
+}
+
+.filter-bar :deep(.el-form-item) {
+  margin-bottom: 10px;
 }
 
 .engine-line {
@@ -761,43 +843,40 @@ onBeforeUnmount(() => {
   margin-left: 12px;
 }
 
-.stat-row {
-  margin-bottom: 12px;
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 128px;
 }
 
-/* 等级用「标签前的小方点 + 数值着色」表达，不用单侧粗边框装饰 */
-.stat-label {
+.stat-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+}
+
+.stat-card .bento-icon {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+
+.stat-label {
   font-size: 13px;
+  font-weight: 500;
   color: var(--qh-text-mute);
 }
 
-.stat-label::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-  border-radius: 2px;
-  background: #d4d4d8;
-}
+.stat-red .bento-icon { color: var(--qh-red); background: #fef2f2; }
+.stat-orange .bento-icon { color: var(--qh-orange); background: #fffbeb; }
+.stat-yellow .bento-icon { color: var(--qh-yellow); background: #fefce8; }
+.stat-normal .bento-icon { color: #52525b; background: #f4f4f5; }
 
-.stat-red .stat-label::before {
-  background: var(--qh-red);
-}
-
-.stat-orange .stat-label::before {
-  background: var(--qh-orange);
-}
-
-.stat-yellow .stat-label::before {
-  background: var(--qh-yellow);
-}
-
-.stat-normal .stat-label::before {
-  background: #a1a1aa;
-}
+.stat-red:hover .bento-icon { color: var(--qh-red); background: #fee2e2; }
+.stat-orange:hover .bento-icon { color: var(--qh-orange); background: #fef3c7; }
+.stat-yellow:hover .bento-icon { color: var(--qh-yellow); background: #fef9c3; }
+.stat-normal:hover .bento-icon { color: #18181b; background: #e4e4e7; }
 
 .stat-value {
   font-size: 24px;
@@ -816,6 +895,189 @@ onBeforeUnmount(() => {
 .stat-value.small {
   font-size: 20px;
   color: var(--qh-text);
+}
+
+.stat-sep {
+  margin: 0 6px;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--bento-mute);
+}
+
+.hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100%;
+}
+
+.hero-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero-class-name {
+  margin: 0;
+  font-size: clamp(26px, 2.6vw, 36px);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--bento-text);
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--bento-border);
+  border-bottom: 1px solid var(--bento-border);
+}
+
+.hero-metrics div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hero-metrics span {
+  font-size: 12px;
+  color: var(--bento-mute);
+}
+
+.hero-metrics b {
+  font-size: 24px;
+  font-weight: 680;
+  color: var(--bento-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-split {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.split-bar {
+  display: flex;
+  height: 10px;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f4f4f5;
+}
+
+.seg {
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+
+.seg-red { background: #e5484d; }
+.seg-orange { background: #f5a623; }
+.seg-yellow { background: #f0c808; }
+.seg-none { background: #4cb971; }
+
+.split-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--bento-sub);
+}
+
+.split-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.dot-red { background: #e5484d; }
+.dot-orange { background: #f5a623; }
+.dot-yellow { background: #f0c808; }
+.dot-none { background: #4cb971; }
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hero-info div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.hero-info span {
+  flex: 0 0 40px;
+  font-size: 12px;
+  color: var(--bento-mute);
+}
+
+.hero-info b {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--bento-text);
+}
+
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero-link {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f4f4f5;
+  color: var(--bento-sub);
+  font-size: 12px;
+  text-decoration: none;
+  transition:
+    background-color 200ms var(--bento-ease),
+    color 200ms var(--bento-ease),
+    transform 200ms var(--bento-ease);
+}
+
+.hero-link:hover {
+  background: #18181b;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.hero-foot {
+  margin-top: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--bento-mute);
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.chart-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.risk-card {
+  display: flex;
+  flex-direction: column;
 }
 
 .threshold-head {
@@ -837,7 +1099,7 @@ onBeforeUnmount(() => {
 }
 
 .intent-card {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .intent-head {
@@ -852,15 +1114,20 @@ onBeforeUnmount(() => {
 .intent-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: 16px;
 }
 
 .intent-item {
   border: 1px solid var(--qh-border);
-  border-top: 3px solid var(--intent-color);
-  border-radius: var(--qh-radius-lg);
-  background: var(--qh-surface);
-  padding: 10px 12px;
+  border-radius: 16px;
+  background: #fafafa;
+  padding: 14px 16px;
+  transition: transform 220ms var(--bento-ease), box-shadow 220ms var(--bento-ease);
+}
+
+.intent-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
 }
 
 .intent-label {
@@ -897,7 +1164,7 @@ onBeforeUnmount(() => {
 }
 
 .table-card {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .expand-box {
@@ -905,6 +1172,15 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: #4e5969;
   line-height: 1.9;
+}
+
+.table-reason {
+  font-size: 13px;
+  color: var(--bento-sub);
+}
+
+.table-reason.muted {
+  color: var(--bento-mute);
 }
 
 .reason {
@@ -923,8 +1199,8 @@ onBeforeUnmount(() => {
 .risk-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: 12px;
+  padding: 8px 0;
   font-size: 13px;
 }
 
