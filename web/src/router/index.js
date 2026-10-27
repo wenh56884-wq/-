@@ -7,6 +7,7 @@ import InterviewRoom from '../views/InterviewRoom.vue'
 import KgView from '../views/KgView.vue'
 import JobList from '../views/JobList.vue'
 import Login from '../views/Login.vue'
+import StudentForecast from '../views/StudentForecast.vue'
 import StudentHome from '../views/StudentHome.vue'
 import TeacherDashboard from '../views/TeacherDashboard.vue'
 import TeacherStudents from '../views/TeacherStudents.vue'
@@ -37,7 +38,8 @@ const routes = [
       { path: 'jobs', name: 'student-jobs', component: JobList },
       { path: 'interview', name: 'student-interview', component: InterviewRoom },
       { path: 'exams', name: 'student-exams', component: ExamNotices },
-      { path: 'kg', name: 'student-kg', component: KgView }
+      { path: 'kg', name: 'student-kg', component: KgView },
+      { path: 'forecast', name: 'student-forecast', component: StudentForecast }
     ]
   },
   // 智能助手已改为右下角悬浮抽屉，这里保留旧地址做重定向，避免历史链接白屏

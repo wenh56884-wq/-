@@ -142,7 +142,9 @@ const ICONS = {
   // 面试：麦克风（话筒头 + 支架）
   mic: 'M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v4M8 22h8',
   // 图谱：三节点连线
-  graph: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 17l3.5-2M17 9.5l-3.5 8M17.5 8 8 17'
+  graph: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 17l3.5-2M17 9.5l-3.5 8M17.5 8 8 17',
+  // 预测：折线上扬 + 箭头
+  trend: 'M3 17l6-6 4 4 7-7M17 8h4M17 8v4'
 }
 
 // 侧栏宽度：规范上限 280px，统一 256px；折叠态 64px
@@ -172,7 +174,8 @@ const MENUS = {
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
     { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
-    { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
+    { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
+    { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' }
   ]
 }
 
