@@ -1,18 +1,19 @@
 <template>
-  <div class="page">
+  <div class="page bento-page">
+    <div class="bento-grid">
     <!-- 数据新鲜度：让用户知道这份数据是哪天抓的，不是"实时" -->
     <el-alert
       v-if="lastSuccess"
       type="info"
       :closable="false"
-      class="freshness"
+      class="freshness bento-span-4"
       show-icon
     >
       数据每周从官方渠道自动更新，上次同步：{{ lastSuccess }}
       <span class="freshness-note">（公告原文链接可逐条核对）</span>
     </el-alert>
 
-    <el-card shadow="never" class="filter-bar">
+    <el-card shadow="never" class="filter-bar bento-span-4">
       <el-form inline @submit.prevent>
         <el-form-item label="类型">
           <el-radio-group v-model="examType" @change="reload">
@@ -47,16 +48,43 @@
     </el-card>
 
     <!-- 各类型条数概览 -->
-    <div class="type-stats">
-      <div v-for="t in stats" :key="t.exam_type" class="type-chip" :class="{ active: examType === t.exam_type }"
-        @click="pickType(t.exam_type)">
-        <span class="chip-label">{{ t.label }}</span>
-        <span class="chip-num">{{ t.total }}</span>
-        <span class="chip-open">在招 {{ t.open }}</span>
+    <article
+      class="bento-card stat-card type-card"
+      :class="{ active: examType === '' }"
+      role="button"
+      tabindex="0"
+      @click="pickType('')"
+      @keyup.enter="pickType('')"
+    >
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5L12 3zM4 12l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" /></svg>
+        </span>
+        <span class="stat-label">全部公告</span>
       </div>
-    </div>
+      <div class="bento-stat">{{ statTotals.total }}<small>在招 {{ statTotals.open }}</small></div>
+    </article>
 
-    <el-card shadow="never" v-loading="loading">
+    <article
+      v-for="t in stats"
+      :key="t.exam_type"
+      class="bento-card stat-card type-card"
+      :class="{ active: examType === t.exam_type }"
+      role="button"
+      tabindex="0"
+      @click="pickType(t.exam_type)"
+      @keyup.enter="pickType(t.exam_type)"
+    >
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M14 3v4h4M9 13h6M9 17h4" /></svg>
+        </span>
+        <span class="stat-label">{{ t.label }}</span>
+      </div>
+      <div class="bento-stat">{{ t.total }}<small>在招 {{ t.open }}</small></div>
+    </article>
+
+    <el-card shadow="never" v-loading="loading" class="bento-span-4 list-card">
       <el-empty v-if="!loading && !items.length" description="没有符合条件的公告" />
 
       <div v-for="it in items" :key="it.id" class="notice-item" @click="openDetail(it)">
@@ -94,6 +122,7 @@
         @current-change="onPage"
       />
     </el-card>
+    </div>
 
     <!-- 详情抽屉：原文全文 + 官网链接 -->
     <el-drawer v-model="drawer" :title="detail?.title || '公告详情'" size="640px">
@@ -176,6 +205,16 @@ const detailReqs = computed(() =>
   REQ_FIELDS.map((f) => ({ ...f, value: detail.value?.[f.key] || '' }))
 )
 
+const statTotals = computed(() =>
+  (stats.value || []).reduce(
+    (acc, t) => ({
+      total: acc.total + Number(t.total || 0),
+      open: acc.open + Number(t.open || 0)
+    }),
+    { total: 0, open: 0 }
+  )
+)
+
 function tagType(t) {
   return EXAM_TYPE_TAG[t] || 'info'
 }
@@ -247,10 +286,8 @@ onMounted(() => {
 
 <style scoped>
 .page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px;
+  display: block;
+  padding: 0;
 }
 .freshness {
   margin-bottom: 0;
@@ -263,40 +300,45 @@ onMounted(() => {
 .filter-bar :deep(.el-form-item) {
   margin-bottom: 0;
 }
-.type-stats {
+.stat-card {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.type-chip {
-  display: flex;
-  align-items: baseline;
+  flex-direction: column;
   gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  min-height: 128px;
+}
+
+.stat-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stat-card .bento-icon {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bento-mute);
+}
+
+.type-card {
   cursor: pointer;
-  transition: all 0.15s;
-  background: var(--el-bg-color);
 }
-.type-chip:hover {
-  border-color: var(--el-color-primary);
+
+.type-card.active {
+  border-color: #18181b;
+  box-shadow:
+    0 0 0 2px rgba(24, 24, 27, 0.08),
+    var(--bento-shadow);
 }
-.type-chip.active {
-  border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-.chip-label {
-  font-weight: 600;
-}
-.chip-num {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--el-color-primary);
-}
-.chip-open {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+
+.type-card.active .bento-icon {
+  color: #18181b;
+  background: #e4e4e7;
 }
 .notice-item {
   padding: 12px 8px;

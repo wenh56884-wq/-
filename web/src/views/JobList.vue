@@ -1,18 +1,19 @@
 <template>
-  <div class="page">
+  <div class="page bento-page">
+    <div class="bento-grid">
     <!-- 数据新鲜度：数据不是"实时"的，必须让学生知道是哪天同步的 -->
     <el-alert
       v-if="lastSuccess"
       type="info"
       :closable="false"
-      class="freshness"
+      class="freshness bento-span-4"
       show-icon
     >
       岗位每周从公开招聘渠道自动更新，上次同步：{{ lastSuccess }}
       <span class="freshness-note">（薪资/学历均取原文，未标注的显示「未标注」，不做推测）</span>
     </el-alert>
 
-    <el-card shadow="never" class="filter-bar">
+    <el-card shadow="never" class="filter-bar bento-span-4">
       <el-form inline @submit.prevent>
         <el-form-item label="关键词">
           <el-input
@@ -55,31 +56,60 @@
     </el-card>
 
     <!-- 概览：总量 / 在招 / 单位数 / 行业数 -->
-    <div class="stat-row">
-      <div class="stat-chip">
-        <span class="stat-num">{{ stats.total ?? '—' }}</span>
+    <article class="bento-card stat-card">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="3" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18" /></svg>
+        </span>
         <span class="stat-label">岗位总数</span>
       </div>
-      <div class="stat-chip">
-        <span class="stat-num">{{ stats.open ?? '—' }}</span>
+      <div class="bento-stat">{{ stats.total ?? '—' }}</div>
+    </article>
+
+    <article class="bento-card stat-card">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg>
+        </span>
         <span class="stat-label">在招</span>
       </div>
-      <div class="stat-chip">
-        <span class="stat-num">{{ stats.companies ?? '—' }}</span>
+      <div class="bento-stat">{{ stats.open ?? '—' }}</div>
+    </article>
+
+    <article class="bento-card stat-card">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14M15 10h3a2 2 0 0 1 2 2v8M3 20h18M8 8h3M8 12h3M8 16h3" /></svg>
+        </span>
         <span class="stat-label">招聘单位</span>
       </div>
-      <div class="stat-chip">
-        <span class="stat-num">{{ stats.industries ?? '—' }}</span>
+      <div class="bento-stat">{{ stats.companies ?? '—' }}</div>
+    </article>
+
+    <article class="bento-card stat-card">
+      <div class="stat-top">
+        <span class="bento-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5L12 3zM4 12l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" /></svg>
+        </span>
         <span class="stat-label">覆盖行业</span>
       </div>
-      <div class="stat-top">
+      <div class="bento-stat">{{ stats.industries ?? '—' }}</div>
+    </article>
+
+    <section class="bento-card bento-span-4 industry-card">
+      <div class="card-head">
+        <h3 class="bento-title">行业分布</h3>
+        <span class="bento-eyebrow">按在招岗位</span>
+      </div>
+      <div class="top-tags">
         <span v-for="t in stats.top_industries || []" :key="t.industry" class="top-tag">
           {{ t.industry }} {{ t.total }}
         </span>
+        <span v-if="!(stats.top_industries || []).length" class="empty-note">暂无行业数据</span>
       </div>
-    </div>
+    </section>
 
-    <el-card shadow="never" v-loading="loading">
+    <el-card shadow="never" v-loading="loading" class="bento-span-4 list-card">
       <el-empty v-if="!loading && !items.length" description="没有符合条件的岗位" />
 
       <div v-for="it in items" :key="it.id" class="job-item" @click="openDetail(it)">
@@ -119,6 +149,7 @@
         @current-change="onPage"
       />
     </el-card>
+    </div>
 
     <!-- 详情抽屉：完整 JD + 投递原文链接 -->
     <el-drawer v-model="drawer" :title="detail?.title || '岗位详情'" size="620px">
@@ -237,10 +268,8 @@ onMounted(() => {
 
 <style scoped>
 .page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px;
+  display: block;
+  padding: 0;
 }
 .freshness {
   margin-bottom: 0;
@@ -253,42 +282,60 @@ onMounted(() => {
 .filter-bar :deep(.el-form-item) {
   margin-bottom: 0;
 }
-.stat-row {
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 128px;
+}
+
+.stat-top {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
 }
-.stat-chip {
+
+.stat-card .bento-icon {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bento-mute);
+}
+
+.industry-card {
+  padding: 18px 20px;
+}
+
+.card-head {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
-  background: var(--el-bg-color);
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
 }
-.stat-num {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--el-color-primary);
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.stat-top {
+
+.top-tags {
   display: flex;
-  gap: 6px;
   flex-wrap: wrap;
-  margin-left: auto;
+  gap: 8px;
 }
+
 .top-tag {
   font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-regular);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f4f4f5;
+  color: var(--bento-sub);
+}
+
+.empty-note {
+  font-size: 12px;
+  color: var(--bento-mute);
 }
 .job-item {
   padding: 12px 8px;

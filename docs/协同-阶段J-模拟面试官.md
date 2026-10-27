@@ -92,10 +92,14 @@
 | 18:21 | Claude Code | **接管声明**：用户授权，冻结 `app/routers/interview.py`、`web/src/views/InterviewRoom.vue` 至 fix commit 完成；WorkBuddy/CodeBuddy 这两个文件暂停改动 | 完成 |
 | 18:21 | WorkBuddy | 全量 pytest 结束；转做知识图谱，新增 `engine/kg.py`、`app/routers/kg.py`、`scripts/build_kg.py`、`data/kg/`（新 WIP，不属于面试提交） | 进行中 |
 | 18:22 | Claude Code | 修 P0-2/P0-3 + 前端显示字段；新增 5 条路由契约测试；32 passed、eval 5/5、build PASS | 完成，待提交 |
+| 18:35 | WorkBuddy | 二期 B/C 落地：`engine/kg.py`+`/kg` 路由+KgView；`engine/hybrid.py`（0.7/0.3）+工具层三段式理由+StudentHome 展示 | 完成 |
+| 18:40 | WorkBuddy | `scripts/demo_full.py` 完整演示 21 步全通（含防虚构降级实录、越权 403） | 完成 |
+| 18:44 | WorkBuddy | 全量 `pytest -m "not spark"` **342 passed**；spark 10 条本轮未跑（被并发会话 kill，二期②已验收） | 待复跑 |
+| 18:45 | WorkBuddy | **违规自述**：18:0x 用 `git add -A` 提交，把 Claude Code 的 `agents/interviewer.py`/`tests/test_interviewer.py`/本文件一并纳入 18d1bd3；之后各提交改为精确 add | 已纠 |
 
 ### 待办队列（按优先级）
-1. **[WorkBuddy]** `tests/test_interview.py` 的环境变量改为 autouse fixture（模块级 `setdefault` 会污染同进程其他测试；我的测试已隔离，但其他模块仍可能中招）。
-2. **[WorkBuddy]** `scripts/demo_interview.py` 头部仍写 `_smoke_interview.py`，且 `sys.path.insert(0, r"D:\qihang")` 写死盘符；演示前改成 `Path(__file__).resolve().parent.parent`。
+1. ~~**[WorkBuddy]** `tests/test_interview.py` 的环境变量改为 autouse fixture~~ → **已修（18:58）**：删掉模块级 `os.environ.setdefault`，改为 `@pytest.fixture(autouse=True)` + `monkeypatch.setenv` 逐条隔离；混跑 `test_interview + test_tools + test_api` 54 passed，确认无串扰。
+2. ~~**[WorkBuddy]** `scripts/demo_interview.py` 头部仍写 `_smoke_interview.py`，且 `sys.path.insert(0, r"D:\qihang")` 写死盘符~~ → **已修（18:58）**：改为模块 docstring + `Path(__file__).resolve().parent.parent`；`BASE` 改读 `DEMO_BASE` 环境变量。
 3. **[Claude Code]** 点评数值校验（铁律 1）：`verify_comment()` 目前只校验引文，不校验「引擎分被写成别的数字」；下一轮加数值白名单。
 4. **[全员]** 全量 `pytest tests\ -q` 排他复跑一次（WorkBuddy 18:15 那轮已跑完，结论以排他复跑为准）。
 5. **[全员]** 提交纪律：`git add -A` 已在 18:16 的提交里把三方改动混在一起；后续一律按路径 stage，知识图谱 WIP 不得混入面试提交。
@@ -171,11 +175,14 @@ cd web; npm run build
 - **登录页**：2×2 品牌渐变卡 + 2×2 登录卡 + 4 个 1×1 能力卡；演示账号更新为 `T001 / teacher@123`、`AI20230001 / AI20230001`。
 - **教师看板**：全宽筛选卡 + 4 个指标瓦片 + 2×2 班级概貌（风险分段条/图例/快捷入口）+ 2×1 图表 + 2×1 高风险 Top5 + 全宽职业目标分布 + 全宽预警名单（新增归因摘要列）。
 - **学生首页**：生涯规划 2×2 大卡 + 本人信息卡 + 快捷入口（面试/岗位/招考/图谱）+ 全宽岗位推荐；原业务逻辑与混合推荐字段不动。
+- **岗位库**：4 个指标瓦片 + 全宽筛选卡 + 全宽行业分布 + 全宽列表；查询/分页/详情抽屉逻辑不变。
+- **招考信息**：全部/考公/考编/考研 4 个可点选指标卡（全部=合计）+ 全宽筛选卡 + 全宽公告列表；筛选/分页/详情抽屉逻辑不变。
 - **全局 Bento 化**：其他页面的 `el-card` 立即获得 20px 圆角、Bento 阴影与悬停，不必逐页重写。
-- 视觉截图（不入库）：`logs/screenshots/01-login.png`、`02-teacher-dashboard.png`、`03-student-home.png`。
+- 视觉截图（不入库）：`logs/screenshots/01-login.png`、`02-teacher-dashboard.png`、`03-student-home.png`、`04-student-jobs.png`、`05-student-exams.png`。
 - 构建：`npm run build` 通过（15.89s）。
 
 ### Phase 2 分工（防打架）
-- `TeacherStudents.vue` / `JobList.vue` / `ExamNotices.vue` / `InterviewRoom.vue` / `KgView.vue`：优先 CodeBuddy 用现有 `.bento-page / .bento-grid / .bento-card / .bento-span-*` 改造；Claude Code 负责验收与共享 CSS 调整。
+- **已完成（Claude Code）**：`JobList.vue`、`ExamNotices.vue`（2026-10-27 18:55，构建 9.83s）。
+- **剩余（CodeBuddy）**：`TeacherStudents.vue` / `InterviewRoom.vue` / `KgView.vue`——用现有 `.bento-page / .bento-grid / .bento-card / .bento-span-*` 改造；Claude Code 负责验收与共享 CSS 调整。
 - 每页改造前先在看板登记；同一文件同一时间只允许一个 owner 改；改完 `npm run build` 并把截图/构建输出贴回本节。
 - 规则：外层 `.bento-page`、内层 `.bento-grid`；大卡 `span-2 row-2`、中卡 `span-2`、小卡 1×1；统一 gap 20；不在 `bento-card` 里再套 `el-card`；主按钮不用 Element 蓝。
