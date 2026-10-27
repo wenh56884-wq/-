@@ -30,4 +30,5 @@ Thumbs.db
 
 # --- frontend ---
 web/node_modules/
-web/dist/.workbuddy/
+web/dist/
+.workbuddy/

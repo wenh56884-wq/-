@@ -134,7 +134,11 @@ const ICONS = {
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   chat: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
-  self: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8'
+  self: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
+  // 招考：卷轴/公告形态（纸 + 折角 + 两行正文）
+  doc: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4',
+  // 岗位：公文包（把手 + 箱体）
+  briefcase: 'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 12h20'
 }
 
 // 侧栏宽度：规范上限 280px，统一 256px；折叠态 64px
@@ -152,10 +156,14 @@ const role = currentRole()
 const MENUS = {
   teacher: [
     { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
-    { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' }
+    { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' },
+    { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
+    { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' }
   ],
   student: [
-    { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' }
+    { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
+    { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
+    { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' }
   ]
 }
 
@@ -173,9 +181,15 @@ const contentMargin = computed(() => {
   return `${collapsed.value ? SIDEBAR_COLLAPSED_W : SIDEBAR_W}px`
 })
 
-const currentItem = computed(
-  () => menus.value.find((item) => route.path.startsWith(item.path)) || menus.value[0]
-)
+// 取「最长匹配」而非「第一个匹配」：否则 /teacher/exams 会被 /teacher 抢先命中，
+// 顶栏标题就永远停在「班级总览」。
+const currentItem = computed(() => {
+  const hits = menus.value.filter(
+    (item) => route.path === item.path || route.path.startsWith(`${item.path}/`)
+  )
+  if (!hits.length) return menus.value[0]
+  return hits.reduce((best, cur) => (cur.path.length > best.path.length ? cur : best))
+})
 const currentLabel = computed(() => currentItem.value?.label || '')
 const currentHint = computed(() => currentItem.value?.hint || '')
 

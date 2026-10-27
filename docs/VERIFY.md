@@ -1,6 +1,6 @@
 # 启航系统 · 验收报告（VERIFY.md）
 
-> 生成脚本：`python scripts\gen_verify_report.py`　生成时间：2026-10-26 22:33:24
+> 生成脚本：`python scripts\gen_verify_report.py`　生成时间：2026-10-27 15:05:02
 
 ## 1. 环境水印
 
@@ -9,10 +9,10 @@
 
 ## 2. 数据源状态
 
-- MySQL：学生 504 人 / 班级 44 个 / 成绩行 2886 条 / 岗位 2931 条
-- DuckDB student_feature：619 行，版本分布 v1.1=619
-- gpa_trend 值域：-33.89 ~ 22.3；recommend_log：1035 条
-- 抽查班级：AI2201（20 人在报告样本内）
+- MySQL：学生 10000 人 / 班级 40 个 / 成绩行 57954 条 / 岗位 2931 条
+- DuckDB student_feature：10000 行，版本分布 v1.1=10000
+- gpa_trend 值域：-39.91 ~ 27.19；recommend_log：43 条
+- 抽查班级：AI2301（20 人在报告样本内）
 
 ## 3. 端到端 12 项结果
 
@@ -20,16 +20,16 @@
 | - | - | - | - |
 | 1 | /health 全绿 | PASS | status=ok db=ok duckdb=ok llm=configured |
 | 2 | 教师登录拿 token | PASS | role=teacher tenant=1 |
-| 3 | 班级概览 | PASS | 班级=AI2201 headcount=29 avg_gpa=74.22 |
-| 4 | 预警名单 | PASS | 分布：red 3、orange 2、yellow 6、none 18、unknown 0 |
-| 5 | 学生画像 | PASS | AI2022001 四维=4 标签=3 |
+| 3 | 班级概览 | PASS | 班级=AI2301 headcount=580 avg_gpa=76.3 |
+| 4 | 预警名单 | PASS | 分布：red 47、orange 45、yellow 92、none 396、unknown 0 |
+| 5 | 学生画像 | PASS | AI20230001 四维=4 标签=3 |
 | 6 | 职业差距 | PASS | target=数据 gaps=3 |
-| 7 | 学生登录 | PASS | AI2022001 |
-| 8 | 学生查本人预警 | PASS | risk=15 level=none coverage=3 两端一致=True |
-| 9 | 学生查他人被拒 | PASS | HTTP 403（目标 AI2022002） |
-| 10 | 学生推荐接口 | PASS | version=v1.0 items=5 冷启动=False 候选池=916 |
+| 7 | 学生登录 | PASS | AI20230001 |
+| 8 | 学生查本人预警 | PASS | risk=10 level=none coverage=3 两端一致=True |
+| 9 | 学生查他人被拒 | PASS | HTTP 403（目标 AI20230002） |
+| 10 | 学生推荐接口 | PASS | version=v1.0 items=5 冷启动=False 候选池=736 |
 | 11 | 前端静态托管 | PASS | / 与 /teacher 均回落 web\dist\index.html |
-| 12 | 静态资源可加载 | PASS | assets/index-CPLtGC_1.js HTTP 200 |
+| 12 | 静态资源可加载 | PASS | assets/index-UhrxUEv9.js HTTP 200 |
 
 ## 4. 数值一致性（20 人级抽查）
 

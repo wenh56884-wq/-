@@ -26,6 +26,8 @@ from app.auth import (
 )
 from app.config import get_settings
 from app.routers import career as career_router
+from app.routers import exam as exam_router
+from app.routers import job as job_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
 from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
@@ -100,6 +102,8 @@ def create_app() -> FastAPI:
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
     app.include_router(career_router.router)
+    app.include_router(exam_router.router)
+    app.include_router(job_router.router)
 
     @app.middleware("http")
     async def audit_middleware(request: Request, call_next):
@@ -223,6 +227,15 @@ try:
 
     start_background_sync()
 except Exception:  # 同步模块异常不能拖垮接口服务
+    pass
+
+# 后台周更：招考公告（考公 / 考编 / 考研）每周抓一次并增量入库
+# 间隔由 RECRUIT_SYNC_HOURS 控制（默认 168 小时 = 一周；0 关闭）
+try:
+    from app.recruit_sync import start_background_sync as start_recruit_sync
+
+    start_recruit_sync()
+except Exception:
     pass
 
 
