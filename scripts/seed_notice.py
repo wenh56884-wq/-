@@ -157,7 +157,7 @@ def main() -> int:
         with conn.cursor() as cur:
             for n in NOTICES:
                 h = raw_hash(n["title"], n["publisher"])
-                cur.execute("SELECT id FROM notice WHERE raw_hash = %s", (h,))
+                cur.execute("SELECT `编号` FROM `学校通知` WHERE `原始哈希` = %s", (h,))
                 if cur.fetchone():
                     skipped += 1
                     continue
@@ -165,9 +165,9 @@ def main() -> int:
                 published = deadline - timedelta(days=20)
                 cur.execute(
                     """
-                    INSERT INTO notice
-                        (tenant_id, title, publisher, deadline, summary, url,
-                         category, raw_hash, published_at)
+                    INSERT INTO `学校通知`
+                        (`租户编号`, `标题`, `发布单位`, `截止日期`, `摘要`, `链接`,
+                         `分类`, `原始哈希`, `发布日期`)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """,
                     (args.tenant, n["title"], n["publisher"], deadline,
@@ -179,10 +179,10 @@ def main() -> int:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT SUM(deadline >= CURDATE()) AS open_cnt,
-                       SUM(deadline <  CURDATE()) AS expired_cnt,
+                SELECT SUM(`截止日期` >= CURDATE()) AS open_cnt,
+                       SUM(`截止日期` <  CURDATE()) AS expired_cnt,
                        COUNT(*) AS total
-                FROM notice WHERE tenant_id = %s
+                FROM `学校通知` WHERE `租户编号` = %s
                 """,
                 (args.tenant,),
             )

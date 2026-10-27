@@ -111,9 +111,11 @@ def fetch_student_facts(tenant_id: int, student_id: int) -> dict[str, Any]:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, student_no, name, major, college, class_name, grade, enroll_year
-            FROM student
-            WHERE id = %s AND tenant_id = %s
+            SELECT `编号` AS id, `学号` AS student_no, `姓名` AS name, `专业` AS major,
+                   `学院` AS college, `班级` AS class_name, `年级` AS grade,
+                   `入学年份` AS enroll_year
+            FROM `学生`
+            WHERE `编号` = %s AND `租户编号` = %s
             """,
             (student_id, tenant_id),
         )
@@ -122,9 +124,11 @@ def fetch_student_facts(tenant_id: int, student_id: int) -> dict[str, Any]:
         # 四六级 / 政治面貌：没有记录 = 未采集（None），不是"未通过"
         cur.execute(
             """
-            SELECT cet4_score, cet6_score, political_status, target_city, weekly_hours
-            FROM student_extra
-            WHERE student_id = %s AND tenant_id = %s
+            SELECT `四级分数` AS cet4_score, `六级分数` AS cet6_score,
+                   `政治面貌` AS political_status, `意向城市` AS target_city,
+                   `每周学时` AS weekly_hours
+            FROM `学生扩展信息`
+            WHERE `学生编号` = %s AND `租户编号` = %s
             """,
             (student_id, tenant_id),
         )
@@ -133,23 +137,23 @@ def fetch_student_facts(tenant_id: int, student_id: int) -> dict[str, Any]:
         # 绩点/挂科从业务表现算（不跨库读 DuckDB，避免 career 模块依赖派生表）
         cur.execute(
             """
-            SELECT ROUND(AVG(score), 2) AS gpa,
-                   SUM(CASE WHEN score < 60 THEN 1 ELSE 0 END) AS fail_count,
+            SELECT ROUND(AVG(`分数`), 2) AS gpa,
+                   SUM(CASE WHEN `分数` < 60 THEN 1 ELSE 0 END) AS fail_count,
                    COUNT(*) AS course_cnt
-            FROM score
-            WHERE student_id = %s
+            FROM `成绩`
+            WHERE `学生编号` = %s
             """,
             (student_id,),
         )
         score_row = cur.fetchone() or {}
 
-        # 证书/竞赛/项目数来自 student_activity（P2-3 灌的行为表）
+        # 证书/竞赛/项目数来自 学生活动（P2-3 灌的行为表）
         cur.execute(
             """
-            SELECT activity_type, COUNT(*) AS cnt
-            FROM student_activity
-            WHERE student_id = %s AND tenant_id = %s
-            GROUP BY activity_type
+            SELECT `活动类型` AS activity_type, COUNT(*) AS cnt
+            FROM `学生活动`
+            WHERE `学生编号` = %s AND `租户编号` = %s
+            GROUP BY `活动类型`
             """,
             (student_id, tenant_id),
         )
@@ -200,16 +204,16 @@ def save_student_extra(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO student_extra
-                    (tenant_id, student_id, cet4_score, cet6_score,
-                     political_status, target_city, weekly_hours)
+                INSERT INTO `学生扩展信息`
+                    (`租户编号`, `学生编号`, `四级分数`, `六级分数`,
+                     `政治面貌`, `意向城市`, `每周学时`)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
-                    cet4_score       = COALESCE(VALUES(cet4_score), cet4_score),
-                    cet6_score       = COALESCE(VALUES(cet6_score), cet6_score),
-                    political_status = COALESCE(VALUES(political_status), political_status),
-                    target_city      = COALESCE(VALUES(target_city), target_city),
-                    weekly_hours     = COALESCE(VALUES(weekly_hours), weekly_hours)
+                    `四级分数`  = COALESCE(VALUES(`四级分数`), `四级分数`),
+                    `六级分数`  = COALESCE(VALUES(`六级分数`), `六级分数`),
+                    `政治面貌`  = COALESCE(VALUES(`政治面貌`), `政治面貌`),
+                    `意向城市`  = COALESCE(VALUES(`意向城市`), `意向城市`),
+                    `每周学时`  = COALESCE(VALUES(`每周学时`), `每周学时`)
                 """,
                 (
                     tenant_id, student_id, cet4_score, cet6_score,
@@ -233,8 +237,8 @@ def fetch_intent(tenant_id: int, student_id: int) -> str | None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT intent FROM career_intent "
-                "WHERE tenant_id = %s AND student_id = %s LIMIT 1",
+                "SELECT `意向` AS intent FROM `职业意向` "
+                "WHERE `租户编号` = %s AND `学生编号` = %s LIMIT 1",
                 (tenant_id, student_id),
             )
             row = cur.fetchone()
@@ -252,9 +256,9 @@ def save_intent(tenant_id: int, student_id: int, intent: str) -> int:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO career_intent (tenant_id, student_id, intent)
+                INSERT INTO `职业意向` (`租户编号`, `学生编号`, `意向`)
                 VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE intent = VALUES(intent)
+                ON DUPLICATE KEY UPDATE `意向` = VALUES(`意向`)
                 """,
                 (tenant_id, student_id, intent),
             )
@@ -276,11 +280,13 @@ def fetch_active_plan(tenant_id: int, student_id: int) -> dict[str, Any] | None:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, raw_text, goal_type, plan_json, gaps_json, pending_questions,
-                   prompt_version, model_name, created_at
-            FROM career_plan
-            WHERE student_id = %s AND tenant_id = %s AND is_active = 1
-            ORDER BY id DESC
+            SELECT `编号` AS id, `规划原文` AS raw_text, `目标类型` AS goal_type,
+                   `规划内容` AS plan_json, `差距内容` AS gaps_json,
+                   `待补问题` AS pending_questions, `提示词版本` AS prompt_version,
+                   `模型名称` AS model_name, `创建时间` AS created_at
+            FROM `职业规划`
+            WHERE `学生编号` = %s AND `租户编号` = %s AND `是否生效` = 1
+            ORDER BY `编号` DESC
             LIMIT 1
             """,
             (student_id, tenant_id),
@@ -310,19 +316,20 @@ def save_plan(
     prompt_version: str = "career-v1",
     model_name: str | None = None,
 ) -> int:
-    """落库一份画像：先把旧的 is_active 置 0，再插新的 active=1（保留历史可追溯）。"""
+    """落库一份画像：先把旧的 是否生效 置 0，再插新的（保留历史可追溯）。"""
     conn = connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE career_plan SET is_active = 0 WHERE student_id = %s AND tenant_id = %s",
+                "UPDATE `职业规划` SET `是否生效` = 0 "
+                "WHERE `学生编号` = %s AND `租户编号` = %s",
                 (student_id, tenant_id),
             )
             cur.execute(
                 """
-                INSERT INTO career_plan
-                    (tenant_id, student_id, raw_text, goal_type, plan_json,
-                     gaps_json, pending_questions, prompt_version, model_name, is_active)
+                INSERT INTO `职业规划`
+                    (`租户编号`, `学生编号`, `规划原文`, `目标类型`, `规划内容`,
+                     `差距内容`, `待补问题`, `提示词版本`, `模型名称`, `是否生效`)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
                 """,
                 (
@@ -347,13 +354,16 @@ def fetch_active_rule(tenant_id: int, student_id: int) -> dict[str, Any] | None:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT r.id, r.plan_id, r.main_template, r.sub_template, r.main_weight,
-                   r.gates_json, r.phases_json, r.metrics_json, r.calendar_json,
-                   r.hard_baseline, r.adjustable, r.engine_version, r.created_at
-            FROM plan_rule r
-            JOIN career_plan p ON p.id = r.plan_id
-            WHERE r.student_id = %s AND r.tenant_id = %s AND p.is_active = 1
-            ORDER BY r.id DESC
+            SELECT r.`编号` AS id, r.`规划编号` AS plan_id, r.`主模板` AS main_template,
+                   r.`次模板` AS sub_template, r.`主权重` AS main_weight,
+                   r.`门槛状态` AS gates_json, r.`阶段计划` AS phases_json,
+                   r.`监控指标` AS metrics_json, r.`节点日历` AS calendar_json,
+                   r.`硬基线` AS hard_baseline, r.`可调项` AS adjustable,
+                   r.`引擎版本` AS engine_version, r.`创建时间` AS created_at
+            FROM `规划规则` r
+            JOIN `职业规划` p ON p.`编号` = r.`规划编号`
+            WHERE r.`学生编号` = %s AND r.`租户编号` = %s AND p.`是否生效` = 1
+            ORDER BY r.`编号` DESC
             LIMIT 1
             """,
             (student_id, tenant_id),
@@ -395,15 +405,15 @@ def save_rule(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM plan_rule WHERE plan_id = %s AND tenant_id = %s",
+                "DELETE FROM `规划规则` WHERE `规划编号` = %s AND `租户编号` = %s",
                 (plan_id, tenant_id),
             )
             cur.execute(
                 """
-                INSERT INTO plan_rule
-                    (tenant_id, student_id, plan_id, main_template, sub_template, main_weight,
-                     gates_json, phases_json, metrics_json, calendar_json,
-                     hard_baseline, adjustable, engine_version)
+                INSERT INTO `规划规则`
+                    (`租户编号`, `学生编号`, `规划编号`, `主模板`, `次模板`, `主权重`,
+                     `门槛状态`, `阶段计划`, `监控指标`, `节点日历`,
+                     `硬基线`, `可调项`, `引擎版本`)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
@@ -437,10 +447,10 @@ def fetch_week_history(
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT iso_year, iso_week, judge_json
-            FROM week_snapshot
-            WHERE student_id = %s AND tenant_id = %s
-            ORDER BY iso_year DESC, iso_week DESC
+            SELECT `ISO年` AS iso_year, `ISO周` AS iso_week, `判定结果` AS judge_json
+            FROM `周快照`
+            WHERE `学生编号` = %s AND `租户编号` = %s
+            ORDER BY `ISO年` DESC, `ISO周` DESC
             LIMIT %s
             """,
             (student_id, tenant_id, limit),
@@ -479,19 +489,19 @@ def save_week_snapshot(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO week_snapshot
-                    (tenant_id, student_id, plan_id, iso_year, iso_week,
-                     self_report, system_metrics, judge_json, escalation_json,
-                     notice_push, summary, advice_json, engine_version)
+                INSERT INTO `周快照`
+                    (`租户编号`, `学生编号`, `规划编号`, `ISO年`, `ISO周`,
+                     `自报内容`, `系统指标`, `判定结果`, `升级预警`,
+                     `通知推送`, `摘要`, `建议内容`, `引擎版本`)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
-                    judge_json       = VALUES(judge_json),
-                    escalation_json  = VALUES(escalation_json),
-                    notice_push      = VALUES(notice_push),
-                    summary          = VALUES(summary),
-                    advice_json      = VALUES(advice_json),
-                    self_report      = VALUES(self_report),
-                    system_metrics   = VALUES(system_metrics)
+                    `判定结果`   = VALUES(`判定结果`),
+                    `升级预警`   = VALUES(`升级预警`),
+                    `通知推送`   = VALUES(`通知推送`),
+                    `摘要`       = VALUES(`摘要`),
+                    `建议内容`   = VALUES(`建议内容`),
+                    `自报内容`   = VALUES(`自报内容`),
+                    `系统指标`   = VALUES(`系统指标`)
                 """,
                 (
                     tenant_id, student_id, plan_id, int(iso_year), int(iso_week),
@@ -517,10 +527,12 @@ def fetch_notices(tenant_id: int, limit: int = 60) -> list[dict[str, Any]]:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, title, publisher, deadline, summary, url, category
-            FROM notice
-            WHERE tenant_id = %s
-            ORDER BY deadline IS NULL, deadline ASC
+            SELECT `编号` AS id, `标题` AS title, `发布单位` AS publisher,
+                   `截止日期` AS deadline, `摘要` AS summary, `链接` AS url,
+                   `分类` AS category
+            FROM `学校通知`
+            WHERE `租户编号` = %s
+            ORDER BY `截止日期` IS NULL, `截止日期` ASC
             LIMIT %s
             """,
             (tenant_id, limit),
@@ -552,7 +564,7 @@ def save_notice_match(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM notice_match WHERE student_id = %s AND tenant_id = %s",
+                "DELETE FROM `通知匹配` WHERE `学生编号` = %s AND `租户编号` = %s",
                 (student_id, tenant_id),
             )
             n = 0
@@ -565,7 +577,7 @@ def save_notice_match(
                     continue
                 cur.execute(
                     """
-                    INSERT INTO notice_match (tenant_id, notice_id, student_id, relevance, reason)
+                    INSERT INTO `通知匹配` (`租户编号`, `通知编号`, `学生编号`, `相关度`, `理由`)
                     VALUES (%s, %s, %s, %s, %s)
                     """,
                     (

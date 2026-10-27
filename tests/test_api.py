@@ -69,33 +69,33 @@ def db():
     conn = _conn()
     created = False
     with conn.cursor() as cur:
-        cur.execute("SELECT id FROM teacher WHERE employee_no = %s", (EMPLOYEE_NO,))
+        cur.execute("SELECT `编号` FROM `教师` WHERE `工号` = %s", (EMPLOYEE_NO,))
         if cur.fetchone() is None:
             cur.execute(
-                "INSERT INTO teacher (tenant_id, name, employee_no, role, password_hash) "
+                "INSERT INTO `教师` (`租户编号`, `姓名`, `工号`, `角色`, `口令摘要`) "
                 "VALUES (%s, %s, %s, 'teacher', %s)",
                 (TENANT, "测试教师", EMPLOYEE_NO, hash_password(TEACHER_PWD)),
             )
             created = True
         cur.execute(
-            "SELECT s.class_name AS class_name, COUNT(DISTINCT s.id) AS n "
-            "FROM student s JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-            "WHERE s.tenant_id = %s GROUP BY s.class_name ORDER BY n DESC LIMIT 1",
+            "SELECT s.`班级` AS class_name, COUNT(DISTINCT s.`编号`) AS n "
+            "FROM `学生` s JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+            "WHERE s.`租户编号` = %s GROUP BY s.`班级` ORDER BY n DESC LIMIT 1",
             (TERM, TENANT),
         )
         klass_row = cur.fetchone() or {}
         cur.execute(
-            "SELECT s.id AS id, s.student_no AS student_no FROM student s "
-            "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-            "WHERE s.tenant_id = %s AND s.class_name = %s "
-            "ORDER BY s.student_no LIMIT 1", (TERM, TENANT, klass_row.get("class_name")),
+            "SELECT s.`编号` AS id, s.`学号` AS student_no FROM `学生` s "
+            "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+            "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+            "ORDER BY s.`学号` LIMIT 1", (TERM, TENANT, klass_row.get("class_name")),
         )
         stu_row = cur.fetchone() or {}
     conn.commit()
     yield conn, str(klass_row.get("class_name") or ""), stu_row
     if created:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM teacher WHERE employee_no = %s", (EMPLOYEE_NO,))
+            cur.execute("DELETE FROM `教师` WHERE `工号` = %s", (EMPLOYEE_NO,))
         conn.commit()
     conn.close()
 
@@ -262,19 +262,20 @@ def test_anonymous_request_still_audited(client, db):
     conn, klass, _ = db
     probe = f"audit-{uuid.uuid4().hex[:8]}"
     with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(1) AS n FROM audit_log")
+        cur.execute("SELECT COUNT(1) AS n FROM `审计日志`")
         before = int(cur.fetchone()["n"])
 
     client.get("/teacher/warnings",
                params={"class_name": klass, "term": TERM, "probe": probe})
 
     with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(1) AS n FROM audit_log")
+        cur.execute("SELECT COUNT(1) AS n FROM `审计日志`")
         after = int(cur.fetchone()["n"])
         # 只认本次请求的探针，避免并行测试进程的审计行插在中间
         cur.execute(
-            "SELECT actor_type, actor_id, action, detail FROM audit_log "
-            "WHERE action = %s AND target LIKE %s ORDER BY id DESC LIMIT 1",
+            "SELECT `操作者类型`, `操作者编号`, `动作` AS action, `详情` AS detail "
+            "FROM `审计日志` "
+            "WHERE `动作` = %s AND `对象` LIKE %s ORDER BY `编号` DESC LIMIT 1",
             ("GET /teacher/warnings", f"%{probe}%"),
         )
         last = cur.fetchone()
@@ -318,7 +319,8 @@ def test_career_intent_roundtrip_and_restore(client, db):
     headers = {"Authorization": f"Bearer {token}"}
 
     with conn.cursor() as cur:
-        cur.execute("SELECT intent FROM career_intent WHERE student_id = %s", (student_id,))
+        cur.execute("SELECT `意向` AS intent FROM `职业意向` WHERE `学生编号` = %s",
+                    (student_id,))
         before = cur.fetchone()
 
     try:
@@ -344,9 +346,9 @@ def test_career_intent_roundtrip_and_restore(client, db):
     finally:
         with conn.cursor() as cur:
             if before is None:
-                cur.execute("DELETE FROM career_intent WHERE student_id = %s", (student_id,))
+                cur.execute("DELETE FROM `职业意向` WHERE `学生编号` = %s", (student_id,))
             else:
-                cur.execute("UPDATE career_intent SET intent = %s WHERE student_id = %s",
+                cur.execute("UPDATE `职业意向` SET `意向` = %s WHERE `学生编号` = %s",
                             (before["intent"], student_id))
         conn.commit()
 
@@ -393,14 +395,14 @@ def test_teacher_scope_limits_class_directory_and_profile(client, db):
     headers = {"Authorization": f"Bearer {login['access_token']}"}
 
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM teacher_class WHERE teacher_id = %s", (teacher_id,))
+        cur.execute("DELETE FROM `教师任教班级` WHERE `教师编号` = %s", (teacher_id,))
         cur.execute(
-            "INSERT INTO teacher_class (tenant_id, teacher_id, class_name) VALUES (%s, %s, %s)",
+            "INSERT INTO `教师任教班级` (`租户编号`, `教师编号`, `班级`) VALUES (%s, %s, %s)",
             (TENANT, teacher_id, klass),
         )
         cur.execute(
-            "SELECT class_name FROM student WHERE tenant_id = %s AND class_name <> %s "
-            "ORDER BY class_name LIMIT 1",
+            "SELECT `班级` AS class_name FROM `学生` WHERE `租户编号` = %s AND `班级` <> %s "
+            "ORDER BY `班级` LIMIT 1",
             (TENANT, klass),
         )
         other = cur.fetchone()["class_name"]
@@ -420,7 +422,7 @@ def test_teacher_scope_limits_class_directory_and_profile(client, db):
         assert "任教范围" in resp.json()["detail"]
     finally:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM teacher_class WHERE teacher_id = %s", (teacher_id,))
+            cur.execute("DELETE FROM `教师任教班级` WHERE `教师编号` = %s", (teacher_id,))
         conn.commit()
 
 
@@ -433,8 +435,9 @@ def test_class_warning_thresholds_roundtrip(client, db):
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT metric, weight, red_value, orange_value, yellow_value "
-            "FROM class_warning_threshold WHERE tenant_id = %s AND class_name = %s",
+            "SELECT `指标` AS metric, `权重` AS weight, `红色阈值` AS red_value, "
+            "       `橙色阈值` AS orange_value, `黄色阈值` AS yellow_value "
+            "FROM `班级预警阈值` WHERE `租户编号` = %s AND `班级` = %s",
             (TENANT, klass),
         )
         before = [dict(row) for row in cur.fetchall()]
@@ -467,12 +470,12 @@ def test_class_warning_thresholds_roundtrip(client, db):
     finally:
         with conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM class_warning_threshold WHERE tenant_id = %s AND class_name = %s",
+                "DELETE FROM `班级预警阈值` WHERE `租户编号` = %s AND `班级` = %s",
                 (TENANT, klass),
             )
             for row in before:
                 cur.execute(
-                    "INSERT INTO class_warning_threshold "
+                    "INSERT INTO `班级预警阈值` "
                     "(tenant_id, class_name, metric, weight, red_value, orange_value, yellow_value) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (TENANT, klass, row["metric"], row["weight"], row["red_value"],

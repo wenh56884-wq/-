@@ -24,7 +24,7 @@ _CALC_VERSION = "v1"
 
 
 def load_to_mysql(df: pd.DataFrame, settings) -> tuple[int, int]:
-    """灌入 MySQL job 表（INSERT IGNORE），返回 (inserted, skipped)。"""
+    """灌入 MySQL `岗位` 表（INSERT IGNORE），返回 (`新增数`, skipped)。"""
     conn = pymysql.connect(
         host=settings.mysql_host,
         port=settings.mysql_port,
@@ -37,7 +37,7 @@ def load_to_mysql(df: pd.DataFrame, settings) -> tuple[int, int]:
     try:
         cur = conn.cursor()
         # 先清空旧数据（幂等）
-        cur.execute("TRUNCATE TABLE job")
+        cur.execute("TRUNCATE TABLE `岗位`")
         inserted = 0
         skipped = 0
         rows = []
@@ -59,11 +59,11 @@ def load_to_mysql(df: pd.DataFrame, settings) -> tuple[int, int]:
                 r["description"], r["source"], r["raw_key"], None,
             ))
         sql = (
-            "INSERT IGNORE INTO job "
-            "(title, company, industry, company_size, city, district, "
-            "salary_min, salary_max, salary_unit, salary_months, "
-            "exp_min, exp_max, education, skill_tags, benefits, "
-            "description, source, raw_key, published_at) "
+            "INSERT IGNORE INTO `岗位` "
+            "(`岗位名称`, `企业`, `行业`, `企业规模`, `城市`, `区县`, "
+            "`最低薪资`, `最高薪资`, `薪资单位`, `薪资月数`, "
+            "`最低经验`, `最高经验`, `学历`, `技能标签`, `福利待遇`, "
+            "`岗位描述`, `来源`, `原始键`, `发布时间`) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         )
         cur.executemany(sql, rows)
@@ -80,7 +80,7 @@ def load_to_duckdb(df: pd.DataFrame, settings) -> int:
     conn = duckdb.connect(str(db_path))
     try:
         # 先清空
-        conn.execute("DELETE FROM job_feature")
+        conn.execute('DELETE FROM "岗位特征"')
         records = []
         for _, r in df.iterrows():
             skill_tags = r["skill_tags"]
@@ -94,9 +94,10 @@ def load_to_duckdb(df: pd.DataFrame, settings) -> int:
                 r["source"], _CALC_VERSION,
             ))
         conn.executemany(
-            "INSERT INTO job_feature "
-            "(title, city, salary_min, salary_max, education, exp_min, exp_max, "
-            "skill_tags, source, calc_version) "
+            'INSERT INTO "岗位特征" '
+            '("岗位名称", "城市", "最低薪资", "最高薪资", "学历", '
+            '"最低经验", "最高经验", '
+            '"技能标签", "来源", "计算版本") '
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             records,
         )
@@ -117,7 +118,7 @@ def show_city_counts(settings) -> None:
     )
     try:
         cur = conn.cursor()
-        cur.execute("SELECT city, COUNT(*) FROM job GROUP BY city ORDER BY COUNT(*) DESC")
+        cur.execute("SELECT `城市`, COUNT(*) FROM `岗位` GROUP BY `城市` ORDER BY COUNT(*) DESC")
         print("\n=== MySQL job 表城市分布 ===")
         for row in cur.fetchall():
             print(f"  {row[0]}: {row[1]}")

@@ -222,10 +222,10 @@ def test_gpa_direction_is_mirrored(monkeypatch):
 
     def _fake_query(sql: str, params) -> list[dict]:
         # 上级学期探测 → 返回上期学期号
-        if "sc.term < %s" in sql:
+        if "sc.`学期` < %s" in sql:
             return [{"term": "2025-2026-1"}]
         # 考勤 SQL（缺考勤 → 空列表，本例不关心出勤）
-        if "a.absent_sessions" in sql:
+        if "a.`缺勤次数`" in sql:
             return []
         # 当期成绩 SQL（带 fail_count 聚合列）
         if "fail_count" in sql:

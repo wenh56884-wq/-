@@ -30,6 +30,9 @@ RULES_PATH = _ROOT / "rules" / "direction_keywords.json"
 MIN_COURSES, MAX_COURSES = 2, 4
 # 与本人专业方向相关的选课概率（其余随机，制造区分度）
 MAJOR_RELATED_PROB = 0.60
+# 写库分批大小：万人 × 2 学期约 5.5 万行，一次 executemany 会顶到
+# max_allowed_packet（默认 4MB）被截断，必须分批
+INSERT_BATCH = 5000
 
 
 def load_directions() -> tuple[list[tuple[str, tuple[str, ...]]], dict[str, list[dict[str, Any]]], str]:
@@ -87,7 +90,9 @@ def load_students(tenant_id: int) -> list[dict[str, Any]]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, student_no, name, major FROM student WHERE tenant_id = %s ORDER BY student_no",
+                "SELECT `编号` AS id, `学号` AS student_no, `姓名` AS name, "
+                "       `专业` AS major FROM `学生` "
+                "WHERE `租户编号` = %s ORDER BY `学号`",
                 (tenant_id,),
             )
             return [dict(r) for r in cur.fetchall()]
@@ -196,20 +201,22 @@ def main(argv: list[str] | None = None) -> int:
         with conn.cursor() as cur:
             for term in terms:
                 cur.execute(
-                    "DELETE es FROM elective_selection es "
-                    "JOIN student s ON s.id = es.student_id "
-                    "WHERE es.tenant_id = %s AND es.term = %s",
+                    "DELETE es FROM `选课记录` es "
+                    "JOIN `学生` s ON s.`编号` = es.`学生编号` "
+                    "WHERE es.`租户编号` = %s AND es.`学期` = %s",
                     (args.tenant_id, term),
                 )
-            cur.executemany(
-                "INSERT INTO elective_selection "
-                "(tenant_id, student_id, term, course_name, direction, credit) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                [(args.tenant_id, r[0], r[2], r[3], r[4], r[5]) for r in all_rows],
+            payload = [(args.tenant_id, r[0], r[2], r[3], r[4], r[5]) for r in all_rows]
+            sql = (
+                "INSERT INTO `选课记录` "
+                "(`租户编号`, `学生编号`, `学期`, `课程名称`, `方向`, `学分`) "
+                "VALUES (%s, %s, %s, %s, %s, %s)"
             )
+            for start in range(0, len(payload), INSERT_BATCH):
+                cur.executemany(sql, payload[start:start + INSERT_BATCH])
         conn.commit()
         with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) AS n FROM elective_selection WHERE tenant_id = %s",
+            cur.execute("SELECT COUNT(*) AS n FROM `选课记录` WHERE `租户编号` = %s",
                         (args.tenant_id,))
             print(f"写入 elective_selection：{cur.fetchone()['n']} 行")
     finally:

@@ -102,9 +102,9 @@ s = get_settings()
 c = connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
             password=s.mysql_password, database=s.mysql_db, charset="utf8mb4")
 cur = c.cursor()
-cur.execute("SELECT id FROM teacher WHERE employee_no = %s", ("T001",))
+cur.execute("SELECT `编号` FROM `教师` WHERE `工号` = %s", ("T001",))
 if cur.fetchone() is None:
-    cur.execute("INSERT INTO teacher (tenant_id, name, employee_no, role, password_hash) "
+    cur.execute("INSERT INTO `教师` (`租户编号`, `姓名`, `工号`, `角色`, `口令摘要`) "
                 "VALUES (%s,%s,%s,'teacher',%s)",
                 (1, "演示教师", "T001", hash_password("teacher@123")))
 c.commit()
@@ -126,19 +126,19 @@ c = connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
             password=s.mysql_password, database=s.mysql_db,
             charset="utf8mb4", cursorclass=DictCursor)
 cur = c.cursor()
-cur.execute("SELECT s.class_name AS class_name, COUNT(DISTINCT s.id) AS n "
-            "FROM student s JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-            "WHERE s.tenant_id = 1 GROUP BY s.class_name ORDER BY n DESC LIMIT 1", (term,))
+cur.execute("SELECT s.`班级` AS class_name, COUNT(DISTINCT s.`编号`) AS n "
+            "FROM `学生` s JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+            "WHERE s.`租户编号` = 1 GROUP BY s.`班级` ORDER BY n DESC LIMIT 1", (term,))
 row = cur.fetchone() or {}
 klass = row.get("class_name") or ""
-cur.execute("SELECT s.student_no AS student_no FROM student s "
-            "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-            "WHERE s.tenant_id = 1 AND s.class_name = %s "
-            "ORDER BY s.student_no LIMIT 1", (term, klass))
+cur.execute("SELECT s.`学号` AS student_no FROM `学生` s "
+            "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+            "WHERE s.`租户编号` = 1 AND s.`班级` = %s "
+            "ORDER BY s.`学号` LIMIT 1", (term, klass))
 self_no = (cur.fetchone() or {}).get("student_no") or ""
-cur.execute("SELECT s.student_no AS student_no FROM student s "
-            "WHERE s.tenant_id = 1 AND s.student_no <> %s "
-            "ORDER BY s.student_no LIMIT 1", (self_no,))
+cur.execute("SELECT s.`学号` AS student_no FROM `学生` s "
+            "WHERE s.`租户编号` = 1 AND s.`学号` <> %s "
+            "ORDER BY s.`学号` LIMIT 1", (self_no,))
 other = (cur.fetchone() or {}).get("student_no") or ""
 c.close()
 print(json.dumps({"class_name": klass, "student_no": self_no,

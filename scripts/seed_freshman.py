@@ -45,9 +45,9 @@ def _resolve_class(cur, college: str) -> str:
     不抛异常 —— 这个脚本只负责演示账号，不该阻断初始化流程。
     """
     cur.execute(
-        "SELECT class_name, COUNT(*) AS n FROM student "
-        "WHERE tenant_id = %s AND college = %s AND class_name IS NOT NULL "
-        "AND class_name <> '' GROUP BY class_name ORDER BY n DESC, class_name LIMIT 1",
+        "SELECT `班级`, COUNT(*) AS n FROM `学生` "
+        "WHERE `租户编号` = %s AND `学院` = %s AND `班级` IS NOT NULL "
+        "AND `班级` <> '' GROUP BY `班级` ORDER BY n DESC, `班级` LIMIT 1",
         (TENANT_ID, college),
     )
     row = cur.fetchone()
@@ -68,23 +68,23 @@ def _seed_learning(cur, student_id: int, major: str) -> None:
 
     只在该生该学期没有任何成绩时写入；数值固定，不引入随机数。
     """
-    cur.execute("SELECT COUNT(*) AS n FROM score WHERE student_id = %s AND term = %s",
+    cur.execute("SELECT COUNT(*) AS n FROM `成绩` WHERE `学生编号` = %s AND `学期` = %s",
                 (student_id, TERM))
     if int(cur.fetchone()[0] or 0) > 0:
         return
-    cur.execute("SELECT id FROM course WHERE major = %s ORDER BY id LIMIT 6", (major,))
+    cur.execute("SELECT `编号` FROM `课程` WHERE `专业` = %s ORDER BY `编号` LIMIT 6", (major,))
     course_ids = [int(row[0]) for row in cur.fetchall()]
     if not course_ids:
         return
     for index, course_id in enumerate(course_ids):
         score = 82 + (index * 3) % 12
         cur.execute(
-            "INSERT INTO score (student_id, course_id, term, score, is_retake) "
+            "INSERT INTO `成绩` (`学生编号`, `课程编号`, `学期`, `分数`, `是否重修`) "
             "VALUES (%s, %s, %s, %s, 0)",
             (student_id, course_id, TERM, score),
         )
     cur.execute(
-        "INSERT INTO attendance "
+        "INSERT INTO `考勤` "
         "(student_id, term, total_sessions, absent_sessions, attendance_rate) "
         "VALUES (%s, %s, 20, 0, 1.0)",
         (student_id, TERM),
@@ -109,7 +109,7 @@ def seed() -> int:
                 class_name = _resolve_class(cur, item["college"])
                 item["class_name"] = class_name  # 回填给 main 打印
                 cur.execute(
-                    "INSERT IGNORE INTO student "
+                    "INSERT IGNORE INTO `学生` "
                     "(tenant_id, student_no, name, college, major, class_name, "
                     " grade, enroll_year, password_hash) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
@@ -123,10 +123,10 @@ def seed() -> int:
                 # 已存在的老数据也纠正班级：历史版本给 2026 级单独编过班
                 # （AI2601 之类 1 人班），这里统一并入该学院的正常班。
                 cur.execute(
-                    "UPDATE student SET class_name = %s WHERE student_no = %s",
+                    "UPDATE `学生` SET `班级` = %s WHERE `学号` = %s",
                     (class_name, item["student_no"]),
                 )
-                cur.execute("SELECT id FROM student WHERE student_no = %s",
+                cur.execute("SELECT `编号` FROM `学生` WHERE `学号` = %s",
                             (item["student_no"],))
                 row = cur.fetchone()
                 if row:
@@ -138,14 +138,17 @@ def seed() -> int:
 
 
 def main() -> None:
-    """入口：打印新增/已存在结果与登录提示。"""
-    created = seed()
-    print(f"大一演示账号：新增 {created} 个，已存在 {len(FRESHMEN) - created} 个。")
-    for item in FRESHMEN:
-        print(f"  {item['student_no']}  {item['name']}  {item['class_name']}  "
-              f"（初始口令 = 学号）")
-    print(f"已补齐 {TERM} 的演示成绩/考勤（无随机数）；如需画像，再运行：")
-    print("  python scripts\\build_profile_raw.py --term 2025-2026-2")
+    """入口：已废弃，直接退出并给出说明。
+
+    2026 级现在是 seed_mock.py 里**一个正式年级**（大一，约 2,500 人，
+    分 8 个学院的 {缩写}2601 / {缩写}MX01 班），不再需要单独补 4 个演示账号。
+    本脚本保留文件只为不打断 README / docs 里对它的引用，运行时会提示已废弃。
+    """
+    print("本脚本已废弃：2026 级（大一）已由 seed_mock.py 整届生成。")
+    print("  统一用：.venv\\Scripts\\python.exe scripts\\seed_mock.py")
+    print("  其中 2026 级（大一）/ 2025 级（大二）/ 2024 级（大三）/ 2023 级（大四）")
+    print("  各自带着从入学至今累积的完整学期成绩与考勤。")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

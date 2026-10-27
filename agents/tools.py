@@ -151,7 +151,7 @@ def write_audit(
     if AUDIT_SINK is not None:
         AUDIT_SINK.append(dict(entry))
     _write_raw(
-        "INSERT INTO audit_log (actor_type, actor_id, action, target, detail) "
+        "INSERT INTO `审计日志` (`操作者类型`, `操作者编号`, `动作`, `对象`, `详情`) "
         "VALUES (%s, %s, %s, %s, %s)",
         (
             entry["actor_type"],
@@ -206,8 +206,8 @@ def _nearby_classes(ctx: ToolContext, class_name: str, limit: int = 5) -> list[s
     匹配规则：输入的字母前缀相同，或输入是候选的前缀（反之亦然）。
     """
     rows = _query(
-        "SELECT DISTINCT s.class_name AS class_name FROM student s "
-        "WHERE s.tenant_id = %s ORDER BY s.class_name",
+        "SELECT DISTINCT s.`班级` AS class_name FROM `学生` s "
+        "WHERE s.`租户编号` = %s ORDER BY s.`班级`",
         (ctx.tenant_id,),
     )
     names = [str(r.get("class_name") or "") for r in rows if r.get("class_name")]
@@ -261,8 +261,8 @@ def _teacher_class_scope(ctx: ToolContext) -> set[str] | None:
     if ctx.actor_type != ACTOR_TEACHER:
         return None
     rows = _query(
-        "SELECT class_name FROM teacher_class "
-        "WHERE tenant_id = %s AND teacher_id = %s ORDER BY class_name",
+        "SELECT `班级` AS class_name FROM `教师任教班级` "
+        "WHERE `租户编号` = %s AND `教师编号` = %s ORDER BY `班级`",
         (ctx.tenant_id, int(ctx.teacher_id or 0)),
     )
     names = {str(row.get("class_name")) for row in rows if row.get("class_name")}
@@ -280,8 +280,8 @@ def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, 
     用户把 AI2201 打成 AI220100 时会看到一句「越权」，既误导又污染审计日志。
     """
     rows = _query(
-        "SELECT COUNT(DISTINCT s.id) AS cnt FROM student s "
-        "WHERE s.tenant_id = %s AND s.class_name = %s",
+        "SELECT COUNT(DISTINCT s.`编号`) AS cnt FROM `学生` s "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s",
         (ctx.tenant_id, class_name),
     )
     cnt = int(rows[0]["cnt"]) if rows else 0
@@ -294,8 +294,8 @@ def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, 
 
     # 该班是否存在于其他租户？存在 → 真越权
     other = _query(
-        "SELECT COUNT(DISTINCT s.id) AS cnt FROM student s "
-        "WHERE s.tenant_id <> %s AND s.class_name = %s",
+        "SELECT COUNT(DISTINCT s.`编号`) AS cnt FROM `学生` s "
+        "WHERE s.`租户编号` <> %s AND s.`班级` = %s",
         (ctx.tenant_id, class_name),
     )
     other_cnt = int(other[0]["cnt"]) if other else 0
@@ -315,10 +315,10 @@ def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, 
 def _fetch_student(ctx: ToolContext, student_no: str, action: str) -> dict[str, Any]:
     """按学号取学生档案（带 tenant_id）；查不到即视为跨租户。"""
     rows = _query(
-        "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
-        "       s.class_name AS class_name, s.id AS student_id, s.college AS college, "
-        "       s.enroll_year AS enroll_year "
-        "FROM student s WHERE s.tenant_id = %s AND s.student_no = %s",
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, s.`专业` AS major, "
+        "       s.`班级` AS class_name, s.`编号` AS student_id, s.`学院` AS college, "
+        "       s.`入学年份` AS enroll_year "
+        "FROM `学生` s WHERE s.`租户编号` = %s AND s.`学号` = %s",
         (ctx.tenant_id, student_no),
     )
     if not rows:
@@ -338,9 +338,9 @@ def _fetch_student(ctx: ToolContext, student_no: str, action: str) -> dict[str, 
 def _resolve_self(ctx: ToolContext, action: str) -> dict[str, Any]:
     """学生端：把 ctx.student_id 解析成本人学号（带 tenant_id 兜底校验）。"""
     rows = _query(
-        "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
-        "       s.class_name AS class_name, s.enroll_year AS enroll_year "
-        "FROM student s WHERE s.tenant_id = %s AND s.id = %s",
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, s.`专业` AS major, "
+        "       s.`班级` AS class_name, s.`入学年份` AS enroll_year "
+        "FROM `学生` s WHERE s.`租户编号` = %s AND s.`编号` = %s",
         (ctx.tenant_id, ctx.student_id),
     )
     if not rows:
@@ -359,9 +359,9 @@ def _resolve_term(ctx: ToolContext, term: str | None) -> str:
     if ctx.term:
         return str(ctx.term)
     rows = _query(
-        "SELECT sc.term AS term FROM score sc "
-        "JOIN student s ON s.id = sc.student_id AND s.tenant_id = %s "
-        "GROUP BY sc.term ORDER BY sc.term DESC LIMIT 1",
+        "SELECT sc.`学期` AS term FROM `成绩` sc "
+        "JOIN `学生` s ON s.`编号` = sc.`学生编号` AND s.`租户编号` = %s "
+        "GROUP BY sc.`学期` ORDER BY sc.`学期` DESC LIMIT 1",
         (ctx.tenant_id,),
     )
     return str(rows[0]["term"]) if rows else ""
@@ -448,11 +448,11 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
     _require_teacher(ctx, "class_list", "all")
     scope = _teacher_class_scope(ctx)
     rows = _query(
-        "SELECT s.college AS college, s.class_name AS class_name, s.major AS major, "
-        "       COUNT(DISTINCT s.id) AS headcount "
-        "FROM student s WHERE s.tenant_id = %s "
-        "GROUP BY s.college, s.class_name, s.major "
-        "ORDER BY s.college, s.class_name, s.major",
+        "SELECT s.`学院` AS college, s.`班级` AS class_name, s.`专业` AS major, "
+        "       COUNT(DISTINCT s.`编号`) AS headcount "
+        "FROM `学生` s WHERE s.`租户编号` = %s "
+        "GROUP BY s.`学院`, s.`班级`, s.`专业` "
+        "ORDER BY s.`学院`, s.`班级`, s.`专业`",
         (ctx.tenant_id,),
     )
     if scope is not None:
@@ -602,14 +602,14 @@ def _replace_class_thresholds(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "DELETE FROM class_warning_threshold "
-                "WHERE tenant_id = %s AND class_name = %s",
+                "DELETE FROM `班级预警阈值` "
+                "WHERE `租户编号` = %s AND `班级` = %s",
                 (tenant_id, class_name),
             )
             for metric, weight, red, orange, yellow in rows:
                 cur.execute(
-                    "INSERT INTO class_warning_threshold "
-                    "(tenant_id, class_name, metric, weight, red_value, orange_value, yellow_value) "
+                    "INSERT INTO `班级预警阈值` "
+                    "(`租户编号`, `班级`, `指标`, `权重`, `红色阈值`, `橙色阈值`, `黄色阈值`) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (tenant_id, class_name, metric, weight, red, orange, yellow),
                 )
@@ -689,12 +689,12 @@ def class_overview(ctx: ToolContext, class_name: str, term: str) -> dict[str, An
         "       SUM(t.fail_cnt) AS fail_courses, "
         "       AVG(t.gpa) AS avg_gpa "
         "FROM ("
-        "  SELECT s.student_no AS student_no, AVG(sc.score) AS gpa, "
-        "         SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_cnt "
-        "  FROM student s "
-        "  JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "  WHERE s.tenant_id = %s AND s.class_name = %s "
-        "  GROUP BY s.student_no"
+        "  SELECT s.`学号` AS student_no, AVG(sc.`分数`) AS gpa, "
+        "         SUM(CASE WHEN sc.`分数` < 60 THEN 1 ELSE 0 END) AS fail_cnt "
+        "  FROM `学生` s "
+        "  JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "  WHERE s.`租户编号` = %s AND s.`班级` = %s "
+        "  GROUP BY s.`学号`"
         ") t",
         (term, ctx.tenant_id, class_name),
     )
@@ -746,12 +746,12 @@ def _career_intent_distribution(ctx: ToolContext, class_name: str) -> dict[str, 
     不用 0 冒充，也不把未填写从分母里剔除。
     """
     rows = _query(
-        "SELECT COALESCE(ci.intent, '未填写') AS intent, COUNT(*) AS cnt "
-        "FROM student s "
-        "LEFT JOIN career_intent ci "
-        "       ON ci.student_id = s.id AND ci.tenant_id = s.tenant_id "
-        "WHERE s.tenant_id = %s AND s.class_name = %s "
-        "GROUP BY COALESCE(ci.intent, '未填写')",
+        "SELECT COALESCE(ci.`意向`, '未填写') AS intent, COUNT(*) AS cnt "
+        "FROM `学生` s "
+        "LEFT JOIN `职业意向` ci "
+        "       ON ci.`学生编号` = s.`编号` AND ci.`租户编号` = s.`租户编号` "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+        "GROUP BY COALESCE(ci.`意向`, '未填写')",
         (ctx.tenant_id, class_name),
     )
     distribution = {intent: 0 for intent in career_guide.INTENTS}
@@ -776,12 +776,12 @@ def _career_intent_distribution(ctx: ToolContext, class_name: str) -> dict[str, 
 def _employment_intent(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
     """就业意向：本班浏览/收藏过的岗位按方向聚合（取前 5）。"""
     rows = _query(
-        "SELECT j.title AS title, COUNT(*) AS cnt "
-        "FROM job_view_log v "
-        "JOIN student s ON s.id = v.student_id AND s.tenant_id = %s "
-        "JOIN job j ON j.id = v.job_id "
-        "WHERE v.term = %s AND s.class_name = %s "
-        "GROUP BY j.title",
+        "SELECT j.`岗位名称` AS title, COUNT(*) AS cnt "
+        "FROM `岗位浏览日志` v "
+        "JOIN `学生` s ON s.`编号` = v.`学生编号` AND s.`租户编号` = %s "
+        "JOIN `岗位` j ON j.`编号` = v.`岗位编号` "
+        "WHERE v.`学期` = %s AND s.`班级` = %s "
+        "GROUP BY j.`岗位名称`",
         (ctx.tenant_id, term, class_name),
     )
     counter: dict[str, int] = {}
@@ -843,11 +843,11 @@ def student_profile(ctx: ToolContext, student_no: str, term: str) -> dict[str, A
 def _gpa_series(ctx: ToolContext, student_no: str) -> list[dict[str, Any]]:
     """该生逐学期均分（升序），用于前端画趋势线。"""
     rows = _query(
-        "SELECT sc.term AS term, AVG(sc.score) AS gpa "
-        "FROM score sc "
-        "JOIN student s ON s.id = sc.student_id AND s.tenant_id = %s "
-        "WHERE s.student_no = %s "
-        "GROUP BY sc.term ORDER BY sc.term",
+        "SELECT sc.`学期` AS term, AVG(sc.`分数`) AS gpa "
+        "FROM `成绩` sc "
+        "JOIN `学生` s ON s.`编号` = sc.`学生编号` AND s.`租户编号` = %s "
+        "WHERE s.`学号` = %s "
+        "GROUP BY sc.`学期` ORDER BY sc.`学期`",
         (ctx.tenant_id, student_no),
     )
     return [{"term": str(r["term"]),
@@ -904,9 +904,9 @@ def career_gap(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
     _require_class(ctx, class_name, "career_gap")
 
     roster = _query(
-        "SELECT s.student_no AS student_no FROM student s "
-        "WHERE s.tenant_id = %s AND s.class_name = %s "
-        "ORDER BY s.student_no",
+        "SELECT s.`学号` AS student_no FROM `学生` s "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+        "ORDER BY s.`学号`",
         (ctx.tenant_id, class_name),
     )
     student_nos = [str(r["student_no"]) for r in roster]
@@ -990,13 +990,14 @@ def _job_demand(ctx: ToolContext, class_name: str, term: str,
                 "education_top": [], "salary_range": None, "avg_exp_min": None}
 
     rows = _query(
-        "SELECT j.title AS title, j.salary_min AS salary_min, j.salary_max AS salary_max, "
-        "       j.exp_min AS exp_min, j.education AS education, "
-        "       j.skill_tags AS skill_tags, j.description AS description "
-        "FROM job_view_log v "
-        "JOIN student s ON s.id = v.student_id AND s.tenant_id = %s "
-        "JOIN job j ON j.id = v.job_id "
-        "WHERE v.term = %s AND s.class_name = %s",
+        "SELECT j.`岗位名称` AS title, j.`最低薪资` AS salary_min, "
+        "       j.`最高薪资` AS salary_max, "
+        "       j.`最低经验` AS exp_min, j.`学历` AS education, "
+        "       j.`技能标签` AS skill_tags, j.`岗位描述` AS description "
+        "FROM `岗位浏览日志` v "
+        "JOIN `学生` s ON s.`编号` = v.`学生编号` AND s.`租户编号` = %s "
+        "JOIN `岗位` j ON j.`编号` = v.`岗位编号` "
+        "WHERE v.`学期` = %s AND s.`班级` = %s",
         (ctx.tenant_id, term, class_name),
     )
     jobs = [r for r in rows if direction_of(r.get("title")) == target]
@@ -1235,10 +1236,14 @@ SEARCH_SCAN_LIMIT = 5000
 def _load_jobs_for_search(limit: int = SEARCH_SCAN_LIMIT) -> list[dict[str, Any]]:
     """取搜索用岗位池。job_search 是纯函数，取数全部在这一层完成。"""
     rows = _query(
-        "SELECT id, title, company, industry, company_size, city, district, "
-        "       salary_min, salary_max, salary_unit, salary_months, "
-        "       exp_min, exp_max, education, skill_tags, benefits, description, source "
-        "FROM job ORDER BY id LIMIT %s",
+        "SELECT `编号` AS id, `岗位名称` AS title, `企业` AS company, `行业` AS industry, "
+        "       `企业规模` AS company_size, `城市` AS city, `区县` AS district, "
+        "       `最低薪资` AS salary_min, `最高薪资` AS salary_max, "
+        "       `薪资单位` AS salary_unit, `薪资月数` AS salary_months, "
+        "       `最低经验` AS exp_min, `最高经验` AS exp_max, `学历` AS education, "
+        "       `技能标签` AS skill_tags, `福利待遇` AS benefits, "
+        "       `岗位描述` AS description, `来源` AS source "
+        "FROM `岗位` ORDER BY `编号` LIMIT %s",
         (int(limit),),
     )
     out: list[dict[str, Any]] = []
@@ -1361,10 +1366,14 @@ def job_detail(ctx: ToolContext, job_id: int) -> dict[str, Any]:
         raise ValueError("岗位 id 必须是整数")
 
     rows = _query(
-        "SELECT id, title, company, industry, company_size, city, district, "
-        "       salary_min, salary_max, salary_unit, salary_months, "
-        "       exp_min, exp_max, education, skill_tags, benefits, description, source "
-        "FROM job WHERE id = %s",
+        "SELECT `编号` AS id, `岗位名称` AS title, `企业` AS company, `行业` AS industry, "
+        "       `企业规模` AS company_size, `城市` AS city, `区县` AS district, "
+        "       `最低薪资` AS salary_min, `最高薪资` AS salary_max, "
+        "       `薪资单位` AS salary_unit, `薪资月数` AS salary_months, "
+        "       `最低经验` AS exp_min, `最高经验` AS exp_max, `学历` AS education, "
+        "       `技能标签` AS skill_tags, `福利待遇` AS benefits, "
+        "       `岗位描述` AS description, `来源` AS source "
+        "FROM `岗位` WHERE `编号` = %s",
         (job_id,),
     )
     if not rows:

@@ -48,21 +48,21 @@ def seed(reset: bool = False) -> int:
         with conn.cursor() as cur:
             if reset:
                 cur.execute(
-                    "DELETE ci FROM career_intent ci "
-                    "JOIN student s ON s.id = ci.student_id "
-                    "WHERE ci.tenant_id = %s AND s.enroll_year <> %s",
+                    "DELETE ci FROM `职业意向` ci "
+                    "JOIN `学生` s ON s.`编号` = ci.`学生编号` "
+                    "WHERE ci.`租户编号` = %s AND s.`入学年份` <> %s",
                     (TENANT_ID, FRESHMAN_YEAR),
                 )
 
             cur.execute(
-                "SELECT id, student_no FROM student "
-                "WHERE tenant_id = %s AND enroll_year <> %s ORDER BY id",
+                "SELECT `编号`, `学号` FROM `学生` "
+                "WHERE `租户编号` = %s AND `入学年份` <> %s ORDER BY `编号`",
                 (TENANT_ID, FRESHMAN_YEAR),
             )
             students = [(int(row[0]), str(row[1])) for row in cur.fetchall()]
 
             cur.execute(
-                "SELECT student_id FROM career_intent WHERE tenant_id = %s",
+                "SELECT `学生编号` FROM `职业意向` WHERE `租户编号` = %s",
                 (TENANT_ID,),
             )
             existing = {int(row[0]) for row in cur.fetchall()}
@@ -74,7 +74,7 @@ def seed(reset: bool = False) -> int:
             ]
             if rows:
                 cur.executemany(
-                    "INSERT INTO career_intent (tenant_id, student_id, intent) "
+                    "INSERT INTO `职业意向` (`租户编号`, `学生编号`, `意向`) "
                     "VALUES (%s, %s, %s)",
                     rows,
                 )
@@ -104,16 +104,16 @@ def main() -> None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT intent, COUNT(*) AS n FROM career_intent "
-                "WHERE tenant_id = %s GROUP BY intent ORDER BY intent",
+                "SELECT `意向` AS intent, COUNT(*) AS n FROM `职业意向` "
+                "WHERE `租户编号` = %s GROUP BY `意向` ORDER BY `意向`",
                 (TENANT_ID,),
             )
             print(f"本次新增 {created} 条职业目标。当前分布：")
             for row in cur.fetchall():
                 print(f"  {row['intent']}: {row['n']} 人")
             cur.execute(
-                "SELECT COUNT(*) AS n FROM student "
-                "WHERE tenant_id = %s AND enroll_year = %s",
+                "SELECT COUNT(*) AS n FROM `学生` "
+                "WHERE `租户编号` = %s AND `入学年份` = %s",
                 (TENANT_ID, FRESHMAN_YEAR),
             )
             print(f"  2026 级未填写（保留给“大一先选目标”演示）：{cur.fetchone()['n']} 人")

@@ -134,9 +134,9 @@ def _extract_class_name(query: str) -> str | None:
 def _default_class(ctx: ToolContext) -> str:
     """没点名班级时取本租户第一个有成绩的班（避免全班扫库）。"""
     rows = tools._query(
-        "SELECT s.class_name AS class_name FROM student s "
-        "JOIN score sc ON sc.student_id = s.id "
-        "WHERE s.tenant_id = %s GROUP BY s.class_name ORDER BY s.class_name LIMIT 1",
+        "SELECT s.`班级` AS class_name FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` "
+        "WHERE s.`租户编号` = %s GROUP BY s.`班级` ORDER BY s.`班级` LIMIT 1",
         (ctx.tenant_id,),
     )
     return str(rows[0]["class_name"]) if rows else ""
@@ -150,9 +150,9 @@ def _extract_student_no(ctx: ToolContext, query: str) -> str:
     if match:
         return match.group(1)
     rows = tools._query(
-        "SELECT s.student_no AS student_no FROM student s "
-        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "WHERE s.tenant_id = %s ORDER BY s.student_no LIMIT 1",
+        "SELECT s.`学号` AS student_no FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "WHERE s.`租户编号` = %s ORDER BY s.`学号` LIMIT 1",
         (state_term(ctx), ctx.tenant_id),
     )
     return str(rows[0]["student_no"]) if rows else ""

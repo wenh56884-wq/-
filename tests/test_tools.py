@@ -107,7 +107,7 @@ def test_cross_tenant_class_is_denied(audit_sink, monkeypatch):
     """班级只在其他租户存在 → 拒绝并写审计（不得返回空数据假装成功）。"""
     def fake_query(sql: str, params: tuple):
         # 第一次查本租户（0 行），第二次查其他租户（存在）
-        return [{"cnt": 1}] if "tenant_id <> %s" in sql else [{"cnt": 0}]
+        return [{"cnt": 1}] if "`租户编号` <> %s" in sql else [{"cnt": 0}]
 
     monkeypatch.setattr(tools, "_query", fake_query)
     with pytest.raises(PermissionError) as exc:
@@ -129,9 +129,9 @@ def test_unknown_class_is_value_error_not_permission(audit_sink, monkeypatch):
 def test_teacher_scope_limits_class_list(audit_sink, monkeypatch):
     """配置了 teacher_class 的教师，班级目录只返回任教班级。"""
     def fake_query(sql: str, params: tuple):
-        if "FROM teacher_class" in sql:
+        if "FROM `教师任教班级`" in sql:
             return [{"class_name": CLASS}]
-        if "GROUP BY s.college" in sql:
+        if "GROUP BY s.`学院`" in sql:
             return [
                 {"college": "软件学院", "class_name": CLASS,
                  "major": "软件工程", "headcount": 30},
@@ -150,9 +150,9 @@ def test_teacher_scope_limits_class_list(audit_sink, monkeypatch):
 def test_teacher_scope_denies_student_outside_class(audit_sink, monkeypatch):
     """教师只能查任教班级的学生；跨班学号按越权拒绝并写审计。"""
     def fake_query(sql: str, params: tuple):
-        if "FROM teacher_class" in sql:
+        if "FROM `教师任教班级`" in sql:
             return [{"class_name": CLASS}]
-        if "FROM student s WHERE" in sql:
+        if "FROM `学生` s WHERE" in sql:
             return [{
                 "student_no": OTHER_STUDENT_NO, "name": "别班学生",
                 "major": "软件工程", "class_name": "RJ2202",
@@ -207,11 +207,11 @@ def test_default_term_falls_back_to_latest_term(monkeypatch):
 
     def _fake(sql: str, params) -> list[dict]:
         seen.append((sql, tuple(params)))
-        if "ORDER BY sc.term DESC LIMIT 1" in sql:
+        if "ORDER BY sc.`学期` DESC LIMIT 1" in sql:
             return [{"term": "2025-2026-2"}]
-        if "COUNT(DISTINCT s.id) AS cnt" in sql:
+        if "COUNT(DISTINCT s.`编号`) AS cnt" in sql:
             return [{"cnt": 1}]
-        if "AVG(sc.score) AS gpa" in sql and "GROUP BY s.student_no" in sql:
+        if "AVG(sc.`分数`) AS gpa" in sql and "GROUP BY s.`学号`" in sql:
             return [{"headcount": 1, "fail_students": 0, "fail_courses": 0, "avg_gpa": 80.0}]
         return []
 
@@ -224,7 +224,7 @@ def test_default_term_falls_back_to_latest_term(monkeypatch):
 
     out2 = tools.class_overview(_teacher(), CLASS, "")
     assert out2["term"] == "2025-2026-2", "应回落到最新有成绩学期"
-    assert any("ORDER BY sc.term DESC LIMIT 1" in q[0] for q in seen)
+    assert any("ORDER BY sc.`学期` DESC LIMIT 1" in q[0] for q in seen)
 
 
 def test_illegal_level_raises_value_error(monkeypatch):
@@ -241,27 +241,27 @@ def test_illegal_level_raises_value_error(monkeypatch):
 def test_returns_are_structured_with_versions(monkeypatch):
     """每个返回值必须是 dict，且带 engine_version / calc_version（禁止自然语言）。"""
     def _fake(sql: str, params) -> list[dict]:
-        if "COUNT(DISTINCT s.id) AS cnt" in sql:
+        if "COUNT(DISTINCT s.`编号`) AS cnt" in sql:
             return [{"cnt": 2}]
         if "headcount" in sql or "SUM(t.fail_cnt" in sql:
             return [{"headcount": 2, "fail_students": 1, "fail_courses": 3, "avg_gpa": 76.5}]
-        if "COUNT(*) AS cnt" in sql and "j.title" in sql:
+        if "COUNT(*) AS cnt" in sql and "j.`岗位名称`" in sql:
             return [{"title": "Java 后端开发工程师", "cnt": 5}]
-        if "j.salary_min" in sql:  # 目标岗位样本（career_gap 的需求侧）
+        if "j.`最低薪资`" in sql:  # 目标岗位样本（career_gap 的需求侧）
             return [{
                 "title": "Java 后端开发工程师", "salary_min": 8000, "salary_max": 15000,
                 "exp_min": 1, "education": "本科",
                 "skill_tags": '["Java", "Spring", "项目经验"]',
                 "description": "要求有项目经验和团队协作能力",
             }]
-        if "SELECT s.student_no AS student_no FROM student s" in sql:
+        if "SELECT s.`学号` AS student_no FROM `学生` s" in sql:
             return [{"student_no": "RJ2022001"}, {"student_no": "RJ2022002"}]
-        if "s.name AS name, s.major AS major" in sql:
+        if "s.`姓名` AS name, s.`专业` AS major" in sql:
             return [{"student_no": "RJ2022001", "name": "张三", "major": "软件工程",
                      "class_name": CLASS, "student_id": 1}]
-        if "GROUP BY s.student_no" in sql and "AVG(sc.score) AS gpa" in sql:
+        if "GROUP BY s.`学号`" in sql and "AVG(sc.`分数`) AS gpa" in sql:
             return [{"student_no": "RJ2022001", "gpa": 76.5, "fail_cnt": 1}]
-        if "ORDER BY sc.term" in sql:
+        if "ORDER BY sc.`学期`" in sql:
             return [{"term": TERM, "gpa": 76.5}]
         return []
 
@@ -320,9 +320,9 @@ def test_student_only_sees_self(audit_sink):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT s.id AS id, s.student_no AS student_no FROM student s "
-                "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-                "WHERE s.tenant_id = %s ORDER BY s.student_no LIMIT 1",
+                "SELECT s.`编号` AS id, s.`学号` AS student_no FROM `学生` s "
+                "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+                "WHERE s.`租户编号` = %s ORDER BY s.`学号` LIMIT 1",
                 (TERM, TENANT_A),
             )
             row = cur.fetchone()
@@ -357,7 +357,7 @@ def test_all_sql_carries_tenant_condition():
     # 取数类 SQL（.execute / _query 里的 SELECT）必须 tenant 过滤
     select_sql = [
         line for line in src.splitlines()
-        if "tenant_id = %s" in line or "v.student_id = s.id AND s.tenant_id" in line
+        if "`租户编号` = %s" in line or "v.student_id = s.id AND s.tenant_id" in line
     ]
     assert len(select_sql) >= 8, f"带 tenant_id 条件的 SQL 行数不足：{len(select_sql)}"
 

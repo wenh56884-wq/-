@@ -75,13 +75,14 @@ def _warning_metrics(settings, tenant_id: int, term: str) -> tuple[dict[str, dic
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT student_no FROM student WHERE tenant_id = %s AND student_no <> ''",
+                "SELECT `学号` AS student_no FROM `学生` "
+                "WHERE `租户编号` = %s AND `学号` <> ''",
                 (tenant_id,),
             )
             tenant_students = {str(row["student_no"]) for row in cur.fetchall()}
             cur.execute(
-                "SELECT DISTINCT class_name FROM student "
-                "WHERE tenant_id = %s AND class_name <> '' ORDER BY class_name",
+                "SELECT DISTINCT `班级` AS class_name FROM `学生` "
+                "WHERE `租户编号` = %s AND `班级` <> '' ORDER BY `班级`",
                 (tenant_id,),
             )
             classes = [str(row["class_name"]) for row in cur.fetchall()]
@@ -123,8 +124,8 @@ def _audit_rows(settings, action: str, limit: int) -> list[dict[str, Any]]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT target, detail FROM audit_log WHERE action = %s "
-                "ORDER BY id DESC LIMIT %s",
+                "SELECT `对象`, `详情` FROM `审计日志` WHERE `动作` = %s "
+                "ORDER BY `编号` DESC LIMIT %s",
                 (action, int(limit)),
             )
             return [
@@ -142,9 +143,9 @@ def _latency_metrics(settings, limit: int) -> dict[str, Any]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT action, detail FROM audit_log "
-                "WHERE action LIKE 'GET /%%' OR action LIKE 'POST /%%' OR action LIKE 'PUT /%%' "
-                "ORDER BY id DESC LIMIT %s",
+                "SELECT `动作`, `详情` FROM `审计日志` "
+                "WHERE `动作` LIKE 'GET /%%' OR `动作` LIKE 'POST /%%' OR `动作` LIKE 'PUT /%%' "
+                "ORDER BY `编号` DESC LIMIT %s",
                 (int(limit),),
             )
             rows = cur.fetchall()
@@ -176,8 +177,8 @@ def _recommend_metrics(settings) -> dict[str, Any]:
         try:
             with duckdb.connect(str(settings.duckdb_path_obj), read_only=True) as conn:
                 rows = conn.execute(
-                    "SELECT student_no, final_score, cf_score, hit_items, gap_items "
-                    "FROM recommend_log"
+                    'SELECT "学号", "最终得分", "协同得分", "命中项", "缺口项" '
+                    'FROM "推荐日志"'
                 ).fetchall()
             columns = ("student_no", "final_score", "cf_score", "hit_items", "gap_items")
             data = [dict(zip(columns, row)) for row in rows]
@@ -197,21 +198,21 @@ def _usage_metrics(settings, tenant_id: int) -> dict[str, Any]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(DISTINCT actor_id) AS n FROM audit_log "
-                "WHERE actor_type = 'student' AND actor_id > 0 "
+                "SELECT COUNT(DISTINCT `操作者编号`) AS n FROM `审计日志` "
+                "WHERE `操作者类型` = 'student' AND `操作者编号` > 0 "
                 "AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
             )
             active_students = int(cur.fetchone()["n"] or 0)
             cur.execute(
-                "SELECT COUNT(DISTINCT a.actor_id) AS n FROM audit_log a "
-                "JOIN teacher t ON t.id = a.actor_id "
-                "WHERE a.actor_type = 'teacher' AND t.tenant_id = %s",
+                "SELECT COUNT(DISTINCT a.`操作者编号`) AS n FROM `审计日志` a "
+                "JOIN `教师` t ON t.`编号` = a.`操作者编号` "
+                "WHERE a.`操作者类型` = 'teacher' AND t.`租户编号` = %s",
                 (tenant_id,),
             )
             active_teachers = int(cur.fetchone()["n"] or 0)
-            cur.execute("SELECT COUNT(*) AS n FROM student WHERE tenant_id = %s", (tenant_id,))
+            cur.execute("SELECT COUNT(*) AS n FROM `学生` WHERE `租户编号` = %s", (tenant_id,))
             total_students = int(cur.fetchone()["n"] or 0)
-            cur.execute("SELECT COUNT(*) AS n FROM teacher WHERE tenant_id = %s", (tenant_id,))
+            cur.execute("SELECT COUNT(*) AS n FROM `教师` WHERE `租户编号` = %s", (tenant_id,))
             total_teachers = int(cur.fetchone()["n"] or 0)
     finally:
         conn.close()

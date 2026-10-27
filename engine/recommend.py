@@ -284,19 +284,19 @@ def _query(sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
 def load_student(tenant_id: int, student_no: str, term: str) -> dict[str, Any]:
     """取推荐所需画像：专业 / 均分 / 技能（课名映射）/ 方向（DuckDB 的 course_pref）。"""
     rows = _query(
-        "SELECT s.student_no AS student_no, s.major AS major, AVG(sc.score) AS gpa "
-        "FROM student s "
-        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "WHERE s.tenant_id = %s AND s.student_no = %s "
-        "GROUP BY s.student_no, s.major",
+        "SELECT s.`学号` AS student_no, s.`专业` AS major, AVG(sc.`分数`) AS gpa "
+        "FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "WHERE s.`租户编号` = %s AND s.`学号` = %s "
+        "GROUP BY s.`学号`, s.`专业`",
         (term, tenant_id, student_no),
     )
     base = rows[0] if rows else {}
     courses = _query(
-        "SELECT DISTINCT c.name AS name FROM score sc "
-        "JOIN course c ON c.id = sc.course_id "
-        "JOIN student s ON s.id = sc.student_id AND s.tenant_id = %s "
-        "WHERE s.student_no = %s AND sc.term = %s",
+        "SELECT DISTINCT c.`课程名称` AS name FROM `成绩` sc "
+        "JOIN `课程` c ON c.`编号` = sc.`课程编号` "
+        "JOIN `学生` s ON s.`编号` = sc.`学生编号` AND s.`租户编号` = %s "
+        "WHERE s.`学号` = %s AND sc.`学期` = %s",
         (tenant_id, student_no, term),
     )
     directions: list[str] = []
@@ -384,9 +384,10 @@ def load_jobs(directions: Sequence[str], limit: int = MAX_CANDIDATES) -> list[di
     抽样按固定步长取（不是随机、也不是只取前 N 条），保证覆盖全 id 区间且同输入同结果。
     """
     rows = _query(
-        "SELECT id, title, company, city, salary_min, salary_max, education, "
-        "       exp_min, exp_max, skill_tags "
-        "FROM job ORDER BY id",
+        "SELECT `编号` AS id, `岗位名称` AS title, `企业` AS company, `城市` AS city, "
+        "       `最低薪资` AS salary_min, `最高薪资` AS salary_max, `学历` AS education, "
+        "       `最低经验` AS exp_min, `最高经验` AS exp_max, `技能标签` AS skill_tags "
+        "FROM `岗位` ORDER BY `编号`",
         (),
     )
     jobs: list[dict[str, Any]] = []

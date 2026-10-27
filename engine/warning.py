@@ -117,8 +117,9 @@ def _query(sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
 def fetch_threshold_rows(tenant_id: int) -> list[dict[str, Any]]:
     """读取该租户的预警阈值行（WHERE tenant_id=?，禁止全表扫描）。"""
     sql = (
-        "SELECT metric, weight, red_value, orange_value, yellow_value "
-        "FROM warning_threshold WHERE tenant_id = %s ORDER BY metric"
+        "SELECT `指标` AS metric, `权重` AS weight, `红色阈值` AS red_value, "
+        "       `橙色阈值` AS orange_value, `黄色阈值` AS yellow_value "
+        "FROM `预警阈值` WHERE `租户编号` = %s ORDER BY `指标`"
     )
     return _query(sql, (tenant_id,))
 
@@ -126,9 +127,10 @@ def fetch_threshold_rows(tenant_id: int) -> list[dict[str, Any]]:
 def fetch_class_threshold_rows(tenant_id: int, class_name: str) -> list[dict[str, Any]]:
     """读取某班级的阈值覆盖行；无覆盖返回空列表。"""
     sql = (
-        "SELECT metric, weight, red_value, orange_value, yellow_value "
-        "FROM class_warning_threshold "
-        "WHERE tenant_id = %s AND class_name = %s ORDER BY metric"
+        "SELECT `指标` AS metric, `权重` AS weight, `红色阈值` AS red_value, "
+        "       `橙色阈值` AS orange_value, `黄色阈值` AS yellow_value "
+        "FROM `班级预警阈值` "
+        "WHERE `租户编号` = %s AND `班级` = %s ORDER BY `指标`"
     )
     return _query(sql, (tenant_id, class_name))
 
@@ -159,11 +161,11 @@ def compute_rank_pct(gpa_of: Mapping[str, float]) -> dict[str, float]:
 def _fetch_previous_term(tenant_id: int, class_name: str, term: str) -> str | None:
     """返回该班级小于当前学期且最接近的学期号；不存在返回 None。"""
     sql = (
-        "SELECT sc.term AS term "
-        "FROM score sc "
-        "JOIN student s ON s.id = sc.student_id "
-        "WHERE s.tenant_id = %s AND s.class_name = %s AND sc.term < %s "
-        "GROUP BY sc.term ORDER BY sc.term DESC LIMIT 1"
+        "SELECT sc.`学期` AS term "
+        "FROM `成绩` sc "
+        "JOIN `学生` s ON s.`编号` = sc.`学生编号` "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s AND sc.`学期` < %s "
+        "GROUP BY sc.`学期` ORDER BY sc.`学期` DESC LIMIT 1"
     )
     rows = _query(sql, (tenant_id, class_name, term))
     return str(rows[0]["term"]) if rows else None
@@ -176,13 +178,13 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
     缺考勤 / 无上学期成绩时对应字段一律为 None（不得按全勤 1.0 或下滑 0.0 冒充）。
     """
     cur_sql = (
-        "SELECT s.student_no AS student_no, s.name AS name, "
-        "       AVG(sc.score) AS gpa, "
-        "       SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_count "
-        "FROM student s "
-        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "WHERE s.tenant_id = %s AND s.class_name = %s "
-        "GROUP BY s.student_no, s.name"
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, "
+        "       AVG(sc.`分数`) AS gpa, "
+        "       SUM(CASE WHEN sc.`分数` < 60 THEN 1 ELSE 0 END) AS fail_count "
+        "FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+        "GROUP BY s.`学号`, s.`姓名`"
     )
     cur_rows = _query(cur_sql, (term, tenant_id, class_name))
 
@@ -190,11 +192,11 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
     prev_gpa: dict[str, float] = {}
     if prev_term is not None:
         prev_sql = (
-            "SELECT s.student_no AS student_no, AVG(sc.score) AS gpa "
-            "FROM student s "
-            "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-            "WHERE s.tenant_id = %s AND s.class_name = %s "
-            "GROUP BY s.student_no"
+            "SELECT s.`学号` AS student_no, AVG(sc.`分数`) AS gpa "
+            "FROM `学生` s "
+            "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+            "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+            "GROUP BY s.`学号`"
         )
         prev_gpa = {
             str(r["student_no"]): float(r["gpa"])
@@ -202,13 +204,13 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
         }
 
     att_sql = (
-        "SELECT s.student_no AS student_no, "
-        "       SUM(a.total_sessions) AS total_sessions, "
-        "       SUM(a.absent_sessions) AS absent_sessions "
-        "FROM student s "
-        "JOIN attendance a ON a.student_id = s.id AND a.term = %s "
-        "WHERE s.tenant_id = %s AND s.class_name = %s "
-        "GROUP BY s.student_no"
+        "SELECT s.`学号` AS student_no, "
+        "       SUM(a.`应到次数`) AS total_sessions, "
+        "       SUM(a.`缺勤次数`) AS absent_sessions "
+        "FROM `学生` s "
+        "JOIN `考勤` a ON a.`学生编号` = s.`编号` AND a.`学期` = %s "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+        "GROUP BY s.`学号`"
     )
     attendance: dict[str, float] = {}
     for r in _query(att_sql, (term, tenant_id, class_name)):
@@ -248,11 +250,11 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
 def fetch_student_row(tenant_id: int, student_no: str, term: str) -> dict[str, Any] | None:
     """读取单个学生的原始指标行；无成绩记录返回 None。"""
     sql = (
-        "SELECT s.student_no AS student_no, s.name AS name, s.class_name AS class_name "
-        "FROM student s "
-        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "WHERE s.tenant_id = %s AND s.student_no = %s "
-        "GROUP BY s.student_no, s.name, s.class_name"
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, s.`班级` AS class_name "
+        "FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "WHERE s.`租户编号` = %s AND s.`学号` = %s "
+        "GROUP BY s.`学号`, s.`姓名`, s.`班级`"
     )
     rows = _query(sql, (term, tenant_id, student_no))
     if not rows:

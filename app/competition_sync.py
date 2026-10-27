@@ -77,8 +77,9 @@ def latest_notices(limit: int = 20) -> list[dict[str, Any]]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT title, published_at, url, source, fetched_at "
-                "FROM competition_notice ORDER BY published_at DESC, id DESC LIMIT %s",
+                "SELECT `标题` AS title, `发布日期` AS published_at, `链接` AS url, "
+                "       `来源` AS source, `抓取时间` AS fetched_at "
+                "FROM `竞赛通知` ORDER BY `发布日期` DESC, `编号` DESC LIMIT %s",
                 (int(limit),),
             )
             rows = [dict(r) for r in cur.fetchall()]

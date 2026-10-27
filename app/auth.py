@@ -93,19 +93,19 @@ def authenticate(role: str, account: str, password: str,
                  tenant_id: int | None = None) -> dict[str, Any] | None:
     """按角色查对应的账号表；库不可用时返回 None（登录失败，不外泄原因）。"""
     if role == ROLE_TEACHER:
-        sql = ("SELECT t.id AS id, t.tenant_id AS tenant_id, t.name AS name, "
-               "       t.employee_no AS employee_no, t.password_hash AS password_hash "
-               "FROM teacher t WHERE t.employee_no = %s")
+        sql = ("SELECT t.`编号` AS id, t.`租户编号` AS tenant_id, t.`姓名` AS name, "
+               "       t.`工号` AS employee_no, t.`口令摘要` AS password_hash "
+               "FROM `教师` t WHERE t.`工号` = %s")
     elif role == ROLE_STUDENT:
-        sql = ("SELECT s.id AS id, s.tenant_id AS tenant_id, s.name AS name, "
-               "       s.student_no AS employee_no, s.password_hash AS password_hash "
-               "FROM student s WHERE s.student_no = %s")
+        sql = ("SELECT s.`编号` AS id, s.`租户编号` AS tenant_id, s.`姓名` AS name, "
+               "       s.`学号` AS employee_no, s.`口令摘要` AS password_hash "
+               "FROM `学生` s WHERE s.`学号` = %s")
     else:
         return None
     params: list[Any] = [account]
     if tenant_id:
         alias = "t" if role == ROLE_TEACHER else "s"
-        sql += f" AND {alias}.tenant_id = %s"
+        sql += f" AND {alias}.`租户编号` = %s"
         params.append(tenant_id)
     sql += " LIMIT 1"
 

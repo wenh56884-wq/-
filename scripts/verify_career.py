@@ -13,13 +13,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
-BASE = "http://127.0.0.1:8000"
+# 直接 `python scripts/verify_career.py` 运行时，sys.path[0] 是 scripts/，
+# 根目录不在路径上 → `from app.config import ...` 在 _pick_demo_account 里
+# 被 except ImportError 吞掉、静默回落到写死的旧学号，表现为「登录 401」。
+# 这里显式把项目根挂上，让脚本形式和 `-m` 形式行为一致。
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+# 服务端口可配：本机常有多个 uvicorn 同时在跑（8000 后端、8001 前端代理后端），
+# 写死 8000 会验到另一个进程上去，得到「登录 401」这种看似数据坏了、
+# 实际只是打错门的假报警。用 QH_BASE 覆盖，或 --base 传参。
+BASE = os.getenv("QH_BASE", "http://127.0.0.1:8000")
 VALID_GATE = {"pass", "fail", "unknown"}
 VALID_LIGHT = {"green", "yellow", "red", "unknown"}
 
@@ -56,10 +69,47 @@ def _req(method: str, path: str, token: str | None = None, body: Any = None) -> 
         raise SystemExit(1)
 
 
+def _pick_demo_account() -> str | None:
+    """从库里挑一个真实存在的学生学号当演示账号（口令同学号）。
+
+    学号格式会随 seed 规则变（例如 10 位 ABBR+年份+4 位序号），写死会一直失效；
+    这里直接读库，拿不到就返回 None，让调用方回落到默认值。
+    """
+    try:
+        import pymysql
+
+        from app.config import get_settings
+    except ImportError:
+        return None
+    s = get_settings()
+    try:
+        conn = pymysql.connect(
+            host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
+            password=s.mysql_password, database=s.mysql_db, charset="utf8mb4",
+        )
+    except pymysql.MySQLError:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT `学号` FROM `学生` WHERE `租户编号` = 1 "
+                "ORDER BY `学号` LIMIT 1"
+            )
+            row = cur.fetchone()
+            return str(row[0]) if row else None
+    except pymysql.MySQLError:
+        return None
+    finally:
+        conn.close()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--account", default="WL2022001", help="学生学号（演示账号口令同学号）")
+    ap.add_argument("--account", default=None,
+                    help="学生学号（演示账号口令同学号）；不传则从库里取一个真实学号")
     args = ap.parse_args()
+    account = args.account or _pick_demo_account() or "WL20220001"
+    args.account = account
 
     print("=" * 66)
     print("启航 · 职业规划模块端到端自检（P13）")

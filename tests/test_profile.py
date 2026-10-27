@@ -76,7 +76,7 @@ def _count_rows(db_file: Path) -> int:
     """统计 student_feature 行数。"""
     con = duckdb.connect(str(db_file))
     try:
-        return int(con.execute("SELECT COUNT(*) FROM student_feature").fetchone()[0])
+        return int(con.execute('SELECT COUNT(*) FROM "学生特征"').fetchone()[0])
     finally:
         con.close()
 

@@ -161,9 +161,11 @@ def recommend_competitions(track: str = "就业", direction: str = "",
     track = "考公" if str(track or "").strip() == "考公" else "就业"
     keywords = _keywords(direction, job_title, gap_skills)
     rows = _query(
-        "SELECT id, name, category, org_unit, track, tags_json, reward, "
-        "       source_title, source_url, published_at "
-        "FROM competition ORDER BY id",
+        "SELECT `编号` AS id, `竞赛名称` AS name, `类别` AS category, "
+        "       `组织单位` AS org_unit, `去向` AS track, `标签` AS tags_json, "
+        "       `奖励方案` AS reward, `来源标题` AS source_title, "
+        "       `来源链接` AS source_url, `发布日期` AS published_at "
+        "FROM `竞赛` ORDER BY `编号`",
     )
     scored: list[dict[str, Any]] = []
     for row in rows:
@@ -188,18 +190,20 @@ def unread_notices(student_no: str, tenant_id: int, limit: int = 20) -> dict[str
     水位用自增 id 而非时间，避免同一秒内发布的新通知被漏掉。
     """
     rows = _query(
-        "SELECT last_notice_id, last_read_at FROM student_notice_read "
-        "WHERE tenant_id = %s AND student_no = %s",
+        "SELECT `已读通知编号` AS last_notice_id, `最后已读时间` AS last_read_at "
+        "FROM `学生通知已读` WHERE `租户编号` = %s AND `学号` = %s",
         (int(tenant_id), str(student_no)),
     )
     watermark = int((rows[0] or {}).get("last_notice_id") or 0) if rows else 0
     notices = _query(
-        "SELECT id, title, published_at, url, source, fetched_at FROM competition_notice "
-        "WHERE id > %s ORDER BY published_at DESC, id DESC LIMIT %s",
+        "SELECT `编号` AS id, `标题` AS title, `发布日期` AS published_at, "
+        "       `链接` AS url, `来源` AS source, `抓取时间` AS fetched_at "
+        "FROM `竞赛通知` "
+        "WHERE `编号` > %s ORDER BY `发布日期` DESC, `编号` DESC LIMIT %s",
         (watermark, int(limit)),
     )
     total = _query(
-        "SELECT COUNT(*) AS n FROM competition_notice WHERE id > %s", (watermark,))
+        "SELECT COUNT(*) AS n FROM `竞赛通知` WHERE `编号` > %s", (watermark,))
     for notice in notices:
         fetched = notice.get("fetched_at")
         notice["fetched_at"] = fetched.strftime("%Y-%m-%d %H:%M:%S") if isinstance(
@@ -215,12 +219,12 @@ def unread_notices(student_no: str, tenant_id: int, limit: int = 20) -> dict[str
 
 def mark_read(student_no: str, tenant_id: int) -> dict[str, Any]:
     """把水位推到当前最大通知 id：之后发布的新通知才会再次提醒。"""
-    rows = _query("SELECT COALESCE(MAX(id), 0) AS max_id FROM competition_notice")
+    rows = _query("SELECT COALESCE(MAX(`编号`), 0) AS max_id FROM `竞赛通知`")
     max_id = int((rows[0] or {}).get("max_id") or 0) if rows else 0
     _execute(
-        "INSERT INTO student_notice_read (student_no, tenant_id, last_notice_id, last_read_at) "
+        "INSERT INTO `学生通知已读` (`学号`, `租户编号`, `已读通知编号`, `最后已读时间`) "
         "VALUES (%s, %s, %s, NOW()) ON DUPLICATE KEY UPDATE "
-        "last_notice_id = VALUES(last_notice_id), last_read_at = NOW()",
+        "`已读通知编号` = VALUES(`已读通知编号`), `最后已读时间` = NOW()",
         (str(student_no), int(tenant_id), max_id),
     )
     return {"student_no": str(student_no), "last_notice_id": max_id, "marked": True}

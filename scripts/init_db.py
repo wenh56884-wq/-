@@ -18,10 +18,14 @@ if str(_ROOT) not in sys.path:
 
 from app.config import get_settings
 
-# SQL 文件路径（按顺序执行；career_tables 依赖 mysql_schema 里的 student 表）
+# SQL 文件路径（按顺序执行；后续几份都依赖 mysql_schema 里的 学生 / 岗位 等主表）
 _MYSQL_SQL_FILES = (
     _ROOT / "db" / "mysql_schema.sql",
     _ROOT / "db" / "career_tables.sql",
+    _ROOT / "db" / "source_tables_v2.sql",
+    _ROOT / "db" / "elective_tables.sql",
+    _ROOT / "db" / "competition_tables.sql",
+    _ROOT / "db" / "recruit_tables.sql",
 )
 _DUCKDB_SQL = _ROOT / "db" / "duckdb_schema.sql"
 

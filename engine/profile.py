@@ -413,14 +413,14 @@ def _query(sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
 def _term_aggregate(tenant_id: int, term: str) -> list[dict[str, Any]]:
     """取该租户某学期的学生均分、挂科数与所属专业、班级。"""
     sql = (
-        "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
-        "       s.class_name AS class_name, "
-        "       AVG(sc.score) AS gpa, "
-        "       SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_count "
-        "FROM student s "
-        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "WHERE s.tenant_id = %s "
-        "GROUP BY s.student_no, s.name, s.major, s.class_name"
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, s.`专业` AS major, "
+        "       s.`班级` AS class_name, "
+        "       AVG(sc.`分数`) AS gpa, "
+        "       SUM(CASE WHEN sc.`分数` < 60 THEN 1 ELSE 0 END) AS fail_count "
+        "FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "WHERE s.`租户编号` = %s "
+        "GROUP BY s.`学号`, s.`姓名`, s.`专业`, s.`班级`"
     )
     return _query(sql, (term, tenant_id))
 
@@ -428,11 +428,11 @@ def _term_aggregate(tenant_id: int, term: str) -> list[dict[str, Any]]:
 def _previous_term(tenant_id: int, term: str) -> str | None:
     """取小于当前学期且最接近的学期号。"""
     sql = (
-        "SELECT sc.term AS term "
-        "FROM score sc "
-        "JOIN student s ON s.id = sc.student_id "
-        "WHERE s.tenant_id = %s AND sc.term < %s "
-        "GROUP BY sc.term ORDER BY sc.term DESC LIMIT 1"
+        "SELECT sc.`学期` AS term "
+        "FROM `成绩` sc "
+        "JOIN `学生` s ON s.`编号` = sc.`学生编号` "
+        "WHERE s.`租户编号` = %s AND sc.`学期` < %s "
+        "GROUP BY sc.`学期` ORDER BY sc.`学期` DESC LIMIT 1"
     )
     rows = _query(sql, (tenant_id, term))
     return str(rows[0]["term"]) if rows else None
@@ -459,13 +459,13 @@ def fetch_student_raw(tenant_id: int, term: str) -> list[dict[str, Any]]:
     )
 
     att_sql = (
-        "SELECT s.student_no AS student_no, "
-        "       SUM(a.total_sessions) AS total_sessions, "
-        "       SUM(a.absent_sessions) AS absent_sessions "
-        "FROM student s "
-        "JOIN attendance a ON a.student_id = s.id AND a.term = %s "
-        "WHERE s.tenant_id = %s "
-        "GROUP BY s.student_no"
+        "SELECT s.`学号` AS student_no, "
+        "       SUM(a.`应到次数`) AS total_sessions, "
+        "       SUM(a.`缺勤次数`) AS absent_sessions "
+        "FROM `学生` s "
+        "JOIN `考勤` a ON a.`学生编号` = s.`编号` AND a.`学期` = %s "
+        "WHERE s.`租户编号` = %s "
+        "GROUP BY s.`学号`"
     )
     attendance: dict[str, float] = {}
     for r in _query(att_sql, (term, tenant_id)):
@@ -535,12 +535,12 @@ def batch_build(
     """
     rows = raw_rows if raw_rows is not None else fetch_student_raw(tenant_id, term)
     target = store if store is not None else DuckDBStore()
-    count = 0
+    batch: list[dict[str, Any]] = []
     for raw in rows:
         features = build_features(raw)
         row = to_feature_row(features)
         if not row["term"]:
             row["term"] = term
-        target.write_student_feature(row)
-        count += 1
-    return count
+        batch.append(row)
+    # 一次批量 upsert：1 万人逐条写要 7 分钟，批量写几秒
+    return target.write_student_features(batch)

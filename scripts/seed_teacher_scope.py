@@ -33,7 +33,7 @@ def _connect(settings) -> pymysql.connections.Connection:
 
 def _teacher_id(cur, tenant_id: int, employee_no: str) -> int:
     cur.execute(
-        "SELECT id FROM teacher WHERE tenant_id = %s AND employee_no = %s",
+        "SELECT `编号` AS id FROM `教师` WHERE `租户编号` = %s AND `工号` = %s",
         (tenant_id, employee_no),
     )
     row = cur.fetchone()
@@ -44,8 +44,8 @@ def _teacher_id(cur, tenant_id: int, employee_no: str) -> int:
 
 def _tenant_classes(cur, tenant_id: int) -> list[str]:
     cur.execute(
-        "SELECT DISTINCT class_name FROM student "
-        "WHERE tenant_id = %s AND class_name <> '' ORDER BY class_name",
+        "SELECT DISTINCT `班级` AS class_name FROM `学生` "
+        "WHERE `租户编号` = %s AND `班级` <> '' ORDER BY `班级`",
         (tenant_id,),
     )
     return [str(row["class_name"]) for row in cur.fetchall()]
@@ -77,10 +77,10 @@ def main(argv: list[str] | None = None) -> int:
                 if missing:
                     raise ValueError(f"班级不存在于租户 {args.tenant_id}：{missing}")
 
-            cur.execute("DELETE FROM teacher_class WHERE teacher_id = %s", (teacher_id,))
+            cur.execute("DELETE FROM `教师任教班级` WHERE `教师编号` = %s", (teacher_id,))
             for class_name in target:
                 cur.execute(
-                    "INSERT INTO teacher_class (tenant_id, teacher_id, class_name) "
+                    "INSERT INTO `教师任教班级` (`租户编号`, `教师编号`, `班级`) "
                     "VALUES (%s, %s, %s)",
                     (args.tenant_id, teacher_id, class_name),
                 )

@@ -100,34 +100,34 @@ def load_study_base(tenant_id: int, term: str) -> list[dict[str, Any]]:
     attendance_rate（无考勤记 None）。
     """
     cur_sql = (
-        "SELECT s.student_no AS student_no, s.name AS name, s.major AS major, "
-        "       s.class_name AS class_name, "
-        "       AVG(sc.score) AS gpa, "
-        "       SUM(CASE WHEN sc.score < 60 THEN 1 ELSE 0 END) AS fail_count "
-        "FROM student s "
-        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-        "WHERE s.tenant_id = %s "
-        "GROUP BY s.student_no, s.name, s.major, s.class_name"
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, s.`专业` AS major, "
+        "       s.`班级` AS class_name, "
+        "       AVG(sc.`分数`) AS gpa, "
+        "       SUM(CASE WHEN sc.`分数` < 60 THEN 1 ELSE 0 END) AS fail_count "
+        "FROM `学生` s "
+        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "WHERE s.`租户编号` = %s "
+        "GROUP BY s.`学号`, s.`姓名`, s.`专业`, s.`班级`"
     )
     cur_rows = _query(cur_sql, (term, tenant_id))
 
     prev_sql = (
-        "SELECT sc.term AS term "
-        "FROM score sc "
-        "JOIN student s ON s.id = sc.student_id "
-        "WHERE s.tenant_id = %s AND sc.term < %s "
-        "GROUP BY sc.term ORDER BY sc.term DESC LIMIT 1"
+        "SELECT sc.`学期` AS term "
+        "FROM `成绩` sc "
+        "JOIN `学生` s ON s.`编号` = sc.`学生编号` "
+        "WHERE s.`租户编号` = %s AND sc.`学期` < %s "
+        "GROUP BY sc.`学期` ORDER BY sc.`学期` DESC LIMIT 1"
     )
     prev_rows = _query(prev_sql, (tenant_id, term))
     prev_gpa: dict[str, float] = {}
     if prev_rows:
         prev_term = str(prev_rows[0]["term"])
         prev_sql = (
-            "SELECT s.student_no AS student_no, AVG(sc.score) AS gpa "
-            "FROM student s "
-            "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-            "WHERE s.tenant_id = %s "
-            "GROUP BY s.student_no"
+            "SELECT s.`学号` AS student_no, AVG(sc.`分数`) AS gpa "
+            "FROM `学生` s "
+            "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+            "WHERE s.`租户编号` = %s "
+            "GROUP BY s.`学号`"
         )
         prev_gpa = {str(r["student_no"]): float(r["gpa"])
                     for r in _query(prev_sql, (prev_term, tenant_id))}
@@ -139,13 +139,13 @@ def load_study_base(tenant_id: int, term: str) -> list[dict[str, Any]]:
         gpa_of, {str(r["student_no"]): str(r["class_name"]) for r in cur_rows})
 
     att_sql = (
-        "SELECT s.student_no AS student_no, "
-        "       SUM(a.total_sessions) AS total_sessions, "
-        "       SUM(a.absent_sessions) AS absent_sessions "
-        "FROM student s "
-        "JOIN attendance a ON a.student_id = s.id AND a.term = %s "
-        "WHERE s.tenant_id = %s "
-        "GROUP BY s.student_no"
+        "SELECT s.`学号` AS student_no, "
+        "       SUM(a.`应到次数`) AS total_sessions, "
+        "       SUM(a.`缺勤次数`) AS absent_sessions "
+        "FROM `学生` s "
+        "JOIN `考勤` a ON a.`学生编号` = s.`编号` AND a.`学期` = %s "
+        "WHERE s.`租户编号` = %s "
+        "GROUP BY s.`学号`"
     )
     attendance: dict[str, float] = {}
     for r in _query(att_sql, (term, tenant_id)):
@@ -181,12 +181,12 @@ def load_course_pref(tenant_id: int, term: str) -> dict[str, dict[str, int]]:
     方向已在表内 direction 列标注，此处只做聚合计数。
     """
     sql = (
-        "SELECT s.student_no AS student_no, es.direction AS direction, "
+        "SELECT s.`学号` AS student_no, es.`方向` AS direction, "
         "       COUNT(*) AS cnt "
-        "FROM elective_selection es "
-        "JOIN student s ON s.id = es.student_id "
-        "WHERE es.tenant_id = %s AND es.term = %s "
-        "GROUP BY s.student_no, es.direction"
+        "FROM `选课记录` es "
+        "JOIN `学生` s ON s.`编号` = es.`学生编号` "
+        "WHERE es.`租户编号` = %s AND es.`学期` = %s "
+        "GROUP BY s.`学号`, es.`方向`"
     )
     pref: dict[str, dict[str, int]] = {}
     for r in _query(sql, (tenant_id, term)):
@@ -198,11 +198,11 @@ def load_course_pref(tenant_id: int, term: str) -> dict[str, dict[str, int]]:
 def load_library(tenant_id: int, term: str) -> dict[str, int]:
     """library_visit_cnt：原始到馆次数（不预归一，交给 build_features）。"""
     sql = (
-        "SELECT s.student_no AS student_no, SUM(lr.visit_cnt) AS visit_cnt "
-        "FROM library_record lr "
-        "JOIN student s ON s.id = lr.student_id "
-        "WHERE s.tenant_id = %s AND lr.term = %s "
-        "GROUP BY s.student_no"
+        "SELECT s.`学号` AS student_no, SUM(lr.`到馆次数`) AS visit_cnt "
+        "FROM `图书馆记录` lr "
+        "JOIN `学生` s ON s.`编号` = lr.`学生编号` "
+        "WHERE s.`租户编号` = %s AND lr.`学期` = %s "
+        "GROUP BY s.`学号`"
     )
     return {str(r["student_no"]): int(r["visit_cnt"] or 0)
             for r in _query(sql, (tenant_id, term))}
@@ -211,11 +211,11 @@ def load_library(tenant_id: int, term: str) -> dict[str, int]:
 def load_consumption(tenant_id: int, term: str) -> dict[str, float]:
     """consumption_regularity = min(1, active_days / 120)。"""
     sql = (
-        "SELECT s.student_no AS student_no, SUM(cr.active_days) AS active_days "
-        "FROM consumption_record cr "
-        "JOIN student s ON s.id = cr.student_id "
-        "WHERE s.tenant_id = %s AND cr.term = %s "
-        "GROUP BY s.student_no"
+        "SELECT s.`学号` AS student_no, SUM(cr.`活跃天数`) AS active_days "
+        "FROM `消费记录` cr "
+        "JOIN `学生` s ON s.`编号` = cr.`学生编号` "
+        "WHERE s.`租户编号` = %s AND cr.`学期` = %s "
+        "GROUP BY s.`学号`"
     )
     return {
         str(r["student_no"]): min(1.0, round(float(r["active_days"] or 0) / CONSUME_DAY_CAP, 4))
@@ -226,12 +226,12 @@ def load_consumption(tenant_id: int, term: str) -> dict[str, float]:
 def load_activity_counts(tenant_id: int, term: str) -> dict[str, dict[str, int]]:
     """证书/竞赛/项目计数：按 student_no + activity_type 聚合，无记录的类型不出现。"""
     sql = (
-        "SELECT s.student_no AS student_no, sa.activity_type AS activity_type, "
+        "SELECT s.`学号` AS student_no, sa.`活动类型` AS activity_type, "
         "       COUNT(*) AS cnt "
-        "FROM student_activity sa "
-        "JOIN student s ON s.id = sa.student_id "
-        "WHERE s.tenant_id = %s AND sa.term = %s "
-        "GROUP BY s.student_no, sa.activity_type"
+        "FROM `学生活动` sa "
+        "JOIN `学生` s ON s.`编号` = sa.`学生编号` "
+        "WHERE s.`租户编号` = %s AND sa.`学期` = %s "
+        "GROUP BY s.`学号`, sa.`活动类型`"
     )
     result: dict[str, dict[str, int]] = {}
     for r in _query(sql, (tenant_id, term)):
@@ -246,11 +246,11 @@ def load_activity_counts(tenant_id: int, term: str) -> dict[str, dict[str, int]]
 def load_job_view_counts(tenant_id: int, term: str) -> tuple[dict[str, int], dict[str, int]]:
     """岗位浏览/收藏计数：返回 (view 计数 dict, favorite 计数 dict)。"""
     sql = (
-        "SELECT s.student_no AS student_no, jvl.action AS action, COUNT(*) AS cnt "
-        "FROM job_view_log jvl "
-        "JOIN student s ON s.id = jvl.student_id "
-        "WHERE s.tenant_id = %s AND jvl.term = %s "
-        "GROUP BY s.student_no, jvl.action"
+        "SELECT s.`学号` AS student_no, jvl.`动作` AS action, COUNT(*) AS cnt "
+        "FROM `岗位浏览日志` jvl "
+        "JOIN `学生` s ON s.`编号` = jvl.`学生编号` "
+        "WHERE s.`租户编号` = %s AND jvl.`学期` = %s "
+        "GROUP BY s.`学号`, jvl.`动作`"
     )
     views: dict[str, int] = {}
     favorites: dict[str, int] = {}
@@ -265,13 +265,13 @@ def load_job_view_counts(tenant_id: int, term: str) -> tuple[dict[str, int], dic
 
 
 def load_job_view_pref(tenant_id: int, term: str) -> dict[str, dict[str, int]]:
-    """job_view_pref：view 流水 JOIN job 表，按标题匹配方向词典聚合成 {方向: 次数}。"""
+    """job_view_pref：view 流水 JOIN `岗位` 表，按标题匹配方向词典聚合成 {方向: 次数}。"""
     sql = (
-        "SELECT s.student_no AS student_no, j.title AS title "
-        "FROM job_view_log jvl "
-        "JOIN job j ON j.id = jvl.job_id "
-        "JOIN student s ON s.id = jvl.student_id "
-        "WHERE s.tenant_id = %s AND jvl.term = %s AND jvl.action = 'view'"
+        "SELECT s.`学号` AS student_no, j.`岗位名称` AS title "
+        "FROM `岗位浏览日志` jvl "
+        "JOIN `岗位` j ON j.`编号` = jvl.`岗位编号` "
+        "JOIN `学生` s ON s.`编号` = jvl.`学生编号` "
+        "WHERE s.`租户编号` = %s AND jvl.`学期` = %s AND jvl.`动作` = 'view'"
     )
     result: dict[str, dict[str, int]] = {}
     for r in _query(sql, (tenant_id, term)):

@@ -283,10 +283,11 @@ def test_end_to_end_batch_build_idempotent(real_rows, tmp_path):
 
     con = duckdb.connect(str(db_file))
     try:
-        count = con.execute("SELECT COUNT(*) FROM student_feature").fetchone()[0]
+        # 库中表名与列名都是中文（见 db/duckdb_schema.sql），断言必须用真名
+        count = con.execute('SELECT COUNT(*) FROM "学生特征"').fetchone()[0]
         sample_no = subset[0]["student_no"]
         saved_tags = con.execute(
-            "SELECT tags FROM student_feature WHERE student_no = ?", (sample_no,)
+            'SELECT "标签" FROM "学生特征" WHERE "学号" = ?', (sample_no,)
         ).fetchone()[0]
     finally:
         con.close()

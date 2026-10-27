@@ -315,13 +315,13 @@ def seed_plan() -> int:
         with conn.cursor() as cur:
             for name, category, org_unit, track, tags, reward in ROWS:
                 cur.execute(
-                    "INSERT INTO competition (name, category, org_unit, track, tags_json, "
-                    "reward, source_title, source_url, published_at) VALUES "
+                    "INSERT INTO `竞赛` (`竞赛名称`, `类别`, `组织单位`, `去向`, `标签`, "
+                    "`奖励方案`, `来源标题`, `来源链接`, `发布日期`) VALUES "
                     "(%s, %s, %s, %s, %s, %s, %s, %s, %s) "
-                    "ON DUPLICATE KEY UPDATE category=VALUES(category), "
-                    "org_unit=VALUES(org_unit), track=VALUES(track), tags_json=VALUES(tags_json), "
-                    "reward=VALUES(reward), source_title=VALUES(source_title), "
-                    "source_url=VALUES(source_url), published_at=VALUES(published_at)",
+                    "ON DUPLICATE KEY UPDATE `类别`=VALUES(`类别`), "
+                    "`组织单位`=VALUES(`组织单位`), `去向`=VALUES(`去向`), `标签`=VALUES(`标签`), "
+                    "`奖励方案`=VALUES(`奖励方案`), `来源标题`=VALUES(`来源标题`), "
+                    "`来源链接`=VALUES(`来源链接`), `发布日期`=VALUES(`发布日期`)",
                     (name, category, org_unit, track,
                      json.dumps(tags, ensure_ascii=False), reward,
                      PLAN_TITLE, PLAN_URL, PLAN_DATE),
@@ -378,8 +378,8 @@ def save_notices(notices: list[dict[str, Any]]) -> int:
         with conn.cursor() as cur:
             for item in notices:
                 affected = cur.execute(
-                    "INSERT INTO competition_notice (title, published_at, url, source) VALUES "
-                    "(%s, %s, %s, 'cfec-jwc') ON DUPLICATE KEY UPDATE url=VALUES(url)",
+                    "INSERT INTO `竞赛通知` (`标题`, `发布日期`, `链接`, `来源`) VALUES "
+                    "(%s, %s, %s, 'cfec-jwc') ON DUPLICATE KEY UPDATE `链接`=VALUES(`链接`)",
                     (item["title"], item["published_at"], item["url"]),
                 )
                 if affected == 1:  # 1=新插入；2=已存在被更新；0=无变化
@@ -404,19 +404,19 @@ def seed_notices() -> int:
 
 
 def ensure_columns() -> None:
-    """补列：老库上新建的 student_notice_read 可能还没有 last_notice_id（水位改用 id）。"""
+    """补列：老库上新建的 学生通知已读 可能还没有 已读通知编号（水位改用 id）。"""
     conn = _connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*) AS n FROM information_schema.COLUMNS "
-                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_notice_read' "
-                "AND COLUMN_NAME = 'last_notice_id'")
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '学生通知已读' "
+                "AND COLUMN_NAME = '已读通知编号'")
             if int((cur.fetchone() or {}).get("n") or 0) == 0:
                 cur.execute(
-                    "ALTER TABLE student_notice_read "
-                    "ADD COLUMN last_notice_id BIGINT NOT NULL DEFAULT 0 "
-                    "COMMENT '已读到的通知 id（判未读用）' AFTER last_read_at")
+                    "ALTER TABLE `学生通知已读` "
+                    "ADD COLUMN `已读通知编号` BIGINT NOT NULL DEFAULT 0 "
+                    "COMMENT '已读到的通知编号（判未读用）' AFTER `最后已读时间`")
         conn.commit()
     finally:
         conn.close()

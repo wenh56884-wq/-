@@ -55,6 +55,9 @@ _FAV_MAX = 8
 _FAV_ZERO_RATE = 0.03  # 仅 3% 学生无收藏，保证 job_favorite_cnt 非空率 ≥95%
 _JOB_MAJOR_HIT = 0.6  # 60% 落在本人专业 JOB_KEYWORDS 命中的岗位上
 
+# 写库分批大小：单批 5 千行，逐行 3 个占位符也远低于 max_allowed_packet(4MB)
+_INSERT_BATCH = 5000
+
 
 def _poisson(rng: random.Random, lam: float) -> int:
     """Knuth 泊松抽样，lam ≥ 0，返回非负整数。"""
@@ -91,7 +94,7 @@ def _load_hidden_risk(path: Path) -> dict[str, bool]:
 def _load_students(cur, tenant_id: int) -> list[tuple[int, str, str]]:
     """取本租户学生的 (id, student_no, major)，按学号升序保证可复现。"""
     cur.execute(
-        "SELECT id, student_no, major FROM student WHERE tenant_id = %s ORDER BY student_no",
+        "SELECT `编号`, `学号`, `专业` FROM `学生` WHERE `租户编号` = %s ORDER BY `学号`",
         (tenant_id,),
     )
     return [(int(r[0]), str(r[1]), str(r[2])) for r in cur.fetchall()]
@@ -99,7 +102,7 @@ def _load_students(cur, tenant_id: int) -> list[tuple[int, str, str]]:
 
 def _load_jobs(cur) -> list[tuple[int, str]]:
     """取真实岗位表的 (id, title)。"""
-    cur.execute("SELECT id, title FROM job ORDER BY id")
+    cur.execute("SELECT `编号`, `岗位名称` FROM `岗位` ORDER BY `编号`")
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
@@ -202,18 +205,41 @@ def _gen_job_view_rows(
 
 
 def _clear_and_insert(cur, table: str, columns: str, rows: list[tuple]) -> int:
-    """幂等：先删本租户本学期的行，再批量插入，返回插入行数。"""
+    """幂等 + **原子**：先删本租户本学期的行，再分批插入，返回插入行数。
+
+    两个坑，都必须处理：
+    1. 分批是必须的：`岗位浏览日志` 一次要写 ~68 万行，pymysql 的 executemany 会
+       把它拼成一条超长 SQL，超过 max_allowed_packet（默认 4 MB）后整批被截断。
+    2. 原子是必须的：连接是 autocommit=True，DELETE 立即生效，若中途被打断
+       （Ctrl-C / 进程被杀 / 磁盘满），表里就只剩前几批 —— 表现是「打印说插入
+       68 万行，表里只有 4.5 万行」。所以这里显式开事务，删+插一起提交，
+       失败整体回滚，绝不会留下半张表。
+    """
     placeholders = ", ".join(["%s"] * len(_TERMS))
-    cur.execute(
-        f"DELETE FROM {table} WHERE tenant_id = %s AND term IN ({placeholders})",
-        [_TENANT_ID, *_TERMS],
-    )
-    deleted = cur.rowcount
-    if rows:
-        marks = ", ".join(["%s"] * len(rows[0]))
-        cur.executemany(f"INSERT INTO {table} ({columns}) VALUES ({marks})", rows)
-    print(f"  {table:<18} 删除 {deleted} 行，插入 {len(rows)} 行")
-    return len(rows)
+    cur.execute("START TRANSACTION")
+    try:
+        cur.execute(
+            f"DELETE FROM `{table}` WHERE `租户编号` = %s AND `学期` IN ({placeholders})",
+            [_TENANT_ID, *_TERMS],
+        )
+        deleted = cur.rowcount
+        inserted = 0
+        if rows:
+            marks = ", ".join(["%s"] * len(rows[0]))
+            sql = f"INSERT INTO `{table}` ({columns}) VALUES ({marks})"
+            for start in range(0, len(rows), _INSERT_BATCH):
+                chunk = rows[start:start + _INSERT_BATCH]
+                cur.executemany(sql, chunk)
+                inserted += len(chunk)
+        if inserted != len(rows):
+            raise RuntimeError(f"{table} 插入行数不符：生成 {len(rows)}，实际 {inserted}")
+        cur.execute("COMMIT")
+    except BaseException:
+        cur.execute("ROLLBACK")
+        print(f"  {table:<18} 失败已回滚（表保持原样）")
+        raise
+    print(f"  {table:<18} 删除 {deleted} 行，插入 {inserted} 行")
+    return inserted
 
 
 def _print_counts(cur) -> None:
@@ -222,13 +248,14 @@ def _print_counts(cur) -> None:
     print("=" * 56)
     print("四张源表行数")
     print("=" * 56)
-    for table in ("library_record", "consumption_record", "student_activity", "job_view_log"):
+    for table in ("图书馆记录", "消费记录", "学生活动", "岗位浏览日志"):
         cur.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE tenant_id = %s", (_TENANT_ID,)
+            f"SELECT COUNT(*) FROM `{table}` WHERE `租户编号` = %s", (_TENANT_ID,)
         )
         total = cur.fetchone()[0]
         cur.execute(
-            f"SELECT term, COUNT(*) FROM {table} WHERE tenant_id = %s GROUP BY term ORDER BY term",
+            f"SELECT `学期` AS term, COUNT(*) FROM `{table}` WHERE `租户编号` = %s "
+            "GROUP BY `学期` ORDER BY `学期`",
             (_TENANT_ID,),
         )
         by_term = ", ".join(f"{t}:{c}" for t, c in cur.fetchall())
@@ -271,23 +298,23 @@ def main() -> None:
                   f"真实岗位 {len(jobs)} 条")
             print("灌入 4 张源表：")
             _clear_and_insert(
-                cur, "library_record",
-                "tenant_id, student_id, term, visit_cnt, borrow_cnt",
+                cur, "图书馆记录",
+                "`租户编号`, `学生编号`, `学期`, `到馆次数`, `借阅册数`",
                 _gen_library_rows(rng, students, risk_map),
             )
             _clear_and_insert(
-                cur, "consumption_record",
-                "tenant_id, student_id, term, meal_cnt, active_days, avg_amount",
+                cur, "消费记录",
+                "`租户编号`, `学生编号`, `学期`, `消费笔数`, `活跃天数`, `日均金额`",
                 _gen_consumption_rows(rng, students, risk_map),
             )
             _clear_and_insert(
-                cur, "student_activity",
-                "tenant_id, student_id, term, activity_type, title, level, got_at",
+                cur, "学生活动",
+                "`租户编号`, `学生编号`, `学期`, `活动类型`, `名称`, `级别`, `获得时间`",
                 _gen_activity_rows(rng, students, risk_map),
             )
             _clear_and_insert(
-                cur, "job_view_log",
-                "tenant_id, student_id, job_id, action, term",
+                cur, "岗位浏览日志",
+                "`租户编号`, `学生编号`, `岗位编号`, `动作`, `学期`",
                 _gen_job_view_rows(rng, students, risk_map, jobs),
             )
             _print_counts(cur)

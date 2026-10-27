@@ -114,9 +114,9 @@ def ensure_teacher() -> None:
                            database=settings.mysql_db, charset="utf8mb4")
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id FROM teacher WHERE employee_no = %s", ("T001",))
+            cur.execute("SELECT `编号` FROM `教师` WHERE `工号` = %s", ("T001",))
             if cur.fetchone() is None:
-                cur.execute("INSERT INTO teacher (tenant_id, name, employee_no, role, password_hash) "
+                cur.execute("INSERT INTO `教师` (`租户编号`, `姓名`, `工号`, `角色`, `口令摘要`) "
                             "VALUES (%s,%s,%s,'teacher',%s)",
                             (TENANT, "演示教师", "T001", hash_password("teacher@123")))
         conn.commit()
@@ -133,26 +133,26 @@ def pick_sample() -> tuple[str, list[str]]:
                            cursorclass=pymysql.cursors.DictCursor)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT s.class_name AS class_name FROM student s "
-                        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-                        "WHERE s.tenant_id = %s GROUP BY s.class_name "
-                        "ORDER BY COUNT(DISTINCT s.id) DESC LIMIT 1", (TERM, TENANT))
+            cur.execute("SELECT s.`班级` AS class_name FROM `学生` s "
+                        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+                        "WHERE s.`租户编号` = %s GROUP BY s.`班级` "
+                        "ORDER BY COUNT(DISTINCT s.`编号`) DESC LIMIT 1", (TERM, TENANT))
             row = cur.fetchone() or {}
             klass = str(row.get("class_name") or "")
-            cur.execute("SELECT s.student_no AS student_no, s.id AS id FROM student s "
-                        "JOIN score sc ON sc.student_id = s.id AND sc.term = %s "
-                        "WHERE s.tenant_id = %s ORDER BY s.student_no LIMIT %s",
+            cur.execute("SELECT s.`学号` AS student_no, s.`编号` AS id FROM `学生` s "
+                        "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+                        "WHERE s.`租户编号` = %s ORDER BY s.`学号` LIMIT %s",
                         (TERM, TENANT, STUDENT_SAMPLE))
             students = [(str(r["student_no"]), int(r["id"])) for r in cur.fetchall()]
-            cur.execute("SELECT COUNT(DISTINCT s.id) AS n FROM student s "
-                        "WHERE s.tenant_id = %s", (TENANT,))
+            cur.execute("SELECT COUNT(DISTINCT s.`编号`) AS n FROM `学生` s "
+                        "WHERE s.`租户编号` = %s", (TENANT,))
             total_students = int(cur.fetchone()["n"])
-            cur.execute("SELECT COUNT(DISTINCT s.class_name) AS n FROM student s "
-                        "WHERE s.tenant_id = %s", (TENANT,))
+            cur.execute("SELECT COUNT(DISTINCT s.`班级`) AS n FROM `学生` s "
+                        "WHERE s.`租户编号` = %s", (TENANT,))
             classes = int(cur.fetchone()["n"])
-            cur.execute("SELECT COUNT(1) AS n FROM score WHERE term = %s", (TERM,))
+            cur.execute("SELECT COUNT(1) AS n FROM `成绩` WHERE `学期` = %s", (TERM,))
             score_rows = int(cur.fetchone()["n"])
-            cur.execute("SELECT COUNT(1) AS n FROM job")
+            cur.execute("SELECT COUNT(1) AS n FROM `岗位`")
             job_rows = int(cur.fetchone()["n"])
     finally:
         conn.close()
@@ -173,15 +173,16 @@ def duckdb_stats() -> dict[str, Any]:
     settings = get_settings()
     con = duckdb.connect(str(settings.duckdb_path_obj))
     try:
-        rows = con.execute("SELECT COUNT(1) FROM student_feature").fetchone()[0]
+        rows = con.execute('SELECT COUNT(1) FROM "学生特征"').fetchone()[0]
         versions = con.execute(
-            "SELECT calc_version, COUNT(1) FROM student_feature GROUP BY calc_version "
-            "ORDER BY calc_version").fetchall()
+            'SELECT "计算版本", COUNT(1) FROM "学生特征" GROUP BY "计算版本" '
+            'ORDER BY "计算版本"').fetchall()
         try:
-            logs = con.execute("SELECT COUNT(1) FROM recommend_log").fetchone()[0]
+            logs = con.execute('SELECT COUNT(1) FROM "推荐日志"').fetchone()[0]
         except Exception:
             logs = 0
-        trend = con.execute("SELECT MIN(gpa_trend), MAX(gpa_trend) FROM student_feature").fetchone()
+        trend = con.execute(
+            'SELECT MIN("绩点趋势"), MAX("绩点趋势") FROM "学生特征"').fetchone()
     finally:
         con.close()
     return {
