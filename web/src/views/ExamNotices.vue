@@ -139,12 +139,18 @@
         </el-descriptions>
 
         <h4 class="sec-title">报考要求</h4>
-        <el-descriptions :column="1" border size="small">
-          <el-descriptions-item v-for="r in detailReqs" :key="r.key" :label="r.label">
-            <span v-if="r.value">{{ r.value }}</span>
-            <span v-else class="missing">公告未单独说明（具体岗位要求以附件岗位表为准）</span>
-          </el-descriptions-item>
-        </el-descriptions>
+        <div class="req-list">
+          <div v-for="r in filledReqs" :key="r.key" class="req-row">
+            <span class="req-label">{{ r.label }}</span>
+            <span class="req-text">{{ r.value }}</span>
+          </div>
+          <div v-if="!filledReqs.length" class="req-hint">
+            公告未单独说明报考要求，具体岗位要求以附件岗位表为准。
+          </div>
+          <div v-else-if="missingLabels.length" class="req-hint">
+            {{ missingLabels.join('、') }}公告未单独说明，具体以附件岗位表为准。
+          </div>
+        </div>
 
         <h4 class="sec-title">公告原文</h4>
         <div class="raw-text">{{ detail.raw_text || '（未抓到正文，请点下方链接查看原文）' }}</div>
@@ -201,8 +207,23 @@ const REQ_FIELDS = [
   { key: 'other_req', label: '其他' }
 ]
 
+// 抓取文本首尾常残留成对引号，仅展示层修剪，不动库里的原文
+function cleanReq(v) {
+  return String(v || '')
+    .trim()
+    .replace(/^["“”']+/, '')
+    .replace(/["“”']+$/, '')
+    .trim()
+}
+
 const detailReqs = computed(() =>
-  REQ_FIELDS.map((f) => ({ ...f, value: detail.value?.[f.key] || '' }))
+  REQ_FIELDS.map((f) => ({ ...f, value: cleanReq(detail.value?.[f.key]) }))
+)
+
+const filledReqs = computed(() => detailReqs.value.filter((r) => r.value))
+
+const missingLabels = computed(() =>
+  detailReqs.value.filter((r) => !r.value).map((r) => r.label)
 )
 
 const statTotals = computed(() =>
@@ -397,12 +418,59 @@ onMounted(() => {
   gap: 12px;
 }
 .sec-title {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-size: 14px;
+  font-weight: 600;
   color: var(--el-text-color-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.missing {
-  color: var(--el-color-warning);
+.sec-title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: #2563eb;
+}
+.req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.req-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 10px;
+}
+.req-label {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.req-text {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--el-text-color-regular);
+  word-break: break-word;
+  min-width: 0;
+}
+.req-hint {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--el-border-color);
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .raw-text {
   white-space: pre-wrap;
