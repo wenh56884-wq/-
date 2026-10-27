@@ -188,11 +188,34 @@ _SECTION_HEADS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("education_req", ("学历要求", "学历条件", "学历（学位）")),
     ("degree_req", ("学位要求", "毕业（学位）证书", "毕业（学位）")),
     ("major_req", ("专业要求", "专业条件", "专业资格审查", "所学专业")),
-    ("political_req", ("政治面貌", "基本条件", "报考条件", "招聘条件")),
+    # 政治面貌/经历/证书三类曾用「报考条件」「工作经历」「职业（执业）资格」这类泛词，
+    # 结果同一段资格审查流程话被三个字段同时命中（数据看着满、语义全错）。
+    # 这里只留字段专属强词；抽不到就 None，由前端显示「公告未单独说明」。
+    ("political_req", ("政治面貌", "中共正式党员", "中共党员", "党员")),
     ("exp_req", ("工作经历", "基层工作经历", "工作年限")),
-    ("cert_req", ("资格证书", "职业（执业）资格", "执业资格")),
+    ("cert_req", ("资格证书", "执业资格", "职业资格", "职业（执业）资格")),
     ("other_req", ("户籍", "回避", "其他条件")),
 )
+
+# 讲「怎么报名、怎么审查、时间怎么算」的流程句，不是报考条件本身
+_FLOW_HINTS: tuple[str, ...] = (
+    "提交报考申请",
+    "资格初审",
+    "资格复审",
+    "网上报名",
+    "现场资格审查",
+    "请考生",
+    "考生应",
+    "对照招聘岗位要求",
+    "对照招聘单位",
+    "计算时间截至",
+    "应提供",
+    "须提供",
+    "报名时",
+)
+
+# 残句开头：说明是从句子中间截断的，不能当要求
+_BAD_HEAD = ("证", "等", "及", "的", "和", "或")
 
 # 小节标题的形态：（一）（二） / 1. 2. / 一、二、
 # 注意：不能加 ^ 锚点 —— _flatten 已把换行去掉，锚点会永远不命中。
@@ -244,12 +267,17 @@ def _strip_heading(sent: str, keywords: tuple[str, ...]) -> str:
     return sent
 
 
-def _pick(blocks: dict[str, str], keywords: tuple[str, ...]) -> str | None:
+def _pick(
+    blocks: dict[str, str],
+    keywords: tuple[str, ...],
+    used: set[str] | None = None,
+) -> str | None:
     """在小节里找命中关键词的那一段，截出与关键词同句的**描述性**原文。
 
-    两道清洗，避免把「（三）毕业（学位）证书及专业」这种纯标题当要求：
-      1. 去掉开头的编号与标题短语（标题短语以冒号/句号结束或长度 <12 且无动词）；
-      2. 结果必须至少 10 个字，且不能是「报考条件」这种只有名词的短标题。
+    三道清洗，避免把标题或流程话当要求：
+      1. 跳过讲报名/资格审查的流程句（那不是在说要求本身）；
+      2. 已经给过别的字段的同一句不再重复用（used 按句记录）；
+      3. 去掉开头的编号与标题短语，结果至少 10 个字。
     """
     for head, body in blocks.items():
         if not any(k in head or k in body[:60] for k in keywords):
@@ -257,6 +285,11 @@ def _pick(blocks: dict[str, str], keywords: tuple[str, ...]) -> str | None:
         for sent in re.split(r"[。；]", body):
             sent = sent.strip()
             if not sent or not any(k in sent for k in keywords):
+                continue
+            if any(h in sent for h in _FLOW_HINTS):
+                continue
+            key = sent[:30]
+            if used is not None and key in used:
                 continue
             sent = _HEAD_MARK.sub("", sent).strip(" ：:，,、")
             # 把「XXX及专业考生凭已取得…」里的标题部分切掉：找第一个「：」或「，」
@@ -267,6 +300,14 @@ def _pick(blocks: dict[str, str], keywords: tuple[str, ...]) -> str | None:
             sent = _strip_heading(sent, keywords)
             if len(sent) < 10:
                 continue
+            # 从句子中间截断出来的残句不要（「证的国家统一招生…」「等考生凭…」）
+            if sent[0] in _BAD_HEAD:
+                continue
+            # 至少得像个「要求」：含限定/资格类措辞
+            if not re.search(r"(以上|及以[上下]|应当|须|需|具有|具备|取得|持有|年龄|学历|学位|专业|资格|经历|年限|证书|党员)", sent):
+                continue
+            if used is not None:
+                used.add(key)
             return sent[:200]
     return None
 
@@ -307,8 +348,9 @@ def extract_requirements(text: str) -> dict[str, Any]:
 
     flat = _flatten(text.split("\n"))
     blocks = _sections(flat)
+    used: set[str] = set()
     for name, keywords in _SECTION_HEADS:
-        out[name] = _pick(blocks, keywords)
+        out[name] = _pick(blocks, keywords, used)
 
     m = _SIGNUP_RE.search(flat)
     if m:
