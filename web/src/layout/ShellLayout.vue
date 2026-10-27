@@ -706,11 +706,11 @@ onBeforeUnmount(() => {
   right: 24px;
   bottom: 24px;
   z-index: 45;
-  width: 64px;
-  height: 64px;
+  width: 92px;
+  height: 92px;
   padding: 0;
   border: 0;
-  border-radius: 16px;
+  border-radius: 22px;
   background: transparent;
   cursor: pointer;
   display: inline-flex;
@@ -738,13 +738,13 @@ onBeforeUnmount(() => {
 
 .fab-badge {
   position: absolute;
-  top: -2px;
-  right: -4px;
+  top: 2px;
+  right: 2px;
   padding: 1px 6px;
   border-radius: 8px;
   background: #2563eb;
   color: #ffffff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   border: 1px solid #ffffff;
 }
@@ -784,8 +784,8 @@ onBeforeUnmount(() => {
   .assistant-fab {
     right: 12px;
     bottom: 12px;
-    width: 56px;
-    height: 56px;
+    width: 72px;
+    height: 72px;
   }
 }
 
