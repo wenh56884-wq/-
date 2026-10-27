@@ -17,9 +17,10 @@ CAREER_ENGINE_VERSION = "career-v1"
 # --- 目标类型 ---
 GOAL_CIVIL = "考公"
 GOAL_POSTGRAD = "考研"
+GOAL_KAOBIAN = "考编"
 GOAL_EMPLOY = "就业"
 GOAL_MIXED = "混合"
-GOALS: tuple[str, ...] = (GOAL_CIVIL, GOAL_POSTGRAD, GOAL_EMPLOY, GOAL_MIXED)
+GOALS: tuple[str, ...] = (GOAL_CIVIL, GOAL_POSTGRAD, GOAL_KAOBIAN, GOAL_EMPLOY, GOAL_MIXED)
 
 # --- 周监控三色（与 warning 的 red/orange/yellow/none 同构，但语义独立）---
 WEEK_GREEN = "green"      # 达标
@@ -570,20 +571,27 @@ def validate_system_record(
 # 六、目标类型归一（模型输出用词不一致时兜底）
 # ----------------------------------------------------------------
 def normalize_goal(text: Any) -> str:
-    """把"考公务员/国考/省考"归到考公，"读研/保研/研究生"归到考研，其余同上。"""
+    """把「考公务员/国考/省考」归到考公，「读研/保研/研究生」归到考研，
+    「事业单位/事业编/教师编」归到考编（此前被错归到考公，已修）。"""
     raw = str(text or "").strip()
     if not raw:
         return ""
-    civil = ("考公", "公务员", "国考", "省考", "选调", "事业单位", "事业编")
+    civil = ("考公", "公务员", "国考", "省考", "选调")
+    # 事业单位 / 事业编 / 教师编 是独立赛道：考试科目、岗位表、时间窗口都不同，
+    # 归到考公会让模板、门槛、排期全用错一套。
+    kaobian = ("考编", "事业编", "事业单位", "教师编", "特岗", "编制", "公益岗")
     postgrad = ("考研", "读研", "保研", "研究生", "硕士")
     employ = ("就业", "求职", "找工作", "实习", "秋招", "春招", "入职")
     hit_civil = any(k in raw for k in civil)
+    hit_bian = any(k in raw for k in kaobian)
     hit_post = any(k in raw for k in postgrad)
     hit_emp = any(k in raw for k in employ)
-    if (hit_civil + hit_post + hit_emp) >= 2 or "混合" in raw or "同时" in raw or "两手" in raw:
+    if (hit_civil + hit_bian + hit_post + hit_emp) >= 2 or "混合" in raw or "同时" in raw or "两手" in raw:
         return GOAL_MIXED
     if hit_civil:
         return GOAL_CIVIL
+    if hit_bian:
+        return GOAL_KAOBIAN
     if hit_post:
         return GOAL_POSTGRAD
     if hit_emp:
@@ -595,6 +603,7 @@ __all__ = [
     "CAREER_ENGINE_VERSION",
     "GOAL_CIVIL",
     "GOAL_POSTGRAD",
+    "GOAL_KAOBIAN",
     "GOAL_EMPLOY",
     "GOAL_MIXED",
     "GOALS",

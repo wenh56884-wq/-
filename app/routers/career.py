@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from agents import tools
@@ -201,6 +201,22 @@ def get_notices(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     return _guard(
         ctx, "filter_notices",
         lambda: nodes.filter_notices(ctx.tenant_id, int(ctx.student_id)),
+    )
+
+
+@router.get("/forecast")
+def get_forecast(
+    goal: str | None = Query(default=None, description="可选：考公/考编/考研；不传则用库里的职业意向"),
+    ctx: ToolContext = Depends(require_student),
+) -> dict[str, Any]:
+    """报考竞争力分析：四维打分 + 档位 + 提升杠杆 + 真实考试窗口。
+
+    不调模型、不给录取概率。每个数字都能倒推回成绩单或真实公告——
+    这一页最容易出现「AI 看起来很懂其实在编」，所以整条链路只走确定性引擎。
+    """
+    return _guard(
+        ctx, "career_forecast",
+        lambda: nodes.forecast_career(ctx.tenant_id, int(ctx.student_id), goal),
     )
 
 

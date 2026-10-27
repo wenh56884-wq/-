@@ -144,7 +144,9 @@ const ICONS = {
   // 图谱：三节点连线
   graph: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 17l3.5-2M17 9.5l-3.5 8M17.5 8 8 17',
   // 预测：折线上扬 + 箭头
-  trend: 'M3 17l6-6 4 4 7-7M17 8h4M17 8v4'
+  trend: 'M3 17l6-6 4 4 7-7M17 8h4M17 8v4',
+  // 报考分析：靶心 + 箭，对应「按指标评估能打到哪」
+  target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'
 }
 
 // 侧栏宽度：规范上限 280px，统一 256px；折叠态 64px
@@ -173,6 +175,7 @@ const MENUS = {
     { path: '/student/grades', label: '成绩单', hint: '每学年课程成绩', icon: 'doc' },
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
     { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
+    { path: '/student/career', label: '报考分析', hint: '按你的指标算竞争力', icon: 'target' },
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
     { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
     { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' }

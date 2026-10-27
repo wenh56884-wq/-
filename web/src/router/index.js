@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import ShellLayout from '../layout/ShellLayout.vue'
+import CareerForecast from '../views/CareerForecast.vue'
 import ExamNotices from '../views/ExamNotices.vue'
 import GradeReport from '../views/GradeReport.vue'
 import InterviewRoom from '../views/InterviewRoom.vue'
@@ -39,7 +40,8 @@ const routes = [
       { path: 'interview', name: 'student-interview', component: InterviewRoom },
       { path: 'exams', name: 'student-exams', component: ExamNotices },
       { path: 'kg', name: 'student-kg', component: KgView },
-      { path: 'forecast', name: 'student-forecast', component: StudentForecast }
+      { path: 'forecast', name: 'student-forecast', component: StudentForecast },
+      { path: 'career', name: 'student-career', component: CareerForecast }
     ]
   },
   // 智能助手已改为右下角悬浮抽屉，这里保留旧地址做重定向，避免历史链接白屏

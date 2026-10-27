@@ -21,6 +21,7 @@ RULES_DIR = Path(__file__).resolve().parents[2] / "rules"
 # 目标类型 → 模板文件名
 TEMPLATE_FILES: dict[str, str] = {
     "考公": "kaogong.json",
+    "考编": "kaobian.json",
     "考研": "kaoyan.json",
     "就业": "jiuye.json",
 }
@@ -515,6 +516,168 @@ def save_week_snapshot(
             return int(cur.lastrowid)
     finally:
         conn.close()
+
+
+# ----------------------------------------------------------------
+# 同侪基准（报考分析的「位次」依据，全部由真实成绩实算）
+# ----------------------------------------------------------------
+def fetch_peer_benchmark(
+    tenant_id: int,
+    student_id: int,
+    min_courses: int = 5,
+) -> dict[str, Any]:
+    """算该生在同专业同届（同入学年份）中的均分位次。
+
+    口径：
+      - 样本 = 同学院同专业 + 同入学年份、且至少有 min_courses 门成绩的学生；
+      - 只要求学生本人的成绩参与排名，同侪成绩只做分母，不泄露任何他人分数；
+      - 样本不足 5 人 → pct 返回 None（不拿小样本冒充位次）。
+    返回 {total, rank, pct, median, max, min, peer_with_score}
+    """
+    empty = {"total": 0, "rank": None, "pct": None, "median": None, "max": None, "min": None}
+    conn = connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT `专业` AS major, `年级` AS grade FROM `学生` WHERE `编号` = %s AND `租户编号` = %s",
+            (student_id, tenant_id),
+        )
+        me = cur.fetchone()
+        if not me or not me.get("major"):
+            return empty
+
+        cur.execute(
+            """
+            SELECT s.`编号` AS sid, ROUND(AVG(g.`分数`), 2) AS gpa, COUNT(*) AS n
+            FROM `学生` s
+            JOIN `成绩` g ON g.`学生编号` = s.`编号`
+            WHERE s.`租户编号` = %s AND s.`专业` = %s AND s.`年级` = %s
+            GROUP BY s.`编号`
+            HAVING n >= %s
+            ORDER BY gpa DESC
+            """,
+            (tenant_id, me["major"], me.get("grade"), int(min_courses)),
+        )
+        rows = cur.fetchall() or []
+        if len(rows) < 5:
+            return {**empty, "total": len(rows), "peer_with_score": len(rows)}
+
+        scores = [float(r["gpa"]) for r in rows]
+        rank = next((i + 1 for i, r in enumerate(rows) if int(r["sid"]) == int(student_id)), None)
+        total = len(rows)
+        mid = total // 2
+        median = scores[mid] if total % 2 else round((scores[mid - 1] + scores[mid]) / 2, 2)
+        return {
+            "total": total,
+            "rank": rank,
+            "pct": _round(rank / total, 3) if rank else None,
+            "median": median,
+            "max": scores[0],
+            "min": scores[-1],
+            "peer_with_score": total,
+            "major": me["major"],
+            "grade": me.get("grade"),
+        }
+    finally:
+        conn.close()
+
+
+def _round(value: float, digits: int = 3) -> float:
+    return round(float(value) + 1e-12, digits)
+
+
+# ----------------------------------------------------------------
+# 真实考试机会（招考公告，按考试类型取）
+# ----------------------------------------------------------------
+def fetch_exam_opportunities(
+    tenant_id: int,
+    exam_type: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """取该路径的真实招考公告 + 分项要求抽取覆盖率。
+
+    stats 里的抽取率必须如实上报：重庆事业单位的岗位分项要求多写在附件岗位表，
+    正文抓不到，前端要据此提示「以原文链接为准」，不能假装门槛都判过了。
+    """
+    conn = connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT `编号` AS id, `标题` AS title, `招录单位` AS unit, `地区` AS region,
+                   `招录人数` AS headcount, `报名截止` AS deadline, `考试日期` AS exam_date,
+                   `原文链接` AS url, `状态` AS status, `发布日期` AS published,
+                   `学历要求` AS edu_req, `专业要求` AS major_req, `政治面貌要求` AS pol_req,
+                   `年龄要求` AS age_req
+            FROM `招考公告`
+            WHERE `租户编号` = %s AND `考试类型` = %s
+            ORDER BY `报名截止` IS NULL, `报名截止` ASC, `发布日期` DESC
+            """,
+            (tenant_id, exam_type),
+        )
+        rows = cur.fetchall() or []
+    finally:
+        conn.close()
+
+    def _filled(key: str) -> int:
+        return sum(1 for r in rows if str(r.get(key) or "").strip())
+
+    headcounts = [int(r["headcount"]) for r in rows if r.get("headcount") is not None]
+    regions = sorted({str(r["region"]) for r in rows if r.get("region")})
+    today = date.today()
+
+    items: list[dict[str, Any]] = []
+    for r in rows[:limit]:
+        deadline = r.get("deadline")
+        days_left = (deadline - today).days if isinstance(deadline, date) else None
+        items.append(
+            {
+                "id": r.get("id"),
+                "标题": r.get("title"),
+                "招录单位": r.get("unit"),
+                "地区": r.get("region"),
+                "招录人数": r.get("headcount"),
+                "报名截止": _iso(deadline),
+                "考试日期": _iso(r.get("exam_date")),
+                "原文链接": r.get("url"),
+                "状态": r.get("status"),
+                "距截止天数": days_left,
+                # 只把真正抽到的要求带出去，空的留 None（前端显示「公告未单独说明」）
+                "学历要求": (str(r.get("edu_req") or "").strip() or None),
+                "专业要求": (str(r.get("major_req") or "").strip() or None),
+                "政治面貌要求": (str(r.get("pol_req") or "").strip() or None),
+                "年龄要求": (str(r.get("age_req") or "").strip() or None),
+            }
+        )
+
+    total = len(rows)
+    open_count = sum(
+        1 for r in rows
+        if isinstance(r.get("deadline"), date) and (r["deadline"] - today).days >= 0
+    )
+    published = [r["published"] for r in rows if isinstance(r.get("published"), date)]
+    stats = {
+        "total": total,
+        "open_count": open_count,
+        "with_education": _filled("edu_req"),
+        "with_major": _filled("major_req"),
+        "with_political": _filled("pol_req"),
+        "with_age": _filled("age_req"),
+        "latest_published": max(published).isoformat() if published else None,
+        "regions": regions,
+        "scope_note": (
+            f"公告库当前只覆盖 {'、'.join(regions)}"
+            + ("，其他省份的招考信息需另行查询官网。" if len(regions) == 1 else "。")
+            if regions else "公告库暂无地区信息。"
+        ),
+    }
+    return {
+        "exam_type": exam_type,
+        "total": total,
+        "headcount": sum(headcounts) if headcounts else None,
+        "items": items,
+        "stats": stats,
+    }
 
 
 # ----------------------------------------------------------------

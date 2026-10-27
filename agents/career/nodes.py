@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents import llm as llm_module
 from agents.career import context as cx
+from engine import career_forecast as cf
 from engine import career_rules as cr
 
 # 提示词版本（落库用，便于后续对比不同版本的产出）
@@ -559,3 +560,82 @@ def coach_chat(
         },
         "engine_version": cr.CAREER_ENGINE_VERSION,
     }
+
+
+# ================================================================
+# 节点 6 · 报考分析与预测（考公 / 考编 / 考研）
+# ================================================================
+def forecast_career(
+    tenant_id: int,
+    student_id: int,
+    goal: str | None = None,
+) -> dict[str, Any]:
+    """按学生真实指标分析报考竞争力。
+
+    **全程不调模型**：四维打分、档位、杠杆、排期全部由 engine.career_forecast 算，
+    模型在这里没有可发挥空间——因为这一页最容易出现"看起来很懂、其实在编"的内容。
+    要做到"更真实的建议"，唯一办法是让每个数字都能倒推回成绩单或真实公告。
+
+    目标来源优先级：显式传入 > 库里的职业意向 > 返回 needs_intent。
+    """
+    facts = cx.fetch_student_facts(tenant_id, student_id)
+
+    explicit = str(goal or "").strip()
+    source = "explicit"
+    resolved = cr.normalize_goal(explicit) if explicit else ""
+    if not resolved:
+        saved = cx.fetch_intent(tenant_id, student_id)
+        resolved = cr.normalize_goal(saved) if saved else ""
+        source = "saved"
+
+    if not resolved:
+        return {
+            "available": False,
+            "needs_intent": True,
+            "reason": "还没选方向。先在生涯规划里选定考公 / 考编 / 考研之一，系统才知道按哪条路算。",
+            "student": {
+                "name": facts.get("name"),
+                "major": facts.get("major"),
+                "grade": facts.get("grade"),
+            },
+        }
+
+    if resolved not in cf.FORECAST_GOALS:
+        return {
+            "available": False,
+            "goal": resolved,
+            "reason": (
+                f"报考分析只覆盖「{'/'.join(cf.FORECAST_GOALS)}」。"
+                + ("就业方向走岗位库与简历诊断，不用这一套指标。" if resolved in {"就业", "混合"} else "")
+            ),
+            "student": {
+                "name": facts.get("name"),
+                "major": facts.get("major"),
+                "grade": facts.get("grade"),
+            },
+        }
+
+    template = cx.load_template(resolved)
+    if not template:
+        return {
+            "available": False,
+            "goal": resolved,
+            "reason": f"规则模板 rules/{cx.TEMPLATE_FILES.get(resolved, '?')} 缺失，无法给出确定性判定。",
+        }
+
+    gates = cr.check_hard_gates(template.get("hard_gates") or [], facts)
+    peer = cx.fetch_peer_benchmark(tenant_id, student_id)
+    exam_type = cf.PATHS[resolved].exam_type
+    notices = cx.fetch_exam_opportunities(tenant_id, exam_type)
+
+    result = cf.forecast(
+        facts,
+        goal=resolved,
+        peer=peer,
+        gates=gates,
+        notices=notices,
+        template=template,
+    )
+    result["intent_source"] = source
+    result["template_version"] = template.get("version")
+    return result
