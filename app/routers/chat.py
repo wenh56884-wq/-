@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from app.audit import audit_event
 from app.auth import get_current_ctx
 from app.config import get_settings
-from app.schemas import ChatIn
+from app.schemas import ChatIn, FeedbackIn
 from engine import rag
 from engine import web_search as web_engine
 from engine import workflow as wf_engine
@@ -150,6 +150,73 @@ def delete_session(sid: int, ctx: ToolContext = Depends(get_current_ctx)) -> dic
         return {"deleted": sid}
     finally:
         conn.close()
+
+
+@router.post("/feedback")
+def feedback(body: FeedbackIn, ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+    """对话质量反馈：点赞/点踩 + 备注，落审计（chat.feedback）。
+
+    商业化闭环：没有反馈数据就无法向客户证明「助手确实在被使用且越用越准」。
+    """
+    entry = audit_event(
+        actor_type=ctx.actor_type,
+        actor_id=_actor(ctx),
+        action="chat.feedback",
+        target=body.trace_id,
+        detail={"rating": body.rating, "comment": (body.comment or "")[:500]},
+    )
+    return {"ok": True, "trace_id": body.trace_id, "rating": body.rating,
+            "recorded_at": str(entry.get("logged_at") or "")}
+
+
+@router.get("/metrics")
+def metrics(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+    """助手质量指标（近 7 天，本租户）：问答量 / 降级率 / 好评率 / 平均耗时。
+
+    仅教师可看；数据全部来自审计日志实数，不估算。
+    """
+    if ctx.actor_type != "teacher":
+        raise HTTPException(403, "质量指标仅教师可查看")
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS n,"
+                " SUM(CASE WHEN `详情` LIKE '%%\"degraded\": true%%' THEN 1 ELSE 0 END) AS degraded,"
+                " AVG(CAST(JSON_EXTRACT(`详情`, '$.duration_ms') AS DECIMAL(12,2))) AS avg_ms"
+                " FROM `审计日志` WHERE `动作`='agent.chat'"
+                " AND `操作者类型`=%s AND `创建时间` >= CURDATE() - INTERVAL 7 DAY",
+                (ctx.actor_type,))
+            chat = cur.fetchone() or {}
+            cur.execute(
+                "SELECT SUM(CASE WHEN `详情` LIKE '%%\"rating\": \"up\"%%' THEN 1 ELSE 0 END) AS up,"
+                " SUM(CASE WHEN `详情` LIKE '%%\"rating\": \"down\"%%' THEN 1 ELSE 0 END) AS down,"
+                " COUNT(*) AS total"
+                " FROM `审计日志` WHERE `动作`='chat.feedback'"
+                " AND `操作者类型`=%s AND `创建时间` >= CURDATE() - INTERVAL 7 DAY",
+                (ctx.actor_type,))
+            fb = cur.fetchone() or {}
+    except pymysql.MySQLError:
+        # 审计表结构异常时如实报缺数，不编数字
+        chat, fb = {}, {}
+    finally:
+        conn.close()
+
+    total = int(chat.get("n") or 0)
+    degraded = int(chat.get("degraded") or 0)
+    up = int(fb.get("up") or 0)
+    down = int(fb.get("down") or 0)
+    return {
+        "window_days": 7,
+        "chat_total": total,
+        "degraded_total": degraded,
+        "degraded_rate": round(degraded / total, 4) if total else None,
+        "avg_duration_ms": float(chat["avg_ms"]) if chat.get("avg_ms") is not None else None,
+        "feedback_total": int(fb.get("total") or 0),
+        "feedback_up": up,
+        "feedback_down": down,
+        "like_rate": round(up / (up + down), 4) if (up + down) else None,
+    }
 
 
 @router.get("/capabilities")

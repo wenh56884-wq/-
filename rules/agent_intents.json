@@ -1,0 +1,13 @@
+{
+  "version": "intents-v1",
+  "notes": "商业化交付时的意图词表覆盖文件：按节与代码内置默认合并（列表追加、词典更新）。实施方可按客户问法在对应节追加词条，改完即生效（mtime 缓存），无需重启服务。tool_keywords 的优先级 = 本文件里的书写顺序。",
+  "tools": {},
+  "overview": [],
+  "levels": {},
+  "student_name_stop_words": [],
+  "chitchat": [],
+  "kb": [],
+  "web": [],
+  "workflow": [],
+  "workflow_prefix": []
+}

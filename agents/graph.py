@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Sequence, TypedDict
 from langgraph.graph import END, StateGraph
 
 from agents import llm as llm_client
+from agents import intents as intents_cfg
 from agents import teacher_agent
 from agents import tools
 from agents.critic import (
@@ -32,7 +33,7 @@ from agents.tools import ToolContext
 from app.audit import audit_event
 from engine import rag as rag_engine
 
-GRAPH_VERSION = "graph-v3"
+GRAPH_VERSION = "graph-v4"
 
 # AGENT_LLM_DRAFT=0 可关闭「大模型润色」，退回机械直引（演示/对比用）
 def _llm_draft_enabled() -> bool:
@@ -40,30 +41,40 @@ def _llm_draft_enabled() -> bool:
 
 
 # 寒暄 / 关于助手本身的提问：不该触发任何取数
-_CHITCHAT_KEYS: tuple[str, ...] = (
-    "你好", "您好", "hi", "hello", "早", "嗨", "谢谢", "感谢", "再见", "拜拜",
-    "你是谁", "你能做什么", "能干什么", "会什么", "功能是", "怎么用", "如何使用",
-)
+# 词表已配置化（rules/agent_intents.json 可覆盖）：商业化时实施方按客户问法增词，改完即生效
+_CHITCHAT_KEYS = lambda: tuple(intents_cfg.section("chitchat"))  # noqa: E731
 
 # 知识库（RAG）：问制度/流程/文档内容 → 走 kb_search，不碰校园数据
-_KB_KEYS: tuple[str, ...] = (
-    "知识库", "制度", "规定", "流程", "手册", "sop", "faq", "常见问题",
-    "报销", "请假", "考勤", "合同", "发票", "入职", "离职", "培训文档",
-    "文档里", "文件里", "pdf", "制度里", "政策文件",
-)
+_KB_KEYS = lambda: tuple(intents_cfg.section("kb"))  # noqa: E731
 
 # 联网搜索：只有明确要「网上/实时」才触发，避免「最新的预警名单」被误判到网上
-_WEB_KEYS: tuple[str, ...] = (
-    "联网", "搜一下", "搜索一下", "上网查", "网上查", "网络搜索",
-    "最新新闻", "实时行情", "今年政策", "最近政策", "公开招聘信息",
-)
+_WEB_KEYS = lambda: tuple(intents_cfg.section("web"))  # noqa: E731
 
 _EXTERNAL_TOOLS = ("kb_search", "web_search")
 
 # 工作流：一句话触发已定义的多步流程
-_WF_KEYS: tuple[str, ...] = ("工作流", "一键", "批量", "跑一遍", "走一遍", "自动执行", "自动跑")
-_WF_PREFIX = ("帮我跑一遍", "帮我跑一下", "帮我执行", "跑一遍", "跑一下", "走一遍",
-              "执行一下", "执行", "工作流", "一键", "批量", "自动执行", "自动跑", "帮我", "一下")
+_WF_KEYS = lambda: tuple(intents_cfg.section("workflow"))  # noqa: E731
+_WF_PREFIX = lambda: tuple(intents_cfg.section("workflow_prefix"))  # noqa: E731
+
+# 引导式追问：答完后给用户 2~3 条「接下来可以问什么」（商业化产品化关键交互）
+# 铁律：句子里不许出现数字（与降级话术同一红线），只描述可问的能力
+_FOLLOWUP_BY_TOOL: dict[str, tuple[str, ...]] = {
+    "class_overview": ("这个班这学期预警名单有哪些人",
+                       "看下某个学生的四维画像（直接说姓名或学号）",
+                       "这个班和岗位要求的能力差距在哪"),
+    "class_list": ("看下其中一个班的整体情况", "哪个班预警人数最多"),
+    "warning_list": ("这些学生里谁的风险最集中", "看下某个学生的画像（直接说姓名或学号）",
+                     "这个班的预警阈值是怎么定的"),
+    "student_profile": ("这个学生和目标岗位的差距在哪", "这个班整体情况怎么样"),
+    "career_gap": ("班级侧哪个维度最容易补上来", "这个班这学期的就业意向分布"),
+    "warning_thresholds": ("这个班的预警名单有哪些人", "阈值调整要走哪个功能页面"),
+    "my_warning": ("我的岗位推荐有哪些", "知识库里有没有帮扶相关的制度"),
+    "my_recommendations": ("我最近有没有学业预警", "这些岗位要求的证书知识库里有吗"),
+    "kb_search": ("换一种说法再查一次", "这个问题校园数据里能不能看"),
+    "web_search": ("这个问题知识库里有没有规定", "回到校园数据里继续查"),
+    "run_workflow": ("看看刚才跑出来的名单", "帮我跑一遍另一个工作流"),
+}
+_FOLLOWUP_DEFAULT: tuple[str, ...] = ("换个说法再问一次", "看看别的班级或学生的情况")
 
 # Graph 状态
 class AgentState(TypedDict, total=False):
@@ -107,9 +118,9 @@ def _intent_text(state: AgentState, query: str) -> str:
 def _is_chitchat(query: str) -> bool:
     """寒暄 / 询问助手能力：不取数，直接对话。"""
     text = query.strip().lower()
-    if len(text) <= 12 and any(key in text for key in _CHITCHAT_KEYS):
+    if len(text) <= 12 and any(key in text for key in _CHITCHAT_KEYS()):
         return True
-    return any(key in text for key in _CHITCHAT_KEYS) and len(text) <= 20
+    return any(key in text for key in _CHITCHAT_KEYS()) and len(text) <= 20
 
 
 def plan_node(state: AgentState) -> dict[str, Any]:
@@ -132,7 +143,7 @@ def plan_node(state: AgentState) -> dict[str, Any]:
         if prev and prev not in query:
             search_query = f"{prev} {query}"
 
-    if any(k in intent for k in _KB_KEYS):
+    if any(k in intent for k in _KB_KEYS()):
         return {"plan": {"tool": "kb_search", "args": {"query": search_query}},
                 "tool_name": "kb_search"}
 
@@ -141,10 +152,10 @@ def plan_node(state: AgentState) -> dict[str, Any]:
         return {"plan": {"tool": last_tool, "args": {"query": search_query}},
                 "tool_name": last_tool}
 
-    if any(k in intent for k in _WF_KEYS):
+    if any(k in intent for k in _WF_KEYS()):
         return {"plan": {"tool": "run_workflow", "args": {"name": _workflow_name(query)}},
                 "tool_name": "run_workflow"}
-    if any(k in intent for k in _WEB_KEYS):
+    if any(k in intent for k in _WEB_KEYS()):
         return {"plan": {"tool": "web_search", "args": {"query": search_query}},
                 "tool_name": "web_search"}
 
@@ -188,7 +199,7 @@ def _workflow_name(query: str) -> str:
     不会瞎猜一个流程去执行。
     """
     name = str(query or "").strip()
-    for token in _WF_PREFIX:
+    for token in _WF_PREFIX():
         name = name.replace(token, "")
     return name.strip(" ：:，,。.帮我想请")
 
@@ -706,6 +717,18 @@ def accept_node(state: AgentState) -> dict[str, Any]:
     return {"answer": str(state.get("draft") or ""), "degraded": False}
 
 
+def _suggested_followups(state: AgentState) -> list[str]:
+    """答完后给 2~3 条引导式追问：用户不用想「还能问什么」（商业化产品化交互）。
+
+    只从固定模板里选，不经过模型——追问建议本身也不能带任何未核对的数字。
+    """
+    tool = str(state.get("tool_name") or "")
+    if tool == "injected":          # 离线注入（测试/演示）不给建议
+        return []
+    picks = _FOLLOWUP_BY_TOOL.get(tool) or _FOLLOWUP_DEFAULT
+    return list(picks[:3])
+
+
 def route_after_critic(state: AgentState) -> str:
     """通过→结束；重试次数用完→降级；否则回草稿重写。"""
     if bool((state.get("verdict") or {}).get("passed")):
@@ -852,6 +875,8 @@ def run_chat(
         "tool_name": str(state.get("tool_name") or ""),
         # 引用清单（知识库给页码、联网给 URL）：前端据此渲染可点开的出处
         "citations": list((state.get("tool_result") or {}).get("citations") or []),
+        # 引导式追问：前端渲染成可点的问题 chips
+        "suggested_followups": _suggested_followups(state),
     }
 
 
@@ -979,6 +1004,7 @@ def run_chat_stream(
             "attempts": int(state.get("attempts") or 0),
             "tool": str(state.get("tool_name") or ""),
             "citations": list((state.get("tool_result") or {}).get("citations") or []),
+            "suggested_followups": _suggested_followups(state),
         }
     except Exception as exc:  # 断库/工具异常等：给安全话术，不外泄堆栈
         audit_event(actor_type=ctx.actor_type,

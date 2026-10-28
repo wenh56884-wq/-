@@ -77,8 +77,15 @@ def _run_chat(ctx: ToolContext, body: ChatIn) -> dict:
     """
     try:
         from app import chat_service
+        from app.chat_service import QuotaExceeded
 
-        return chat_service.handle(ctx, body.query, body.term, body.session_id, body.history)
+        try:
+            return chat_service.handle(ctx, body.query, body.term, body.session_id, body.history)
+        except QuotaExceeded as exc:
+            # 配额用尽要原样透出，不能掉进下面的「图调用兜底」绕过配额
+            return {"answer": str(exc), "degraded": False, "session_id": None,
+                    "tool_name": "", "citations": [], "suggested_followups": [],
+                    "quota_exceeded": True}
     except Exception:
         pass
     try:

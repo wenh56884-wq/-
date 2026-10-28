@@ -76,6 +76,17 @@
               <span class="chip" :class="msg.degraded ? 'chip-warn' : 'chip-ok'">
                 {{ msg.degraded ? '降级话术（未通过回查）' : '数值已回查' }}
               </span>
+              <span class="vote-group">
+                <button class="vote-btn" type="button" :class="{ active: msg.feedback === 'up' }"
+                  :disabled="!!msg.feedback" @click="vote(msg, 'up')">👍</button>
+                <button class="vote-btn" type="button" :class="{ active: msg.feedback === 'down' }"
+                  :disabled="!!msg.feedback" @click="vote(msg, 'down')">👎</button>
+              </span>
+            </div>
+            <div v-if="msg.role === 'assistant' && !msg.streaming && !msg.error
+                        && msg.followups && msg.followups.length" class="followups">
+              <button v-for="q in msg.followups" :key="q" class="followup-btn"
+                type="button" :disabled="sending" @click="send(q)">{{ q }}</button>
             </div>
             <div v-if="msg.error" class="bubble-err">{{ msg.error }}</div>
           </div>
@@ -291,6 +302,7 @@ async function sendOneShot(pending, content, history, started) {
       degraded: Boolean(data?.degraded),
       tool: data?.tool || '',
       citations: data?.citations || [],
+      followups: Array.isArray(data?.suggested_followups) ? data.suggested_followups : [],
       cost: Math.round(performance.now() - started),
       streaming: false,
       status: ''
@@ -330,6 +342,8 @@ async function send(text) {
     degraded: false,
     tool: '',
     citations: [],
+    followups: [],
+    feedback: '',
     cost: 0
   })
   messages.value.push(pending)
@@ -360,6 +374,8 @@ async function send(text) {
         pending.degraded = Boolean(data?.degraded)
         pending.tool = data?.tool || pending.tool
         pending.citations = data?.citations || []
+        pending.followups = Array.isArray(data?.suggested_followups)
+          ? data.suggested_followups : []
         pending.cost = Math.round(performance.now() - started)
         pending.status = ''
         pending.streaming = false
@@ -398,6 +414,17 @@ async function send(text) {
 
 function clearChat() {
   newSession()
+}
+
+// 对话反馈：点赞/点踩落审计，供质量指标统计（失败静默，不打扰对话）
+async function vote(msg, rating) {
+  if (msg.feedback || !msg.trace_id || msg.trace_id === '-') return
+  try {
+    await http.post('/chat/feedback', { trace_id: msg.trace_id, rating })
+    msg.feedback = rating
+  } catch {
+    /* 反馈失败不打扰用户 */
+  }
 }
 </script>
 
@@ -642,6 +669,41 @@ function clearChat() {
   border-color: #fde68a;
   color: #b45309;
 }
+
+.vote-group { margin-left: auto; display: inline-flex; gap: 4px; }
+
+.vote-btn {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  color: #71717a;
+}
+.vote-btn:hover:not(:disabled) { border-color: #a1a1aa; }
+.vote-btn.active { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.vote-btn:disabled { opacity: 0.55; cursor: default; }
+
+.followups {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.followup-btn {
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #1d4ed8;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.followup-btn:hover:not(:disabled) { background: #eff6ff; }
+.followup-btn:disabled { opacity: 0.5; cursor: default; }
 
 .bubble-err {
   margin-top: 6px;

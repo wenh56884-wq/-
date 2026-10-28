@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -57,6 +59,16 @@ class ChatOut(BaseModel):
     tool: str = Field(default="", description="本轮命中的能力：kb_search / web_search / ...")
     citations: list[dict] = Field(default_factory=list,
                                   description="引用清单：知识库给页码，联网给 URL")
+    suggested_followups: list[str] = Field(default_factory=list,
+                                           description="引导式追问：答完后建议继续问的问题")
+
+
+class FeedbackIn(BaseModel):
+    """对话反馈入参：一次点赞/点踩 + 可选备注，落审计供质量统计。"""
+
+    trace_id: str = Field(min_length=1, max_length=32, description="要反馈的那轮回答的追踪号")
+    rating: Literal["up", "down"] = Field(description="up=有帮助，down=没帮助")
+    comment: str | None = Field(default=None, max_length=500, description="可选文字备注")
 
 
 class HealthOut(BaseModel):

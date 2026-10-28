@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     jwt_expire_minutes: int = 120
 
+    # --- 智能体商业化 ---
+    # 每用户每日问答配额（0 = 不限量）。按 audit_log 里 agent.chat 实数计数。
+    agent_daily_limit: int = 0
+
     # --- 前端静态托管（P10-3）---
     # 空串 = 纯 API 不托管；填了路径且目录存在时才挂载 web\dist
     frontend_dist: str = "web/dist"

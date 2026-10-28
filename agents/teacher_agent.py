@@ -9,9 +9,10 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from agents import intents
 from agents.tools import LEVELS, ToolContext, _query
 
-TEACHER_AGENT_VERSION = "teacher-agent-v2"
+TEACHER_AGENT_VERSION = "teacher-agent-v3"
 
 # ----------------------------------------------------------------
 # 教师端专属提示词：比通用稿多了任教范围与「不代学生查」的边界说明
@@ -29,34 +30,19 @@ TEACHER_CHAT_SYSTEM = (
 )
 
 # ----------------------------------------------------------------
-# 意图关键词：按优先级排序，先命中的先选（与 graph.plan_node 的通用分支互斥）
+# 意图关键词：词表来自 agents/intents（rules/agent_intents.json 可覆盖，实施方按客户问法增词）
 # ----------------------------------------------------------------
-_TOOL_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("warning_thresholds", ("阈值", "门槛", "预警线", "判定标准")),
-    ("class_list", ("班级列表", "班级目录", "有哪些班", "哪些班级", "学院列表", "院系", "各班人数")),
-    ("warning_list", ("预警", "风险名单", "风险学生", "名单", "挂科", "挂了")),
-    ("student_profile", ("画像", "标签", "四维", "这个学生", "那位学生", "他的情况", "她的情况")),
-    ("career_gap", ("差距", "缺口", "能力结构", "岗位要求")),
-)
+_TOOL_KEYWORDS = intents.tool_keywords
 # 兜底：没命中任何关键词 → 班级概貌（覆盖「整体情况怎么样」这类问法）
-OVERVIEW_KEYWORDS: tuple[str, ...] = (
-    "概貌", "概览", "概况", "整体情况", "情况怎么样", "什么情况",
-    "考公", "考研", "考编", "就业意向", "去向", "意向分布",
-)
-
-_LEVEL_WORDS: dict[str, str] = {
-    "红色": "red", "红牌": "red", "高危": "red",
-    "橙色": "orange", "中危": "orange",
-    "黄色": "yellow", "低危": "yellow",
-}
+OVERVIEW_KEYWORDS = lambda: tuple(intents.section("overview"))  # noqa: E731
 
 
 def extract_level(query: str) -> str | None:
     """从提问里抠预警等级（红色/橙色/黄色 → red/orange/yellow）。"""
     text = str(query or "")
-    for word, level in _LEVEL_WORDS.items():
-        if word in text:
-            return level
+    for word, level in (intents.section("levels") or {}).items():
+        if str(word) in text:
+            return str(level)
     return None
 
 
@@ -79,8 +65,7 @@ def _extract_student_name(query: str) -> str | None:
     直接拿去查库必然查无此人。凡是以常见动词开头、或含「的」的候选都跳过。
     """
     text = str(query or "")
-    stop_words = ("班级", "学生", "画像", "标签", "情况", "老师", "同学",
-                  "预警", "名单", "概貌", "差距", "岗位")
+    stop_words = tuple(intents.section("student_name_stop_words") or ())
     verb_prefixes = ("看", "查", "帮", "请", "问", "给", "想", "要", "来", "去",
                      "打开", "显示", "这个", "那个", "哪个")
     fillers = "下个位这那吗呢吧啊了有是也就都还"  # 口语虚词：混进来基本是切窗切歪了
@@ -184,7 +169,7 @@ def plan_teacher(ctx: ToolContext, intent: str, query: str,
     没点名班级的班级级工具一律走 default_class，不扫全租户。
     """
     tool_name = "class_overview"
-    for name, keywords in _TOOL_KEYWORDS:
+    for name, keywords in _TOOL_KEYWORDS():
         if any(k in intent for k in keywords):
             tool_name = name
             break

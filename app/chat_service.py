@@ -22,6 +22,39 @@ RECENT_TURNS = 8          # 直接带进上下文的最近轮数
 SUMMARY_TRIGGER = 12      # 超过这么多条消息就开始拼摘要
 
 
+class QuotaExceeded(Exception):
+    """每日问答配额用尽：消息里给出上限实数与恢复时间，不吓唬用户。"""
+
+
+def check_quota(ctx: ToolContext) -> dict[str, int]:
+    """每日配额：数 audit_log 里本人今日 agent.chat 实数，超限抛 QuotaExceeded。
+
+    agent_daily_limit=0 表示不限量（默认）；配额按「人天」计，跨天自动恢复。
+    """
+    from agents.tools import _query as _tools_query
+    from app.config import get_settings
+
+    limit = int(getattr(get_settings(), "agent_daily_limit", 0) or 0)
+    if limit <= 0:
+        return {"limit": 0, "used": 0, "remaining": -1}
+    actor = _actor(ctx)
+    if not actor:
+        return {"limit": limit, "used": 0, "remaining": limit}
+    rows = _tools_query(
+        "SELECT COUNT(*) AS used FROM `审计日志` "
+        "WHERE `动作`='agent.chat' AND `操作者类型`=%s AND `操作者编号`=%s "
+        "AND `创建时间` >= CURDATE()",
+        (ctx.actor_type, actor),
+    )
+    used = int((rows[0] if rows else {}).get("used") or 0)
+    if used >= limit:
+        raise QuotaExceeded(
+            f"今天的提问次数已达上限（每天 {limit} 条）。已聊过的会话可以随时回看，"
+            "明天再来继续问。"
+        )
+    return {"limit": limit, "used": used, "remaining": limit - used}
+
+
 def _conn() -> pymysql.connections.Connection:
     s = get_settings()
     return pymysql.connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
@@ -156,6 +189,7 @@ def handle(ctx: ToolContext, query: str, term: str | None,
     """一次完整对话：定会话 → 取上下文 → 跑图 → 落库。"""
     import time
 
+    check_quota(ctx)
     sid = ensure_session(ctx, session_id, str(query)[:60])
     turns, summary = load_history(ctx, sid)
     if summary:
@@ -187,6 +221,13 @@ def handle_stream(ctx: ToolContext, query: str, term: str | None,
     回答照常流式给出——与 handle 的容错原则一致。
     """
     import time
+
+    try:
+        check_quota(ctx)
+    except QuotaExceeded as exc:
+        # 配额用尽：给一句明确的话术并直接终止，不进入取数与生成
+        yield {"type": "error", "message": str(exc), "quota_exceeded": True}
+        return
 
     sid: int | None = None
     turns: list[dict[str, str]] = []
