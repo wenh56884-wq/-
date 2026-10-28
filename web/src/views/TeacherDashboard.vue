@@ -323,25 +323,42 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="drawer" :title="`${profile.name || ''}（${profile.student_no || ''}）画像`" size="45%">
+    <el-drawer v-model="drawer" :title="`${profile.name || ''}（${profile.student_no || ''}）画像`" size="520px">
       <div v-loading="profileLoading" class="drawer-panel">
         <el-empty v-if="!profile.student_no && !profileLoading" description="未加载到画像" />
         <template v-else>
+          <div class="profile-head">
+            <div class="profile-avatar">{{ (profile.name || '?').slice(0, 1) }}</div>
+            <div class="profile-head-main">
+              <div class="profile-head-name">{{ profile.name || '—' }}</div>
+              <div class="profile-head-sub">{{ profile.class_name || '—' }} · {{ profile.major || '—' }}</div>
+            </div>
+            <div class="profile-head-meta">
+              <el-tag v-if="profile.grade" size="small" effect="plain" round>{{ profile.grade }}</el-tag>
+              <span class="muted">画像 v{{ profile.calc_version || '-' }}</span>
+            </div>
+          </div>
+
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="学院">{{ profile.college || '-' }}</el-descriptions-item>
             <el-descriptions-item label="专业">{{ profile.major || '-' }}</el-descriptions-item>
             <el-descriptions-item label="班级">{{ profile.class_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="数据源">{{ profile.source || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="画像版本">{{ profile.calc_version || '-' }}</el-descriptions-item>
           </el-descriptions>
           <div class="tag-line">
-            <el-tag v-for="t in profile.tags || []" :key="t" class="tag-item">{{ t }}</el-tag>
+            <el-tag v-for="t in profile.tags || []" :key="t" class="tag-item" effect="light" round>{{ t }}</el-tag>
+            <span v-if="!(profile.tags || []).length" class="muted">暂无画像标签</span>
           </div>
+
+          <div class="card-title">四维画像</div>
           <div ref="radarRef" class="chart-box radar-box"></div>
-          <div class="card-title">职业差距（目标方向：{{ gap.target_direction || '—' }}）</div>
-          <el-empty v-if="!gapLoading && !(gap.gaps || []).length" description="暂无职业差距数据" />
+
+          <div class="card-title">
+            职业差距<template v-if="gap.target_direction">（目标方向：{{ gap.target_direction }}）</template>
+          </div>
+          <el-empty v-if="!gapLoading && gapEmpty" :image-size="88" :description="gapEmptyText" />
           <template v-else>
-            <div ref="gapRef" class="chart-box"></div>
+            <div v-show="!gapLoading" ref="gapRef" class="chart-box"></div>
             <div class="gap-note">口径：需求侧关键词出现率 − 班级具备率；≥30% 红档、≥10% 橙档</div>
           </template>
         </template>
@@ -689,14 +706,17 @@ function renderRadar(data) {
       radar: {
         indicator: keys.map((key) => ({ name: names[key], max: 1 })),
         radius: '66%',
-        axisName: { color: '#4e5969' }
+        axisName: { color: '#4e5969' },
+        splitArea: { areaStyle: { color: ['rgba(37, 99, 235, 0.03)', 'rgba(37, 99, 235, 0.06)'] } },
+        splitLine: { lineStyle: { color: '#e5e6eb' } }
       },
       series: [
         {
           type: 'radar',
-          areaStyle: { opacity: 0.25 },
-          lineStyle: { color: '#e5484d' },
-          itemStyle: { color: '#e5484d' },
+          areaStyle: { opacity: 0.18 },
+          lineStyle: { color: '#2563eb', width: 2 },
+          itemStyle: { color: '#2563eb' },
+          symbolSize: 6,
           data: [
             {
               name: '四维画像',
@@ -709,6 +729,25 @@ function renderRadar(data) {
     true
   )
 }
+
+// 职业差距是否无有效数据：接口没返回项，或所有维度的两侧比率都缺失（unknown）
+const gapEmpty = computed(() => {
+  if (gapLoading.value) return false
+  const gaps = gap.value.gaps || []
+  if (!gaps.length) return true
+  return gaps.every((g) => g.class_rate == null && g.demand_rate == null)
+})
+
+// 空态要讲清楚原因，而不是渲染一张全是 0 的空图误导教师
+const gapEmptyText = computed(() => {
+  if (!gap.value.target_direction) {
+    return '本班本学期暂无岗位浏览记录，无法确定目标方向与需求侧数据'
+  }
+  if (!gap.value.class_ability?.sample) {
+    return '本班学生特征数据缺失，无法计算班级具备率'
+  }
+  return '岗位需求侧数据不足，暂时无法计算差距'
+})
 
 async function loadGap() {
   const klass = String(className.value || '').trim()
@@ -1161,6 +1200,55 @@ onBeforeUnmount(() => {
 
 .radar-box {
   margin-top: 8px;
+  height: 280px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: linear-gradient(135deg, #eef4ff, #f7f9fc);
+  border-radius: 12px;
+}
+
+.profile-avatar {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-head-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.profile-head-sub {
+  font-size: 12px;
+  color: #86909c;
+  margin-top: 2px;
+}
+
+.profile-head-meta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.drawer-panel :deep(.el-descriptions) {
+  margin-bottom: 4px;
 }
 
 .table-card {

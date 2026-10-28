@@ -192,3 +192,35 @@ p {
   border-radius: 2px;
   background: #2563eb;
 }
+
+/* ---------- 移动端触摸目标 ----------
+   桌面端按鼠标精度设计（EP 小按钮 24px、行内链接只有文字高），手指按不准。
+   1024px 以下：小按钮抬到 32px，行内链接用伪元素向外扩命中区——
+   扩的是命中区不是盒子，所以排版与视觉都不变，只是点得中。 */
+@media (max-width: 1023px) {
+  .el-button--small,
+  .el-button--mini {
+    min-height: 32px;
+  }
+
+  .el-button--small.is-circle,
+  .el-button--mini.is-circle {
+    min-width: 32px;
+  }
+
+  a {
+    position: relative;
+  }
+
+  a::after {
+    content: '';
+    position: absolute;
+    inset: -7px -4px;
+  }
+
+  /* 图片与卡片链接多为块级，本身已够大，不必再外扩 */
+  a.img-link::after,
+  a.block-link::after {
+    content: none;
+  }
+}

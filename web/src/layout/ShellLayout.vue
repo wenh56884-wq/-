@@ -209,7 +209,16 @@ const currentLabel = computed(() => currentItem.value?.label || '')
 const currentHint = computed(() => currentItem.value?.hint || '')
 
 function isActive(path) {
-  return route.path === path || route.path.startsWith(`${path}/`)
+  if (route.path === path) return true
+  if (!route.path.startsWith(`${path}/`)) return false
+  // 前缀命中还要让位：若存在更长的菜单也命中当前路径（如 /teacher/students 同时
+  // 命中 /teacher 与 /teacher/students），只有最长者亮——与 currentItem 同口径
+  return !menus.value.some(
+    (item) =>
+      item.path !== path &&
+      item.path.length > path.length &&
+      (route.path === item.path || route.path.startsWith(`${item.path}/`))
+  )
 }
 
 function toggleCollapse() {
