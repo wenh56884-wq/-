@@ -26,8 +26,11 @@ from engine.interview import (
     QUESTION_TYPES,
     aggregate,
     build_outline,
+    core_problems,
     diagnose,
+    dimension_scores,
     gap_list,
+    improvement_plan,
     parse_resume,
     parse_resume as parse_resume_engine,
     rubric_from_bank,
@@ -614,7 +617,7 @@ def interview_answer(sid: int, inp: AnswerIn,
 
 
 def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
-    """收卷：引擎汇总总分/差距 → 报告落库。"""
+    """收卷：引擎汇总总分/差距 → 结构化评估 + 报告落库。"""
     conn = _conn()
     try:
         with conn.cursor() as cur:
@@ -628,45 +631,116 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
                "education": job_snapshot.get("education")}
         # 与答题时同一证据集，否则报告分会和逐题落库分不一致
         evidence = _evidence(resume, job_snapshot)
-    finally:
-        conn.close()
+        evaluation = _build_evaluation(outline, answers, evidence, job, resume)
+        report = evaluation["report"]
+        gaps = evaluation["gaps"]
 
-    scores = [score_answer(a["学生回答"], _rubric_of_q(o, job.get("skill_tags") or []),
-                           evidence) for a, o in zip(answers, outline)]
-    total = aggregate(scores, outline)
-    gaps = gap_list(resume, job, scores, outline)
-    items = []
-    for o, a, s in zip(outline, answers, scores):
-        label = _rubric_of_q(o, job.get("skill_tags") or [])["label"]
-        is_probe = bool(o.get("probe_of"))
-        items.append({"round": o["round"],
-                      "label": f"{label}（追问）" if is_probe else label,
-                      "score": s["score"] if s else None,
-                      "is_probe": is_probe,
-                      "brief": (a["学生回答"] or "未作答")[:60]})
-    strengths = [it["label"] for it, s in zip(items, scores) if s and float(s["score"]) >= 75]
-    facts = {"total": total["total"] if total else None, "answered": total["answered"] if total else 0,
-             "skipped": total["skipped"] if total else len(outline),
-             "probes": _probe_count(outline),
-             "items": items, "strengths": strengths, "gaps": gaps}
-    report = interviewer.render_report(facts)
-
-    conn = _conn()
-    try:
         with conn.cursor() as cur:
             cur.execute("UPDATE `面试会话` SET `状态`='finished',`总分`=%s,`报告`=%s,`差距清单`=%s,`完成时间`=%s"
                         " WHERE `编号`=%s",
-                        (facts["total"], report, json.dumps(gaps, ensure_ascii=False),
+                        (evaluation["total"], report, json.dumps(gaps, ensure_ascii=False),
                          datetime.now(), sid))
         conn.commit()
         audit_event(actor_type="student", actor_id=ctx.student_id, action="interview.finish",
-                    target=str(sid), detail={"total": facts["total"], "gaps": len(gaps)})
+                    target=str(sid), detail={"total": evaluation["total"], "gaps": len(gaps)})
     finally:
         conn.close()
-    return {"round_done": len(outline), "score": items[-1]["score"] if items else None,
-            "finished": True, "total": facts["total"], "probes": facts["probes"],
+    return {"round_done": len(outline),
+            "score": evaluation["per_question"][-1]["score"] if evaluation["per_question"] else None,
+            "finished": True, "total": evaluation["total"], "probes": evaluation["probes"],
             "report": report, "gaps": gaps,
-            "items": items, "sources": [_source_row(o) for o in outline]}
+            "evaluation": evaluation,
+            "items": evaluation["per_question"],
+            "sources": [_source_row(o) for o in outline]}
+
+
+def _build_evaluation(outline: list[dict[str, Any]], answers: list[dict[str, Any]],
+                      evidence: list[str], job: Mapping[str, Any],
+                      resume: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """结构化评估（interview-v2，纯引擎确定性）：逐题分 + 维度分 + 核心问题 + 改进计划。
+
+    逐题点评直接复用答题时落库的 `面试问答.点评`（当时已过防虚构校验），收卷不重跑模型；
+    评分用同一引擎重算——确定性函数，与落库分必然一致。
+    """
+    job_skills = job.get("skill_tags") or []
+    scores = [score_answer(a["学生回答"], _rubric_of_q(o, job_skills), evidence)
+              for a, o in zip(answers, outline)]
+    total = aggregate(scores, outline)
+    gaps = gap_list(resume or {"skills": [], "certs": [], "experiences": [], "educations": []},
+                    job, scores, outline)
+    problems = core_problems(scores, outline)
+    plan = improvement_plan(gaps, problems)
+
+    per_question: list[dict[str, Any]] = []
+    for o, a, s in zip(outline, answers, scores):
+        label = _rubric_of_q(o, job_skills)["label"]
+        is_probe = bool(o.get("probe_of"))
+        comment = s and str(a.get("点评") or "") or None
+        per_question.append({
+            "round": o["round"],
+            "label": f"{label}（追问）" if is_probe else label,
+            "type": str(o.get("type")),
+            "question": str(o.get("question") or ""),
+            "is_probe": is_probe,
+            "probe_of": o.get("probe_of"),
+            "score": s["score"] if s else None,
+            "answered": s is not None,
+            "comment": comment or ("本题未作答" if s is None else ""),
+            "comment_version": str(a.get("点评版本") or "") if s else None,
+            "keyword_hits": list(s.get("keyword_hits") or []) if s else [],
+            "keyword_missed": list(s.get("keyword_missed") or []) if s else [],
+            "struct_score": s.get("struct_score") if s else None,
+            "evidence_score": s.get("evidence_score") if s else None,
+            "answer": (a["学生回答"] or "")[:500] if s else "",
+        })
+    strengths = [q["label"] for q, s in zip(per_question, scores)
+                 if s and float(s["score"]) >= 75]
+    return {
+        "engine_version": INTERVIEW_ENGINE_VERSION,
+        "total": total["total"] if total else None,
+        "answered": total["answered"] if total else 0,
+        "skipped": total["skipped"] if total else len(outline),
+        "probes": _probe_count(outline),
+        "dimensions": dimension_scores(scores, outline),
+        "per_question": per_question,
+        "strengths": strengths,
+        "core_problems": problems,
+        "improvement_plan": plan,
+        "gaps": gaps,
+        "report": interviewer.render_report({
+            "total": total["total"] if total else None,
+            "answered": total["answered"] if total else 0,
+            "skipped": total["skipped"] if total else len(outline),
+            "probes": _probe_count(outline),
+            "items": per_question, "strengths": strengths,
+            "core_problems": problems, "improvement_plan": plan, "gaps": gaps,
+        }),
+    }
+
+
+@router.get("/{sid}/evaluation")
+def interview_evaluation(sid: int, ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """历史场次的结构化评估报告：与收卷同一引擎重算（确定性，结果一致）。"""
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            sess = _one(cur, "SELECT * FROM `面试会话` WHERE `编号`=%s AND `租户编号`=%s",
+                        (sid, ctx.tenant_id))
+            if not sess or int(sess["学生编号"]) != int(ctx.student_id or 0):
+                raise HTTPException(404, "会话不存在或不属于本人")
+            if sess["状态"] != "finished":
+                raise HTTPException(409, "该场面试还没答完，没有评估报告")
+            outline = json.loads(sess["提纲"] or "[]")
+            answers = _rows(cur, "SELECT * FROM `面试问答` WHERE `会话编号`=%s ORDER BY `轮次`", (sid,))
+            resume = _load_resume(cur, int(sess["简历编号"]), ctx.tenant_id)
+        job_snapshot = json.loads(sess["岗位要求快照"] or "null") or {}
+        job = {"title": job_snapshot.get("title"), "skill_tags": job_snapshot.get("skill_tags") or [],
+               "education": job_snapshot.get("education")}
+        evidence = _evidence(resume, job_snapshot)
+        evaluation = _build_evaluation(outline, answers, evidence, job, resume)
+        return {"session_id": sid, "job_title": sess.get("岗位名称"), "evaluation": evaluation}
+    finally:
+        conn.close()
 
 
 def _source_row(q: Mapping[str, Any]) -> dict[str, Any]:

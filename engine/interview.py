@@ -9,7 +9,7 @@ import re
 import unicodedata
 from typing import Any, Iterable, Mapping, Sequence
 
-INTERVIEW_ENGINE_VERSION = "interview-v1"
+INTERVIEW_ENGINE_VERSION = "interview-v2"
 RESUME_PARSE_VERSION = "resume-parse-v1"
 
 # ----------------------------------------------------------------
@@ -354,6 +354,126 @@ def aggregate(scores: Sequence[Mapping[str, Any] | None],
         return None
     return {"total": round(num / den, 2), "answered": sum(1 for s in scores if s is not None),
             "skipped": sum(1 for s in scores if s is None)}
+
+
+# ----------------------------------------------------------------
+# 评估报告引擎件（interview-v2）：维度分 / 核心问题 / 改进计划
+# 全部纯函数：输入得分与提纲，输出确定性结论——报告页不许有任何估算
+# ----------------------------------------------------------------
+def dimension_scores(scores: Sequence[Mapping[str, Any] | None],
+                     outline: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """按题型维度汇总：每个维度给已答均分与答题数（追问归入自身题型）。
+
+    没出到的维度不列（没问就不评，不冒充 0 分）。
+    """
+    buckets: dict[str, dict[str, Any]] = {}
+    for item, out in zip(scores, outline):
+        qtype = str(out["type"])
+        b = buckets.setdefault(qtype, {"type": qtype,
+                                       "label": QUESTION_TYPES[qtype]["label"],
+                                       "weight": float(QUESTION_TYPES[qtype]["weight"]),
+                                       "scores": []})
+        if item is not None:
+            b["scores"].append(float(item["score"]))
+    result: list[dict[str, Any]] = []
+    for b in buckets.values():
+        vals = b.pop("scores")
+        result.append({**b, "answered": len(vals),
+                       "avg": round(sum(vals) / len(vals), 2) if vals else None})
+    return result
+
+
+_SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
+def core_problems(scores: Sequence[Mapping[str, Any] | None],
+                  outline: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """核心问题清单：从评分明细里机械归因，按严重度排序，最多 5 条。
+
+    归因来源（全部可从 score_answer 明细直接推出，不许臆断）：
+    1) 跳题（未作答）——面试大忌，high；
+    2) 高频漏考点——多题漏掉同一关键词，high/medium；
+    3) 缺 STAR 结构——struct_score 低，medium；
+    4) 回答与简历/岗位证据脱节（像背模板）——evidence_score 低，medium；
+    5) 回答偏短——depth_score 低，low。
+    """
+    problems: list[dict[str, Any]] = []
+    answered = [(out, item) for out, item in zip(outline, scores) if item is not None]
+    skipped = [out for out, item in zip(outline, scores) if item is None]
+
+    if skipped:
+        labels = "、".join(QUESTION_TYPES[str(o["type"])]["label"] for o in skipped)
+        problems.append({"dimension": "参与度", "severity": "high",
+                         "problem": f"跳过了 {len(skipped)} 题（{labels}）",
+                         "action": "每题都作答：跳题在真实面试里等于放弃该维度全部分数"})
+
+    # 高频漏考点：同一关键词在多题被漏
+    miss_freq: dict[str, dict[str, Any]] = {}
+    for out, item in answered:
+        for kw in item.get("keyword_missed") or []:
+            rec = miss_freq.setdefault(str(kw), {"count": 0, "rounds": []})
+            rec["count"] += 1
+            rec["rounds"].append(int(out.get("round") or 0))
+    hot = sorted(((kw, rec) for kw, rec in miss_freq.items() if rec["count"] >= 2),
+                 key=lambda x: (-x[1]["count"], x[0]))[:3]
+    if hot:
+        kws = "、".join(kw for kw, _ in hot)
+        rounds = sorted({r for _, rec in hot for r in rec["rounds"]})
+        problems.append({"dimension": "考点覆盖", "severity": "high",
+                         "problem": f"多题漏掉高频考点：{kws}",
+                         "action": f"重点补这几个考点（出现在第 {'、'.join(str(r) for r in rounds)} 题），"
+                                   "答题前先对照岗位 JD 把关键词说全"})
+
+    weak_struct = [out for out, item in answered if float(item.get("struct_score") or 0) < 10]
+    if weak_struct:
+        problems.append({"dimension": "表达结构", "severity": "medium",
+                         "problem": f"{len(weak_struct)} 题回答缺少分点 / STAR 结构",
+                         "action": "按「背景-目标-行动-结果」四段组织回答，先列提纲再开口"})
+
+    weak_evid = [out for out, item in answered if float(item.get("evidence_score") or 0) < 8]
+    if weak_evid:
+        problems.append({"dimension": "真实性", "severity": "medium",
+                         "problem": f"{len(weak_evid)} 题回答与简历/岗位证据关联弱（像背模板）",
+                         "action": "回答里点名具体项目、课程和数字结果，让每个说法都有出处"})
+
+    shallow = [out for out, item in answered if float(item.get("depth_score") or 0) <= 12.5]
+    if shallow:
+        problems.append({"dimension": "回答深度", "severity": "low",
+                         "problem": f"{len(shallow)} 题回答偏短（低于面试官预期篇幅）",
+                         "action": "每题至少展开「一个具体例子 + 一个量化结果」，宁可精不要泛"})
+
+    problems.sort(key=lambda p: _SEVERITY_ORDER.get(p["severity"], 9))
+    return problems[:5]
+
+
+def improvement_plan(gaps: Sequence[Mapping[str, Any]],
+                     problems: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """三步改进计划：近 3 天 / 本周内 / 两周内——每步一条焦点一个动作。
+
+    确定性编排：high 问题进「近 3 天」，medium 进「本周内」，
+    差距清单里的技能/经历类硬缺口进「两周内」（改简历和补经历都需要周期）。
+    """
+    plan: list[dict[str, Any]] = []
+    highs = [p for p in problems if p.get("severity") == "high"]
+    mids = [p for p in problems if p.get("severity") == "medium"]
+    if highs:
+        plan.append({"when": "近 3 天", "focus": highs[0]["dimension"],
+                     "action": highs[0]["action"]})
+    if mids:
+        plan.append({"when": "本周内", "focus": mids[0]["dimension"],
+                     "action": mids[0]["action"]})
+    if len(highs) > 1:
+        plan.append({"when": "本周内", "focus": highs[1]["dimension"],
+                     "action": highs[1]["action"]})
+    for g in gaps:
+        if str(g.get("dimension")) in ("技能", "经历", "信息"):
+            plan.append({"when": "两周内", "focus": str(g.get("dimension")),
+                         "action": str(g.get("action"))})
+            break
+    if not plan:
+        plan.append({"when": "保持", "focus": "整体表现",
+                     "action": "各维度无明显短板，换一个更高要求的目标岗位再来一场验证"})
+    return plan[:4]
 
 
 # ----------------------------------------------------------------

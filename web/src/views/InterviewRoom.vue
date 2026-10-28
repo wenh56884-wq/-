@@ -91,7 +91,8 @@
           <ol class="howto">
             <li><b>录入简历</b>：粘贴 / 上传 / 问卷任选，解析后确认保存。</li>
             <li><b>选择岗位</b>：到「面试演练」选目标岗位开局。</li>
-            <li><b>逐题作答</b>：6 轮问答，点评引文逐字校验，最后出报告与差距清单。</li>
+            <li><b>深度模拟面试</b>：逐题作答、逐题点评（引文逐字校验），答浅了会被追问。</li>
+            <li><b>看评估报告</b>：维度分 + 核心问题 + 三步改进计划，照着练下一场就涨分。</li>
           </ol>
         </el-card>
         </div>
@@ -149,6 +150,8 @@
               <el-tag size="small">{{ jobTitle }}</el-tag>
             </div>
           </template>
+          <el-progress :percentage="Math.round(((session.round - 1) / session.total) * 100)"
+            :stroke-width="6" :show-text="false" class="iv-progress" />
           <div class="question">{{ session.question }}</div>
           <div v-if="session.source" class="q-source">
             <template v-if="session.source.kind === 'bank'">
@@ -187,14 +190,102 @@
           <div class="comment">{{ lastComment.text }}</div>
         </el-card>
 
-        <el-card v-if="report" shadow="never" class="block-card bento-span-4">
+        <el-card v-if="report" shadow="never" class="block-card bento-span-4 report-card">
           <template #header>
-            <div class="head-row"><span class="card-title">面试报告</span>
-              <el-tag type="danger" effect="dark">总分 {{ report.total }}</el-tag>
+            <div class="head-row"><span class="card-title">面试评估报告</span>
+              <el-tag size="small" type="info" effect="plain">引擎 {{ evaluation.engine_version || 'interview-v2' }} · 全部为确定性实算</el-tag>
               <el-button size="small" @click="resetInterview">再来一场</el-button>
             </div>
           </template>
-          <pre class="report">{{ report.report }}</pre>
+
+          <!-- 顶部：总分 + 概况 + 维度分 -->
+          <div class="report-hero">
+            <div class="score-ring" :class="scoreClass">
+              <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="52" class="ring-bg" />
+                <circle cx="60" cy="60" r="52" class="ring-fg"
+                  :stroke-dasharray="`${(evaluation.total || 0) / 100 * 326.7} 326.7`" />
+              </svg>
+              <div class="ring-text">
+                <b>{{ evaluation.total ?? '—' }}</b><span>总分</span>
+              </div>
+            </div>
+            <div class="hero-facts">
+              <div class="fact-row">
+                <span class="fact">已答 <b>{{ evaluation.answered }}</b> 题</span>
+                <span class="fact warn" v-if="evaluation.skipped">跳过 <b>{{ evaluation.skipped }}</b> 题</span>
+                <span class="fact" v-if="evaluation.probes">追问 <b>{{ evaluation.probes }}</b> 道</span>
+                <span class="fact" v-if="jobTitle">{{ jobTitle }}</span>
+              </div>
+              <div class="dim-bars">
+                <div v-for="d in evaluation.dimensions" :key="d.type" class="dim-row">
+                  <span class="dim-label">{{ d.label }}</span>
+                  <div class="dim-track">
+                    <div class="dim-fill" :class="dimClass(d.avg)"
+                      :style="{ width: (d.avg || 0) + '%' }"></div>
+                  </div>
+                  <span class="dim-val">{{ d.avg ?? '未答' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 核心问题 -->
+          <div v-if="evaluation.core_problems && evaluation.core_problems.length" class="report-sec">
+            <div class="sec-title">核心问题 <span class="muted">（按严重度排序，全部由评分明细机械归因）</span></div>
+            <div v-for="(p, i) in evaluation.core_problems" :key="i" class="problem-item">
+              <el-tag size="small" :type="p.severity === 'high' ? 'danger' : p.severity === 'medium' ? 'warning' : 'info'"
+                effect="dark">{{ p.severity === 'high' ? '高' : p.severity === 'medium' ? '中' : '低' }}</el-tag>
+              <span class="problem-dim">{{ p.dimension }}</span>
+              <span class="problem-txt">{{ p.problem }}</span>
+              <div class="problem-action">→ {{ p.action }}</div>
+            </div>
+          </div>
+
+          <!-- 改进计划 -->
+          <div v-if="evaluation.improvement_plan && evaluation.improvement_plan.length" class="report-sec">
+            <div class="sec-title">改进计划</div>
+            <div class="plan-row">
+              <div v-for="(s, i) in evaluation.improvement_plan" :key="i" class="plan-card">
+                <div class="plan-when">{{ s.when }}</div>
+                <div class="plan-focus">{{ s.focus }}</div>
+                <div class="plan-action">{{ s.action }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 逐题复盘 -->
+          <div class="report-sec">
+            <div class="sec-title">逐题复盘 <span class="muted">（点评引文已逐字校验；追问以 ⚡ 标记）</span></div>
+            <div v-for="q in evaluation.per_question" :key="q.round" class="qreview"
+              :class="{ probe: q.is_probe, skipped: !q.answered }">
+              <div class="qreview-head">
+                <span class="qreview-round">第 {{ q.round }} 题 <template v-if="q.is_probe">⚡追问</template></span>
+                <el-tag size="small" effect="plain">{{ q.label }}</el-tag>
+                <el-tag size="small" :type="scoreTagType(q.score)">
+                  {{ q.score != null ? q.score + ' 分' : '未作答' }}
+                </el-tag>
+              </div>
+              <div class="qreview-question">{{ q.question }}</div>
+              <div v-if="q.comment" class="qreview-comment">{{ q.comment }}</div>
+              <div v-if="q.keyword_missed && q.keyword_missed.length" class="qreview-tags">
+                <span class="tag-muted">漏掉考点：</span>
+                <el-tag v-for="k in q.keyword_missed" :key="k" size="small" type="warning" effect="plain">{{ k }}</el-tag>
+              </div>
+              <div v-if="q.keyword_hits && q.keyword_hits.length" class="qreview-tags">
+                <span class="tag-muted">命中：</span>
+                <el-tag v-for="k in q.keyword_hits" :key="k" size="small" type="success" effect="plain">{{ k }}</el-tag>
+              </div>
+            </div>
+          </div>
+
+          <!-- 强项与原文 -->
+          <el-collapse class="mt8">
+            <el-collapse-item title="报告原文（可复制）" name="raw">
+              <pre class="report">{{ report.report }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+
           <div v-if="reportSources.length" class="mt8">
             <div class="muted">本场题目出处（每道题都能回到来源页面核对）</div>
             <el-table :data="reportSources" size="small" class="mt8">
@@ -268,7 +359,16 @@ const answering = ref(false)
 const starting = ref(false)
 const lastComment = ref(null)
 const report = ref(null)
+const evaluation = ref({})
 const history = ref([])
+
+// 报告配色：分数段语义色（复用评分口径：<60 待提升 / 60-75 合格 / >=75 强项）
+const scoreClass = computed(() => {
+  const t = evaluation.value.total
+  return t == null ? '' : t >= 75 ? 'good' : t >= 60 ? 'mid' : 'low'
+})
+const dimClass = (v) => (v == null ? '' : v >= 75 ? 'good' : v >= 60 ? 'mid' : 'low')
+const scoreTagType = (s) => (s == null ? 'info' : s >= 75 ? 'success' : s >= 60 ? 'warning' : 'danger')
 
 const ISSUE_LABELS = {
   quantify: '缺量化', verb: '动词开头', length: '过长', missing: '缺失',
@@ -413,6 +513,7 @@ async function startInterview() {
       type: data.question_type, label: data.question_label, id: data.session_id,
       source: data.source || null, isProbe: false }
     report.value = null
+    evaluation.value = {}
     lastComment.value = null
     answerText.value = ''
     diagnosis.value = null
@@ -428,6 +529,7 @@ async function submitAnswer(real) {
       { text: real ? answerText.value : null })
     if (data.finished) {
       report.value = data
+      evaluation.value = data.evaluation || {}
       session.value = null
       await loadHistory()
       return
@@ -450,6 +552,14 @@ async function openHistory(row) {
     return
   }
   const { data } = await http.get(`/interview/${row['编号']}`)
+  // 结构化评估与收卷同一引擎重算，结果与当时一致
+  let eva = {}
+  try {
+    const { data: ed } = await http.get(`/interview/${row['编号']}/evaluation`)
+    eva = ed.evaluation || {}
+  } catch {
+    eva = {}
+  }
   report.value = { total: data.session['总分'], report: data.session['报告'] || '(报告为空)', gaps: [],
     sources: (data.outline || []).map((o) => ({
       round: o.round, type: o.type, label: labelOf(o.type),
@@ -457,15 +567,19 @@ async function openHistory(row) {
       name: (o.source || {}).name || '模板出题', url: (o.source || {}).url, bank_id: (o.source || {}).id,
       is_probe: !!o.probe_of,
     })) }
+  evaluation.value = eva
+  jobTitle.value = data.session['岗位名称'] || ''
   session.value = null
   lastComment.value = null
 }
 
 function resetInterview() {
   report.value = null
+  evaluation.value = {}
   session.value = null
   lastComment.value = null
   jobId.value = null
+  jobTitle.value = ''
 }
 
 onMounted(async () => {
@@ -500,5 +614,59 @@ onMounted(async () => {
 .job-kw { width: 260px; }
 .job-filter { width: 160px; }
 .probe-tag { margin-left: 8px; vertical-align: 1px; }
+.iv-progress { margin-bottom: 12px; }
 .iv-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
+
+/* ===== 面试评估报告 ===== */
+.report-hero { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+.score-ring { position: relative; width: 128px; height: 128px; flex: none; }
+.score-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: #e5e7eb; stroke-width: 10; }
+.ring-fg { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dasharray .6s; }
+.score-ring.good .ring-fg { stroke: #10b981; }
+.score-ring.mid .ring-fg { stroke: #f59e0b; }
+.score-ring.low .ring-fg { stroke: #ef4444; }
+.ring-text { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; }
+.ring-text b { font-size: 30px; line-height: 1.1; }
+.ring-text span { font-size: 12px; color: #6b7280; }
+.hero-facts { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 12px; }
+.fact-row { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: #374151; }
+.fact b { color: #111827; }
+.fact.warn { color: #b45309; }
+.dim-bars { display: flex; flex-direction: column; gap: 6px; }
+.dim-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.dim-label { flex: none; width: 64px; color: #6b7280; }
+.dim-track { flex: 1; height: 8px; border-radius: 4px; background: #f1f5f9; overflow: hidden; }
+.dim-fill { height: 100%; border-radius: 4px; }
+.dim-fill.good { background: #10b981; }
+.dim-fill.mid { background: #f59e0b; }
+.dim-fill.low { background: #ef4444; }
+.dim-val { flex: none; width: 44px; text-align: right; color: #374151; }
+
+.report-sec { margin-top: 22px; }
+.sec-title { font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+.problem-item { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 8px 0; border-bottom: 1px dashed #f1f5f9; font-size: 13px; }
+.problem-dim { font-weight: 600; }
+.problem-txt { color: #374151; }
+.problem-action { width: 100%; color: #059669; font-size: 12px; padding-left: 42px; }
+
+.plan-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.plan-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px;
+  background: #f8fafc; }
+.plan-when { font-size: 12px; color: #2563eb; font-weight: 600; }
+.plan-focus { font-weight: 600; margin: 4px 0; }
+.plan-action { font-size: 12px; color: #4b5563; line-height: 1.6; }
+
+.qreview { border: 1px solid #eef2f7; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.qreview.probe { border-color: #fde68a; background: #fffbeb; }
+.qreview.skipped { opacity: 0.72; }
+.qreview-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qreview-round { font-weight: 600; font-size: 13px; }
+.qreview-question { margin: 8px 0; font-size: 13px; color: #111827; font-weight: 500; }
+.qreview-comment { font-size: 13px; line-height: 1.8; color: #374151;
+  border-left: 3px solid #93c5fd; padding-left: 10px; margin: 6px 0; }
+.qreview-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.tag-muted { font-size: 12px; color: #6b7280; }
 </style>

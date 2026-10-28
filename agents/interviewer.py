@@ -157,8 +157,8 @@ def run_turn(question: str, qtype: str, answer: str | None,
 # 报告生成（数字全部由引擎先算好拼进 prompt，模型只组织语言）
 # ----------------------------------------------------------------
 def render_report(facts: dict[str, Any]) -> str:
-    """facts 必须已含总分/各题得分/差距清单/强项。模型不可改动任何数字——
-    这里在 prompt 里给出原文数字，产出后不做二次算术。"""
+    """facts 必须已含总分/各题得分/差距清单/强项；interview-v2 起追加核心问题与改进计划。
+    模型不可改动任何数字——这里在 prompt 里给出原文数字，产出后不做二次算术。"""
     lines = [
         f"模拟面试报告（引擎 {INTERVIEW_ENGINE_VERSION}）",
         f"总分：{facts['total']}（已答 {facts['answered']} 题，跳过 {facts['skipped']} 题）",
@@ -166,9 +166,20 @@ def render_report(facts: dict[str, Any]) -> str:
         "各题得分：",
     ]
     for it in facts["items"]:
-        lines.append(f"- 第{it['round']}题[{it['label']}] {it['score'] if it['score'] is not None else '未作答'}：{it['brief']}")
+        brief = it.get("brief") or (it.get("answer") or "")[:60] or "未作答"
+        lines.append(f"- 第{it['round']}题[{it['label']}] {it['score'] if it['score'] is not None else '未作答'}：{brief}")
     lines.append("")
     lines.append("强项：" + ("、".join(facts["strengths"]) if facts["strengths"] else "暂无明显强项"))
+    if facts.get("core_problems"):
+        lines.append("")
+        lines.append("核心问题（按严重度）：")
+        for i, p in enumerate(facts["core_problems"], start=1):
+            lines.append(f"{i}. [{p['dimension']}/{p['severity']}] {p['problem']} → {p['action']}")
+    if facts.get("improvement_plan"):
+        lines.append("")
+        lines.append("改进计划：")
+        for step in facts["improvement_plan"]:
+            lines.append(f"- {step['when']}｜{step['focus']}：{step['action']}")
     lines.append("")
     lines.append("差距与下一步（按优先级）：")
     for i, g in enumerate(facts["gaps"], start=1):
