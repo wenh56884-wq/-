@@ -34,3 +34,6 @@ web/node_modules/
 web/dist/
 .workbuddy/
 tools/
+
+# 响应式/页面验证截图（临时产物，不入仓库）
+shots/

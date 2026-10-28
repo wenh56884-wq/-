@@ -122,6 +122,12 @@ D:\qihang\
 
 ## 更新记录
 
+### 2026-10-28
+- 性能：修复教师端「学生档案」整页 14 秒才出数据——根因是 `read_features` 逐人读取画像，580 人的班级要开 580 次 DuckDB 连接（约 5.8 秒）。`engine\store.py` 新增 `read_student_features` 批量读取（一次连接 + IN 查询），`agents\tools.py` 的 `read_features` 改走批量；顺带把 `_job_demand` 的检索文本改为预构建、方向判定加单次调用内缓存（3 个维度不再各拼一遍、2 万条浏览记录不再重复匹配）。`/teacher/career-gap` 从 13.5~14.7s 降到约 1.1s，进程内 19969ms → 936ms，口径与返回结构不变（test_tools / test_profile / test_warning / test_api / test_metric_consistency 共 96 项通过）。
+- 前端：修复侧栏菜单双高亮（`web\src\layout\ShellLayout.vue`）——`isActive` 的前缀匹配导致访问 `/teacher/students` 时「班级总览」与「学生档案」同时点亮，改为与 `currentItem` 相同的最长匹配口径；学生端 `/student` 同类问题一并修复。
+- 前端：教师看板画像抽屉美化（`web\src\views\TeacherDashboard.vue`）——新增姓名头像摘要卡、标签圆角化、四维雷达图由预警红改为主题蓝并加网格底色；职业差距标题在无目标方向时不再显示占位符"—"，无有效数据时按原因给出三类空态文案，不再渲染全 0 空图。
+- 协同：审查 WorkBuddy 提交 `a2dd0a0`（教师端智能体）——全量回归 527 passed；教师按姓名查画像/阈值问答/上学期口径端到端冒烟通过；发现两个待改进点：① 租户内重名学生（如 10 个"何雯"）会兜底到空学号，被误报为"不属于当前租户"，建议改为向教师追问学号/班级；② `student_profile` 对空学号抛的是越权拦截而非参数错误，话术误导。
+
 ### 2026-10-26
 - 新增 `AGENTS.md`：项目宪法，写入六条铁律、运行环境、编码约定与交付汇报格式。
 - 补充 `README.md` 骨架：项目简介、验收指标表（V1–V10）。

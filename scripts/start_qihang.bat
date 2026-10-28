@@ -1,7 +1,9 @@
 @echo off
 REM ================================================================
 REM 启航 · 一键启动  (UTF-8, run with chcp 65001)
-REM Usage: start_qihang.bat [port]        default port = 8000
+REM Usage: start_qihang.bat [port] [lan]
+REM        port  服务端口，默认 8000
+REM        lan   绑 0.0.0.0，供手机/平板经局域网访问；不带则只绑 127.0.0.1
 REM Steps: check env -> check frontend -> start uvicorn -> wait health
 REM        -> open browser -> print demo accounts
 REM ================================================================
@@ -11,6 +13,21 @@ setlocal enabledelayedexpansion
 set "PORT=%~1"
 if not defined PORT set "PORT=8000"
 
+REM 第二个参数 lan：绑 0.0.0.0 开放局域网；默认只绑回环地址（仅本机能访问）
+set "HOST=127.0.0.1"
+set "LANMODE=0"
+set "LANIP="
+if /i "%~2"=="lan" (
+    set "HOST=0.0.0.0"
+    set "LANMODE=1"
+)
+
+REM lan 模式取本机局域网 IPv4：排除回环、169.254 与 VMware / 虚拟机网卡，
+REM 按 InterfaceMetric 升序取第一个（通常是真实以太网或 WiFi）
+if "!LANMODE!"=="1" (
+    for /f "usebackq tokens=*" %%A in (`powershell -NoProfile -Command "$ip=Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue ^| Where-Object {$_.IPAddress -notmatch '^(127^|169\.254)' -and $_.InterfaceAlias -notmatch 'VMware^|VirtualBox^|Hyper-V^|vEthernet'} ^| Sort-Object InterfaceMetric ^| Select-Object -First 1 -ExpandProperty IPAddress; if($ip){$ip}else{'未获取到'}"`) do set "LANIP=%%A"
+)
+
 set "ROOT=%~dp0.."
 for %%I in ("%ROOT%") do set "ROOT=%%~fI"
 cd /d "%ROOT%"
@@ -18,7 +35,11 @@ set "PY=%ROOT%\.venv\Scripts\python.exe"
 
 echo ==========================================================
 echo   启航 · 学业预警与职业发展助手
-echo   一键启动   端口 %PORT%
+if "!LANMODE!"=="1" (
+    echo   一键启动   端口 %PORT%   模式 局域网（%HOST%）
+) else (
+    echo   一键启动   端口 %PORT%   模式 本机（%HOST%）
+)
 echo ==========================================================
 echo.
 
@@ -63,7 +84,7 @@ if !errorlevel!==0 (
     echo       端口 %PORT% 已被占用，服务已在运行，直接复用
 ) else (
     echo       新窗口启动 uvicorn（该窗口可直接看日志，关闭即停服务）
-    start "启航·后端服务 %PORT%" "%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port %PORT%
+    start "启航·后端服务 %PORT%" "%PY%" -m uvicorn app.main:app --host %HOST% --port %PORT%
 )
 
 REM --- 4. 等待健康检查 -------------------------------------------
@@ -97,7 +118,15 @@ echo   学生口令 = 学号；教师 T001 口令 = teacher@123
 echo   登录页选「学生」或「教师」后填入上方账号与口令
 echo ==============================================================
 echo.
-echo 服务地址 http://127.0.0.1:%PORT%/   接口文档 http://127.0.0.1:%PORT%/docs
+echo 本机访问 http://127.0.0.1:%PORT%/   接口文档 http://127.0.0.1:%PORT%/docs
+if "!LANMODE!"=="1" (
+    echo.
+    echo 手机/平板访问  http://!LANIP!:%PORT%/
+    echo   —— 手机需与本电脑连同一个 WiFi。
+    echo      若连不上，多半是 Windows 防火墙拦了 %PORT% 端口：首次运行弹出
+    echo      「是否允许访问」时选允许（专用网络）；没有弹窗就手动加一条
+    echo      %PORT% 端口的入站规则。
+)
 echo 关闭弹出的「启航·后端服务」窗口即可停止服务
 echo.
 pause
