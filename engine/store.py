@@ -194,26 +194,20 @@ class DuckDBStore(Store):
                 raise
         return written
 
-    def read_student_feature(self, student_no: str, term: str) -> dict[str, Any] | None:
-        """读取单条学生特征记录。"""
-        sql = (
-            f"SELECT {self._FEATURE_SELECT} "
-            f"FROM {self._FEATURE_TABLE} WHERE \"学号\" = ? AND \"学期\" = ?"
-        )
-        with closing(self._connect(readonly=True)) as conn:
-            row = conn.execute(sql, [student_no, term]).fetchone()
-        if row is None:
-            return None
-        cols = [
-            "student_no", "term", "gpa", "gpa_trend", "extreme_decline", "fail_count",
-            "class_rank_pct", "major_rank_pct", "attendance_rate",
-            "library_visit_cnt", "library_activity",
-            "consumption_regularity", "course_pref", "job_view_cnt",
-            "job_favorite_cnt", "cert_count", "contest_count",
-            "project_cnt", "tags", "calc_version", "updated_at",
-        ]
-        result = dict(zip(cols, row))
-        # JSON 字段反序列化
+    # 读侧返回的键顺序，必须与 _FEATURE_SELECT 的别名顺序一一对应
+    _FEATURE_READ_COLS = (
+        "student_no", "term", "gpa", "gpa_trend", "extreme_decline", "fail_count",
+        "class_rank_pct", "major_rank_pct", "attendance_rate",
+        "library_visit_cnt", "library_activity",
+        "consumption_regularity", "course_pref", "job_view_cnt",
+        "job_favorite_cnt", "cert_count", "contest_count",
+        "project_cnt", "tags", "calc_version", "updated_at",
+    )
+
+    @classmethod
+    def _feature_row(cls, row: Sequence[Any]) -> dict[str, Any]:
+        """一行查询结果 → 英文键 dict（JSON 字段反序列化）。"""
+        result = dict(zip(cls._FEATURE_READ_COLS, row))
         for jf in ("course_pref", "tags"):
             v = result.get(jf)
             if isinstance(v, str) and v:
@@ -223,6 +217,36 @@ class DuckDBStore(Store):
                     # 脏数据不阻断画像读取：按缺失处理，避免整条记录不可用
                     result[jf] = {} if jf == "course_pref" else []
         return result
+
+    def read_student_feature(self, student_no: str, term: str) -> dict[str, Any] | None:
+        """读取单条学生特征记录。"""
+        sql = (
+            f"SELECT {self._FEATURE_SELECT} "
+            f"FROM {self._FEATURE_TABLE} WHERE \"学号\" = ? AND \"学期\" = ?"
+        )
+        with closing(self._connect(readonly=True)) as conn:
+            row = conn.execute(sql, [student_no, term]).fetchone()
+        return None if row is None else self._feature_row(row)
+
+    def read_student_features(self, student_nos: Sequence[str], term: str
+                              ) -> list[dict[str, Any]]:
+        """批量读取多名学生的特征行：一次连接、一条 IN 查询。
+
+        为什么要有批量版：read_features 原先逐人调用 read_student_feature，
+        580 人的班级就是 580 次 duckdb.connect（每次约 10ms，合计约 5.8 秒），
+        是班级职业差距接口 14 秒的主因。IN 查询一次取回，返回结构与逐条读取完全一致。
+        """
+        nos = [str(s) for s in student_nos if s]
+        if not nos:
+            return []
+        placeholders = ", ".join(["?"] * len(nos))
+        sql = (
+            f"SELECT {self._FEATURE_SELECT} FROM {self._FEATURE_TABLE} "
+            f"WHERE \"学期\" = ? AND \"学号\" IN ({placeholders})"
+        )
+        with closing(self._connect(readonly=True)) as conn:
+            rows = conn.execute(sql, [term, *nos]).fetchall()
+        return [self._feature_row(row) for row in rows]
 
     def write_recommend_log(self, log: dict[str, Any]) -> int:
         """写入单条推荐日志。"""

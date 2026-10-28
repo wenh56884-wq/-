@@ -425,17 +425,15 @@ def _rebuild_features(stored: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def read_features(term: str, student_nos: Sequence[str]) -> list[dict[str, Any]]:
-    """一次取多名学生的画像落库行（只按学号过滤，学号集合来自已鉴权的 MySQL 结果）。"""
+    """一次取多名学生的画像落库行（只按学号过滤，学号集合来自已鉴权的 MySQL 结果）。
+
+    走批量读取：逐人读取每人都会新开一次 DuckDB 连接（580 人约 5.8 秒），
+    这里一次 IN 查询取回，结果与逐条读取一致。
+    """
     nos = [str(s) for s in student_nos if s]
     if not nos:
         return []
-    store = DuckDBStore()
-    rows: list[dict[str, Any]] = []
-    for sno in nos:
-        row = store.read_student_feature(sno, term)
-        if row is not None:
-            rows.append(dict(row))
-    return rows
+    return [dict(row) for row in DuckDBStore().read_student_features(nos, term)]
 
 
 # ----------------------------------------------------------------
@@ -1003,7 +1001,19 @@ def _job_demand(ctx: ToolContext, class_name: str, term: str,
         "WHERE v.`学期` = %s AND s.`班级` = %s",
         (ctx.tenant_id, term, class_name),
     )
-    jobs = [r for r in rows if direction_of(r.get("title")) == target]
+    # direction_of 原样逐行调用：2 万条浏览记录 ×（15 个方向 × 20 个关键词）的匹配，
+    # 而岗位名去重后不过千余个。同一次调用内缓存，结果与逐行调用完全一致，不改口径。
+    dir_cache: dict[str, str] = {}
+
+    def _direction(title: Any) -> str:
+        key = str(title or "")
+        cached = dir_cache.get(key)
+        if cached is None:
+            cached = direction_of(key)
+            dir_cache[key] = cached
+        return cached
+
+    jobs = [r for r in rows if _direction(r.get("title")) == target]
     total = len(jobs)
     skill_counter: dict[str, int] = {}
     edu_counter: dict[str, int] = {}
@@ -1014,15 +1024,18 @@ def _job_demand(ctx: ToolContext, class_name: str, term: str,
         if edu:
             edu_counter[edu] = edu_counter.get(edu, 0) + 1
 
+    # 每个岗位的检索文本只拼一次：原来 _prev 按维度各拼一遍（3 维 × 上万行），
+    # 且每拼一次都要 json.loads 技能标签——这是 14 秒耗时的主要来源
+    blobs = [
+        " ".join([str(job.get("title") or "")] + _iter_tags(job.get("skill_tags"))
+                 + [str(job.get("description") or "")])
+        for job in jobs
+    ]
+
     def _prev(keywords_: tuple[str, ...]) -> float | None:
         if not total:
             return None
-        hit = 0
-        for job in jobs:
-            blob = " ".join([str(job.get("title") or "")] + list(_iter_tags(job.get("skill_tags")))
-                            + [str(job.get("description") or "")])
-            if any(k in blob for k in keywords_):
-                hit += 1
+        hit = sum(1 for blob in blobs if any(k in blob for k in keywords_))
         return round(hit / total, 4)
 
     salary = [float(j["salary_max"] or 0) for j in jobs if j.get("salary_max") is not None]
