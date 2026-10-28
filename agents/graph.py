@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Sequence, TypedDict
 from langgraph.graph import END, StateGraph
 
 from agents import llm as llm_client
+from agents import teacher_agent
 from agents import tools
 from agents.critic import (
     MAX_RETRY,
@@ -31,7 +32,7 @@ from agents.tools import ToolContext
 from app.audit import audit_event
 from engine import rag as rag_engine
 
-GRAPH_VERSION = "graph-v2"
+GRAPH_VERSION = "graph-v3"
 
 # AGENT_LLM_DRAFT=0 可关闭「大模型润色」，退回机械直引（演示/对比用）
 def _llm_draft_enabled() -> bool:
@@ -152,26 +153,8 @@ def plan_node(state: AgentState) -> dict[str, Any]:
             else "my_warning"
         return {"plan": {"tool": tool_name}, "tool_name": tool_name}
 
-    tool_name = "class_overview"
-    if any(k in intent for k in ("班级列表", "班级目录", "有哪些班", "哪些班级", "学院", "院系")):
-        tool_name = "class_list"
-    elif any(k in intent for k in ("预警", "风险", "名单", "挂科")):
-        tool_name = "warning_list"
-    elif any(k in intent for k in ("画像", "标签", "个人", "四维")):
-        tool_name = "student_profile"
-    elif any(k in intent for k in ("差距", "岗位", "能力", "就业")):
-        tool_name = "career_gap"
-
-    args: dict[str, Any] = {"term": term or ""}
-    # 班级名既能从本次提问抠，也能从历史追问里继承（「那这个班呢」）
-    class_name = _extract_class_name(query) or _extract_class_name(intent)
-    if class_name:
-        args["class_name"] = class_name
-    if tool_name in ("class_overview", "warning_list", "career_gap") and not class_name:
-        args["class_name"] = _default_class(ctx)
-    if tool_name == "student_profile":
-        args["student_no"] = _extract_student_no(ctx, query or intent)
-    return {"plan": {"tool": tool_name, "args": args}, "tool_name": tool_name}
+    # 教师端：意图路由与参数抠取全部下沉到 teacher_agent 能力层
+    return dict(teacher_agent.plan_teacher(ctx, intent, query, term))
 
 
 def _extract_class_name(query: str) -> str | None:
@@ -257,8 +240,11 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     try:
         if name == "class_list":
             result = tools.class_list(ctx)
+        elif name == "warning_thresholds":
+            result = tools.get_warning_thresholds(ctx, str(args.get("class_name") or ""))
         elif name == "warning_list":
-            result = tools.warning_list(ctx, args.get("class_name", ""), args.get("term", ""))
+            result = tools.warning_list(ctx, args.get("class_name", ""), args.get("term", ""),
+                                        level=args.get("level"))
         elif name == "student_profile":
             result = tools.student_profile(ctx, args.get("student_no", ""), args.get("term", ""))
         elif name == "career_gap":
@@ -277,6 +263,10 @@ def tool_node(state: AgentState) -> dict[str, Any]:
             result = tools.class_overview(ctx, args.get("class_name", ""), args.get("term", ""))
     except PermissionError as exc:
         return {"tool_result": {"error": str(exc)}, "tool_name": name}
+    except ValueError as exc:
+        # 参数错（班级不存在等）与越权分开呈现，不吓唬用户
+        return {"tool_result": {"error": str(exc), "error_kind": "bad_request"},
+                "tool_name": name}
     return {"tool_result": dict(result), "tool_name": name}
 
 
@@ -288,7 +278,10 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
     if not result:
         return "未查到相关数据。"
     if "error" in result:
-        return "该数据你没有访问权限，请确认班级/学号是否属于本租户。"
+        # 越权与参数错（班级写错等）分开说话，不把输错名字说成越权
+        if result.get("error_kind") == "bad_request":
+            return f"这个数据查不了：{result.get('error')}"
+        return f"该数据你没有访问权限：{result.get('error')}"
     parts: list[str] = []
     if "classes" in result:
         parts.append(
@@ -312,6 +305,23 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
         dist = dict(result.get("warning_distribution") or {})
         if dist:
             parts.append("预警分布：" + "、".join(f"{k} {v} 人" for k, v in dist.items()) + "。")
+        # 教师端补充：职业意向与就业去向分布（口径与 class_overview 工具一致）
+        ci = dict((result.get("career_intent") or {}).get("distribution") or {})
+        if ci:
+            parts.append("职业意向分布：" + "、".join(f"{k} {v} 人" for k, v in ci.items()) + "。")
+        ei = (result.get("employment_intent") or {}).get("top_directions") or []
+        if ei:
+            parts.append("就业意向前几的方向：" + "、".join(
+                f"{row.get('direction')}（浏览 {row.get('views')} 次）" for row in ei[:3]) + "。")
+    if "thresholds" in result:
+        parts.append(f"班级 {result.get('class_name')} 的预警阈值配置如下（空值表示沿用上一级默认）。")
+        for row in result.get("thresholds") or []:
+            parts.append(
+                f"{row.get('label')}（来源 {row.get('source')}）："
+                f"黄色 {row.get('yellow_value')}，橙色 {row.get('orange_value')}，"
+                f"红色 {row.get('red_value')}"
+                + (f"，权重 {row.get('weight')}" if row.get("weight") is not None else "") + "。"
+            )
     if "items" in result:
         parts.append(f"预警名单共命中 {result.get('count')} 人。")
         for item in (result.get("items") or [])[:3]:
@@ -320,6 +330,8 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"等级 {item.get('level')}；归因：{'；'.join(item.get('reasons') or []) or '无'}。"
             )
     if "gaps" in result:
+        if result.get("target_direction"):
+            parts.append(f"目标岗位方向：{result.get('target_direction')}。")
         for gap in (result.get("gaps") or [])[:3]:
             parts.append(
                 f"差距维度 {gap.get('dimension')}：岗位侧 {gap.get('demand_rate')}，"
@@ -547,15 +559,16 @@ def _llm_draft(state: AgentState, result: Mapping[str, Any], feedback: str,
 
 def _llm_chitchat(state: AgentState,
                   on_token: Callable[[str], None] | None = None) -> str | None:
-    """寒暄 / 能力提问：纯对话，不带任何数据。"""
+    """寒暄 / 能力提问：纯对话，不带任何数据；教师端用专属能力话术。"""
     ctx: ToolContext = state["ctx"]
-    parts = [f"【提问】{state.get('query') or ''}"]
+    is_teacher = ctx.actor_type == "teacher"
+    parts = [f"【身份】{'教师' if is_teacher else '学生'}", f"【提问】{state.get('query') or ''}"]
     history = _history_text(state)
     if history:
         parts.append(f"【前面对话】\n{history}")
     return llm_client.generate_reply(
         ctx.actor_type,
-        system_prompt=_CHAT_SYSTEM,
+        system_prompt=teacher_agent.TEACHER_CHAT_SYSTEM if is_teacher else _CHAT_SYSTEM,
         user_prompt="\n\n".join(parts),
         tag="chitchat",
         on_token=on_token,
@@ -610,10 +623,16 @@ def draft_node(state: AgentState,
         draft = str(draft_fn(result, feedback, attempts))
         mode = "injected"
     elif (result or {}).get("mode") == "chitchat":
+        is_teacher = (state.get("ctx") or ToolContext("", 0)).actor_type == "teacher"
         fallback_text = (
-            "你好，我是启航智能助手。我可以帮你查班级概貌与预警名单、看学生的四维画像，"
-            "分析班级与岗位的能力差距，也能从企业知识库里查制度流程（会给出文档与页码），"
-            "还能按已定义的工作流一键跑多步流程。比如直接问「报销的住宿标准是多少」就行。"
+            "你好，我是启航智能助手。我可以帮您看班级整体情况与预警名单、查单个学生的四维画像，"
+            "分析班级能力与岗位要求的差距，也能查各班的预警阈值配置；"
+            "还能从企业知识库里查制度流程（会给出文档与页码），"
+            "按已定义的工作流一键跑多步流程。比如直接问「AI2201 这学期预警情况怎么样」就行。"
+            if is_teacher else
+            "你好，我是启航智能助手。我可以帮你看本人的学业预警状态、推荐匹配的岗位，"
+            "也能从企业知识库里查制度流程（会给出文档与页码），"
+            "按已定义的工作流一键跑多步流程。比如直接问「我最近有没有预警」就行。"
         )
         draft = _llm_chitchat(state, on_token) or fallback_text
         mode = "chitchat"

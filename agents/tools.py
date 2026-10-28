@@ -1455,7 +1455,8 @@ def job_facets(ctx: ToolContext) -> dict[str, Any]:
 
 # 对外工具清单：便于 FastAPI / LangGraph 统一注册与自检
 TEACHER_TOOLS: tuple[str, ...] = (
-    "class_overview", "student_profile", "warning_list", "career_gap",
+    "class_overview", "class_list", "student_profile", "warning_list", "career_gap",
+    "get_warning_thresholds", "save_warning_thresholds",
 )
 STUDENT_TOOLS: tuple[str, ...] = (
     "my_warning", "my_recommendations", "job_search",
