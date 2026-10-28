@@ -227,3 +227,40 @@ def test_jobs_tenant_pool_still_available(client, token):
     assert body["pool"] == "tenant"
     assert body["total"] > 0
     assert all(it["pool"] == "tenant" for it in body["items"])
+
+
+# ----------------------------------------------------------------
+# 题库浏览 API：/interview/bank（只读，带出处）
+# ----------------------------------------------------------------
+@DB
+def test_bank_browse_lists_items_with_sources(client, token):
+    r = client.get("/interview/bank", params={"limit": 20}, headers=token)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] >= 200, f"题库应 ≥200 条，实际 {body['total']}"
+    assert 0 < body["shown"] <= 20
+    it = body["items"][0]
+    assert it["source_name"] and it["source_url"], "每条题必须带出处"
+    assert it["qtype"] in body["qtypes"]
+    assert set(body["families"]) >= {"it_software", "finance_bank", "accounting"}
+
+
+@DB
+def test_bank_browse_filters(client, token):
+    r = client.get("/interview/bank", params={"family": "计算机软件", "limit": 100},
+                   headers=token).json()
+    assert r["total"] > 0
+    assert all(it["family"] == "it_software" for it in r["items"]), "行业词要归到行业族"
+
+    r2 = client.get("/interview/bank", params={"qtype": "scenario", "limit": 100},
+                    headers=token).json()
+    assert r2["total"] > 0 and all(it["qtype"] == "scenario" for it in r2["items"])
+
+    r3 = client.get("/interview/bank", params={"q": "不存在の关键词xyz", "limit": 10},
+                    headers=token).json()
+    assert r3["total"] == 0 and r3["items"] == [], "无命中返回空，不冒充"
+
+
+@DB
+def test_bank_browse_requires_auth(client):
+    assert client.get("/interview/bank").status_code == 401

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from agents import interviewer
 from app.audit import audit_event
-from app.auth import require_student
+from app.auth import get_current_ctx, require_student
 from app.config import get_settings
 from engine import question_bank as qbank
 from engine.interview import (
@@ -754,6 +754,39 @@ def _source_row(q: Mapping[str, Any]) -> dict[str, Any]:
             "url": src.get("url"), "bank_id": src.get("id"),
             "is_probe": bool(q.get("probe_of")), "probe_of": q.get("probe_of"),
             "question_raw": q.get("question_raw")}
+
+
+@router.get("/bank")
+def bank_browse(family: str = "", qtype: str = "", q: str = "",
+                limit: int = 30, ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+    """题库浏览（只读）：按行业族 / 题型 / 关键词过滤，每条带出处可回溯。
+
+    数据源与出题检索同源（data/question_bank/*.json 硬校验后的池），
+    缺字段或坏条目在加载时就已抛错，这里只做过滤，缺失不冒充。
+    """
+    limit = max(1, min(limit, 100))
+    text = qbank._norm(q)
+    items = []
+    for it in qbank.load_bank():
+        if family and it.family != qbank.normalize_industry(family):
+            continue
+        if qtype and it.qtype != qtype:
+            continue
+        if text and text not in qbank._norm(it.question) \
+                and not any(text in qbank._norm(k) for k in it.keywords):
+            continue
+        items.append({"id": it.id, "family": it.family,
+                      "family_label": qbank.family_label(it.family),
+                      "qtype": it.qtype, "question": it.question,
+                      "keywords": list(it.keywords), "difficulty": it.difficulty,
+                      "source_name": it.source_name, "source_url": it.source_url})
+    audit_event(actor_type=ctx.actor_type,
+                actor_id=ctx.teacher_id if ctx.actor_type == "teacher" else ctx.student_id,
+                action="interview.bank.browse",
+                detail={"family": family, "qtype": qtype, "hits": len(items)})
+    return {"total": len(items), "shown": min(len(items), limit), "items": items[:limit],
+            "families": dict(qbank.FAMILY_LABELS),
+            "qtypes": list(qbank.QTYPES)}
 
 
 @router.get("/{sid}")
