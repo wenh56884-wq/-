@@ -437,6 +437,18 @@ def compute_class(
     return results
 
 
+def parse_levels(level: str | None) -> set[str] | None:
+    """解析等级过滤参数：空/None → None（全班）；支持单值或逗号分隔多值
+    （如 "red,orange,yellow"）；非法等级抛 ValueError。"""
+    if not level:
+        return None
+    parts = [p.strip() for p in str(level).split(",") if p.strip()]
+    bad = [p for p in parts if p not in LEVELS]
+    if bad:
+        raise ValueError(f"非法预警等级：{'、'.join(bad)}，可选 {LEVELS}")
+    return set(parts) or None
+
+
 def get_warning_list(
     tenant_id: int,
     class_name: str,
@@ -447,12 +459,12 @@ def get_warning_list(
     rules: WarningRules | None = None,
     fetcher: RowsFetcher | None = None,
 ) -> list[dict[str, Any]]:
-    """按等级过滤的预警名单；level 为空返回全班，level 非法抛 ValueError。"""
-    if level is not None and level not in LEVELS:
-        raise ValueError(f"非法预警等级：{level}，可选 {LEVELS}")
+    """按等级过滤的预警名单；level 为空返回全班，支持单值或逗号分隔多值
+    （如 "red,orange,yellow"），非法等级抛 ValueError。"""
+    levels = parse_levels(level)
     results = compute_class(
         tenant_id, class_name, term, rows=rows, rules=rules, fetcher=fetcher
     )
-    if level is None:
+    if levels is None:
         return results
-    return [r for r in results if r["level"] == level]
+    return [r for r in results if r["level"] in levels]

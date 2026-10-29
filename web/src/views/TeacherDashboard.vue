@@ -219,13 +219,20 @@
     </section>
 
     <section class="bento-card bento-span-4 table-card">
-      <div class="card-title">预警名单（点击行看四维画像）</div>
+      <div class="card-title">
+        预警名单（点击行看四维画像）
+        <el-tag v-if="!loading" size="small" :type="(warnings.items || []).length ? 'danger' : 'success'"
+          effect="plain" class="wl-count">
+          {{ (warnings.items || []).length }} 人
+        </el-tag>
+        <span class="wl-hint">仅列出红/橙/黄色预警学生；全班风险分布见上方图表，分数最高者见「高风险 Top5」</span>
+      </div>
       <el-table
         v-loading="loading"
         :data="warnings.items || []"
         border
         stripe
-        height="420"
+        max-height="420"
         @row-click="openProfile"
       >
         <el-table-column type="expand">
@@ -261,7 +268,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !(warnings.items || []).length" description="该班级暂无预警数据" />
+      <el-empty v-if="!loading && !(warnings.items || []).length" description="本学期该班暂无红/橙/黄色预警学生（可看上方「高风险 Top5」提前关注）" />
     </section>
     </div>
 
@@ -540,7 +547,7 @@ async function loadClass(reportError = true) {
   try {
     const [ovRes, wnRes] = await Promise.all([
       http.get('/teacher/class-overview', { params: { class_name: klass, term: term.value } }),
-      http.get('/teacher/warnings', { params: { class_name: klass, term: term.value } })
+      http.get('/teacher/warnings', { params: { class_name: klass, term: term.value, level: 'red,orange,yellow' } })
     ])
     overview.value = ovRes.data || {}
     warnings.value = wnRes.data || {}
@@ -1253,6 +1260,24 @@ onBeforeUnmount(() => {
 
 .table-card {
   margin-top: 0;
+}
+
+.table-card .card-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wl-count {
+  margin-left: 2px;
+}
+
+.wl-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--bento-sub, #8a919f);
+  white-space: normal;
 }
 
 .expand-box {

@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -863,10 +865,10 @@ def warning_list(ctx: ToolContext, class_name: str, term: str,
     _require_teacher(ctx, "warning_list", str(class_name))
     term = _resolve_term(ctx, term)
     _require_class(ctx, class_name, "warning_list")
-    if level is not None and level not in LEVELS:
-        raise ValueError(f"非法预警等级：{level}，可选 {LEVELS}")
 
     results = warning.compute_class(ctx.tenant_id, class_name, term)
+    # level 支持单值或逗号分隔多值（如 "red,orange,yellow"），解析校验在引擎层
+    levels = warning.parse_levels(level)
     items = [
         {
             "student_no": r["student_no"], "name": r["name"],
@@ -875,7 +877,7 @@ def warning_list(ctx: ToolContext, class_name: str, term: str,
             "missing": r["missing"],
         }
         for r in results
-        if level is None or r["level"] == level
+        if levels is None or r["level"] in levels
     ]
     distribution = {lv: sum(1 for r in results if r["level"] == lv) for lv in LEVELS}
     _audit_call(ctx, "warning_list", f"{class_name}/{term}",
@@ -1512,6 +1514,106 @@ def kb_search(ctx: ToolContext, query: str = "", top_k: int = 4,
             "note": "" if hits else "知识库里没有检索到相关内容"}
 
 
+# ----------------------------------------------------------------
+# 知识库多跳检索（rag-multihop-v1）
+# ----------------------------------------------------------------
+# 为什么要有：单跳检索碰到「原文只提了一句、要点散在另一段」的问题就只能答
+# 「没查到」。这里在模型判定「不足以回答」时改写检索词再补一跳，命中合并去重。
+# 铁律不变：改写词只能用原文或原问题里出现过的词，禁止引入两者都没有的新实体；
+# 引用编号仍由 as_citations 统一编排，verify_citations 的校验口径一行没改。
+_MULTIHOP_SYSTEM = (
+    "你是检索助手。判断下面【原文片段】是否足以回答【问题】。\n"
+    "只输出一行 JSON，不要任何解释：{\"enough\": true, \"query\": \"\"}"
+    " 或 {\"enough\": false, \"query\": \"改写后的检索词\"}\n"
+    "规则：\n"
+    "1. 原文里有能直接支撑答案的句子 → enough=true，query 留空。\n"
+    "2. 不足 → enough=false，query 写一个新的检索词：换同义词、拆出子问题、"
+    "或补上原文里出现的主体。不要照抄原问题。\n"
+    "3. 改写词只能用原文或原问题里出现过的词，禁止引入两者都没有的新实体。\n"
+    "4. 不要输出 JSON 以外的内容。"
+)
+
+
+def _multihop_enabled() -> bool:
+    """AGENT_KB_MULTIHOP=0 可关闭多跳，退回单跳（对比用）。"""
+    return str(os.getenv("AGENT_KB_MULTIHOP", "1")).strip().lower() not in ("0", "false", "off", "no")
+
+
+def _hit_key(hit: Mapping[str, Any]) -> tuple[Any, ...]:
+    return (str(hit.get("title") or ""), hit.get("page"), int(hit.get("chunk_no") or 0))
+
+
+def _judge_enough(ctx: ToolContext, query: str,
+                  hits: Sequence[Mapping[str, Any]]) -> tuple[bool, str]:
+    """让模型判断够不够；不足则给改写词。模型不可用 → 按「够」处理，不再多跳。"""
+    from agents import llm as llm_client
+
+    blob = "\n".join(f"[{i}] {str(h.get('title'))}：{str(h.get('text') or '')[:260]}"
+                     for i, h in enumerate(list(hits)[:4], start=1)) or "（没有检索到任何原文）"
+    raw = llm_client.generate_reply(ctx.actor_type, system_prompt=_MULTIHOP_SYSTEM,
+                                    user_prompt=f"【问题】{query}\n\n【原文片段】\n{blob}",
+                                    tag="kb_hop")
+    if not raw:
+        return True, ""
+    match = re.search(r"\{.*\}", raw, re.S)
+    if not match:
+        return True, ""
+    try:
+        data = json.loads(match.group(0))
+    except ValueError:
+        return True, ""
+    if not isinstance(data, dict):
+        return True, ""
+    return bool(data.get("enough")), str(data.get("query") or "").strip()[:80]
+
+
+def kb_search_deep(ctx: ToolContext, query: str = "", top_k: int = 4,
+                   max_hops: int = 2) -> dict[str, Any]:
+    """知识库多跳检索：第一跳不足以回答时，改写检索词再查一轮（最多再补 1 跳）。
+
+    返回结构与 kb_search 完全一致（多 hops / multi_hop / new_hits 三个字段），
+    所以 _external_draft 与 verify_citations 都不需要改。
+    """
+    ctx = _check_ctx(ctx)
+    q = str(query or "").strip()
+    first = kb_search(ctx, q, top_k=top_k)
+    hops: list[dict[str, Any]] = [{"query": q, "hits": len(first.get("hits") or [])}]
+    if not _multihop_enabled() or max_hops < 2:
+        return {**first, "hops": hops, "multi_hop": False, "new_hits": 0}
+
+    merged: list[dict[str, Any]] = list(first.get("hits") or [])
+    seen = {_hit_key(h) for h in merged}
+    used = {q}
+    new_hits = 0
+    for _ in range(max_hops - 1):
+        enough, nxt = _judge_enough(ctx, q, merged)
+        if enough or len(nxt) < 2 or nxt in used:
+            break
+        used.add(nxt)
+        # 补跳时扩大召回：沿用同样的 top_k 会把第一跳那几块再捞一遍，
+        # 去重后等于白跳一次——小语料上尤其明显（实测过 added 恒为 0）。
+        nxt_res = kb_search(ctx, nxt, top_k=min(int(top_k) * 2, 10))
+        added = 0
+        for h in (nxt_res.get("hits") or []):
+            key = _hit_key(h)
+            if key not in seen:
+                seen.add(key)
+                merged.append(h)
+                added += 1
+        new_hits += added
+        hops.append({"query": nxt, "hits": len(nxt_res.get("hits") or []), "added": added})
+        if added == 0:      # 这一跳没带回任何新原文，再跳也没意义
+            break
+
+    _audit_call(ctx, "tool.kb_search_deep", "kb",
+                {"query": q[:80], "hops": len(hops), "hits": len(merged),
+                 "new_hits": new_hits})
+    return {"query": q, "total": len(merged), "hits": merged,
+            "citations": rag.as_citations(merged), "engine_version": rag.RAG_VERSION,
+            "note": "" if merged else "知识库里没有检索到相关内容",
+            "hops": hops, "multi_hop": len(hops) > 1, "new_hits": new_hits}
+
+
 def web_search(ctx: ToolContext, query: str = "", top_k: int = 5) -> dict[str, Any]:
     """联网搜索（需配置 SERPER_API_KEY / BING_SEARCH_KEY）。
 
@@ -1533,7 +1635,7 @@ def run_workflow(ctx: ToolContext, name: str = "", inputs: Mapping[str, Any] | N
     即便这个工作流是教师定义的。
     """
     ctx = _check_ctx(ctx)
-    rows = _query("SELECT `编号`,`名称`,`描述`,`步骤` FROM `工作流定义`"
+    rows = _query("SELECT `编号`,`名称`,`描述`,`步骤`,`是否需要审批` FROM `工作流定义`"
                   " WHERE `租户编号`=%s AND `是否启用`=1 ORDER BY `编号`", (ctx.tenant_id,))
     if not rows:
         return {"mode": "workflow", "status": "empty", "available": [],
@@ -1557,6 +1659,16 @@ def run_workflow(ctx: ToolContext, name: str = "", inputs: Mapping[str, Any] | N
     if target is None:
         return {"mode": "workflow", "status": "not_found", "available": [],
                 "summary": f"没有找到名为「{name}」的工作流。"}
+
+    # 人工审批：定义了「需要审批」的流程，谁触发都不跑，挂起等教师点头
+    if int(target.get("是否需要审批") or 0):
+        from app import workflow_approval     # 延迟导入：避免 agents ↔ app 循环依赖
+        pending = workflow_approval.submit_for_approval(
+            ctx, int(target["编号"]), str(target["名称"]))
+        _audit_call(ctx, "tool.run_workflow.pending", str(target["编号"]),
+                    {"name": target["名称"], "run_id": pending["run_id"]})
+        return {"mode": "workflow", "status": "pending", "name": target["名称"],
+                "needs_approval": True, "summary": pending["message"]}
 
     steps = []
     try:

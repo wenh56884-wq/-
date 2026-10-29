@@ -247,3 +247,30 @@ def test_engine_has_no_llm_or_random():
         for banned in ("random", "langchain", "langgraph", "openai", "ChatOpenAI"):
             assert banned not in src, f"{name} 出现禁用记号：{banned}"
     assert ENGINE_VERSION == "warning-v2"
+
+
+def test_level_filter_multi_and_invalid():
+    """level 支持逗号分隔多等级（红+黄一起拉），非法多值报错指明坏词。"""
+    rows = [
+        {**_metrics(name="甲"), "student_no": "S003"},
+        {**_metrics(name="乙", fail_count=3, gpa_drop=20.0,
+                    attendance_rate=0.60), "student_no": "S001"},
+        {**_metrics(name="丙", fail_count=2), "student_no": "S002"},
+    ]
+    red = get_warning_list(TENANT_A, CLASS, TERM, "red", rows=rows, rules=_rules())
+    red_yellow = get_warning_list(TENANT_A, CLASS, TERM, "red,yellow",
+                                  rows=rows, rules=_rules())
+    assert [r["student_no"] for r in red] == ["S001"]
+    # 乙=红、丙=黄（挂 2 门）、甲=正常 → 多等级一起拉出两人
+    assert [r["student_no"] for r in red_yellow] == ["S001", "S002"]
+    # 带空格的多值也要能解析
+    spaced = get_warning_list(TENANT_A, CLASS, TERM, " red , yellow ",
+                              rows=rows, rules=_rules())
+    assert [r["student_no"] for r in spaced] == ["S001", "S002"]
+    # 空串等价于不过滤
+    assert len(get_warning_list(TENANT_A, CLASS, TERM, "", rows=rows,
+                                rules=_rules())) == 3
+    with pytest.raises(ValueError) as ei:
+        get_warning_list(TENANT_A, CLASS, TERM, "red,purple", rows=rows,
+                         rules=_rules())
+    assert "purple" in str(ei.value)
