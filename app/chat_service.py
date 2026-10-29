@@ -200,7 +200,8 @@ def handle(ctx: ToolContext, query: str, term: str | None,
 
     started = time.time()
     prev_tool = last_tool(ctx, sid)
-    result = graph.run_chat(ctx, query, term=term, history=turns, last_tool=prev_tool)
+    result = graph.run_chat(ctx, query, term=term, history=turns,
+                            last_tool=prev_tool, session_id=sid)
     result["session_id"] = sid
     persist_turn(ctx, sid, query, result, int((time.time() - started) * 1000))
     return result
@@ -246,7 +247,7 @@ def handle_stream(ctx: ToolContext, query: str, term: str | None,
 
     started = time.time()
     for event in graph.run_chat_stream(ctx, query, term=term, history=turns,
-                                       last_tool=prev_tool):
+                                       last_tool=prev_tool, session_id=sid):
         if event.get("type") == "done" and sid is not None:
             result = {
                 "answer": event.get("answer"),

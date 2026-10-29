@@ -105,6 +105,13 @@ def student_forecast(student_no: str = "") -> str:
 
 
 @tool
+def class_grades_rank(class_name: str = "", term: str = "") -> str:
+    """查询某个班的成绩分析：全班总体平均成绩、每个人的平均成绩，
+    以及同专业之间的班级排名、同专业内的个人排名。
+    class_name 形如 AI2301；term 形如 2025-2026-2，留空表示最近学期。"""
+
+
+@tool
 def my_grades() -> str:
     """查询**本人**的成绩单：各学年 / 学期均分、加权均分、学分、挂科门次。只能查自己。"""
 
@@ -168,6 +175,14 @@ def exam_notices(keyword: str = "", exam_type: str = "", only_open: bool = False
 
 
 @tool
+def exam_positions(keyword: str = "", dept: str = "", education: str = "",
+                   political: str = "", place: str = "") -> str:
+    """查询国考（国家公务员考试）的具体职位明细：部门、用人司局、招考职位、招录人数、
+    学历、专业、政治面貌、工作地点。可按职位/部门/专业关键词、部门、学历、政治面貌、
+    工作地点筛选。查不到就如实说，不拿往年职位凑数。"""
+
+
+@tool
 def my_interviews(limit: int = 8) -> str:
     """查询**本人**的模拟面试场次：状态、总分、轮次。只能查自己。"""
 
@@ -182,15 +197,16 @@ def question_bank_lookup(query: str = "", family: str = "", qtype: str = "") -> 
 # （越权会在工具层被拦，但根本不该给它选项）。
 # 知识图谱是全校公共数据（专业-课程-岗位-技能），两端都给。
 _TEACHER_TOOLS = (class_list, class_overview, warning_list, warning_thresholds,
-                  student_profile, student_grades, student_forecast, career_gap,
+                  student_profile, student_grades, student_forecast, class_grades_rank,
+                  career_gap,
                   kg_major_skills, kg_skill_jobs, kg_path,
-                  exam_notices, question_bank_lookup,
+                  exam_notices, exam_positions, question_bank_lookup,
                   kb_search, web_search, run_workflow)
 _STUDENT_TOOLS = (my_warning, my_recommendations, my_grades, my_forecast,
                   my_career_forecast, my_notices, my_career_guide, competition_guide,
                   search_jobs, job_facets, my_interviews,
                   kg_major_skills, kg_skill_jobs, kg_path,
-                  exam_notices, question_bank_lookup,
+                  exam_notices, exam_positions, question_bank_lookup,
                   kb_search, web_search, run_workflow)
 
 # graph.tool_node 能执行的工具全集：模型选出来的名字必须在这个集合里，否则退回确定性路由

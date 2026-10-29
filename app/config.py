@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
 
+    # --- iFlytek Spark（OpenAI 兼容接口）---
+    spark_api_key: str = ""
+    spark_base_url: str = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
+    spark_model: str = "spark-x2.6"
+
+    # --- LLM 提供方 ---
+    # auto = 配了星火 Key 就优先星火，否则 DeepSeek；也可显式 spark / deepseek
+    llm_provider: str = "auto"
+
     # --- MySQL ---
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306

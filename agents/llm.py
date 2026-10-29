@@ -1,7 +1,7 @@
 # agents/llm.py
-# 职责：DeepSeek LLM 客户端封装，供所有 Agent 节点复用
+# 职责：LLM 客户端封装——讯飞星火优先、DeepSeek 兜底，供所有 Agent 节点复用。
 # 依赖：langchain_openai.ChatOpenAI / app.config.get_settings
-# 说明：api_key 与 model 只从 .env 读取，禁止硬编码
+# 说明：api_key 只从 .env 读取，禁止硬编码；两家都是 OpenAI 兼容接口，切换只换 base_url/model。
 
 from __future__ import annotations
 
@@ -20,42 +20,80 @@ SYSTEM_RULES: str = (
     "不确定就调用工具，不要猜测"
 )
 
-# 固定 base_url，不允许从外部覆盖（防止被误指向其他端点）
-_BASE_URL: str = "https://api.deepseek.com"
+_PLACEHOLDERS = {"", "REPLACE_ME", "sk-REPLACE_ME", "ak-REPLACE_ME"}
 
 
-def _build_llm(temperature: float) -> ChatOpenAI:
-    """根据 temperature 构建 ChatOpenAI 实例（内部函数）。"""
-    settings = get_settings()
+def _configured(key: str) -> bool:
+    return str(key or "").strip() not in _PLACEHOLDERS
 
-    api_key = settings.deepseek_api_key.strip()
-    if not api_key or api_key == "sk-REPLACE_ME":
-        raise RuntimeError(
-            "DEEPSEEK_API_KEY 未配置：请在项目根目录 .env 文件中设置有效的 DEEPSEEK_API_KEY。"
-        )
 
-    model = settings.deepseek_model.strip() or "deepseek-chat"
+def provider_order() -> tuple[str, ...]:
+    """按配置返回提供方尝试顺序；星火优先，DeepSeek 兜底。"""
+    s = get_settings()
+    spark_ok = _configured(s.spark_api_key)
+    deepseek_ok = _configured(s.deepseek_api_key)
+    mode = str(s.llm_provider or "auto").strip().lower()
+
+    if mode == "spark":
+        order = ("spark", "deepseek") if deepseek_ok else ("spark",)
+    elif mode == "deepseek":
+        order = ("deepseek", "spark") if spark_ok else ("deepseek",)
+    elif spark_ok:
+        order = ("spark", "deepseek") if deepseek_ok else ("spark",)
+    else:
+        order = ("deepseek",)
+    return tuple(name for name in order
+                 if (name == "spark" and spark_ok) or (name == "deepseek" and deepseek_ok))
+
+
+def _build_llm(provider: str, temperature: float) -> ChatOpenAI:
+    """按提供方构建 ChatOpenAI；缺 Key 的提供方由 provider_order 过滤。"""
+    s = get_settings()
+    if provider == "spark":
+        base_url = str(s.spark_base_url or "").strip().rstrip("/")
+        model = str(s.spark_model or "").strip() or "spark-x2.6"
+        api_key = str(s.spark_api_key or "").strip()
+        if not _configured(api_key):
+            raise RuntimeError("SPARK_API_KEY 未配置")
+    else:
+        base_url = str(s.deepseek_base_url or "https://api.deepseek.com").strip().rstrip("/")
+        model = str(s.deepseek_model or "").strip() or "deepseek-chat"
+        api_key = str(s.deepseek_api_key or "").strip()
+        if not _configured(api_key):
+            raise RuntimeError("DEEPSEEK_API_KEY 未配置")
 
     return ChatOpenAI(
-        base_url=_BASE_URL,
+        base_url=base_url,
         model=model,
         api_key=api_key,
         temperature=temperature,
         timeout=60,
-        max_retries=2,
+        max_retries=1,
     )
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=4)
+def _cached_llm(provider: str, temperature: float) -> ChatOpenAI:
+    return _build_llm(provider, temperature)
+
+
+def _primary_llm(actor_type: str) -> ChatOpenAI:
+    order = provider_order()
+    if not order:
+        raise RuntimeError(
+            "没有可用的 LLM Key：请在 .env 配置 SPARK_API_KEY 或 DEEPSEEK_API_KEY")
+    temperature = 0.2 if actor_type == "teacher" else 0.3
+    return _cached_llm(order[0], temperature)
+
+
 def get_teacher_llm() -> ChatOpenAI:
-    """教师端 LLM 单例（temperature=0.2，偏严谨）。"""
-    return _build_llm(temperature=0.2)
+    """教师端主 LLM（星火优先，temperature=0.2）。"""
+    return _primary_llm("teacher")
 
 
-@lru_cache(maxsize=1)
 def get_student_llm() -> ChatOpenAI:
-    """学生端 LLM 单例（temperature=0.3，略活泼）。"""
-    return _build_llm(temperature=0.3)
+    """学生端主 LLM（星火优先，temperature=0.3）。"""
+    return _primary_llm("student")
 
 
 def _messages(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
@@ -65,57 +103,82 @@ def _messages(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
     ]
 
 
+def _temperature(actor_type: str) -> float:
+    return 0.2 if actor_type == "teacher" else 0.3
+
+
 def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) -> str:
-    """按角色取对应 LLM 实例发一次对话；返回纯文本正文。"""
+    """按提供方顺序尝试一次对话；星火失败自动落 DeepSeek，返回纯文本正文。"""
     from app.audit import audit_event
 
-    llm = get_teacher_llm() if actor_type == "teacher" else get_student_llm()
-    started = time.perf_counter()
-    try:
-        resp = llm.invoke(_messages(system_prompt, user_prompt))
-    except Exception as exc:  # Key 无效/限流/超时都归到这里，由调用方兜底
-        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
-                    target="", detail={"error": str(exc)[:200]})
-        raise
-    content = resp.content if isinstance(resp.content, str) else str(resp.content)
-    audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target="",
-                detail={"chars": len(content), "cost_ms": round((time.perf_counter() - started) * 1000)})
-    return str(content).strip()
+    order = provider_order()
+    if not order:
+        raise RuntimeError("没有可用的 LLM Key")
+    errors: list[str] = []
+    for provider in order:
+        llm = _cached_llm(provider, _temperature(actor_type))
+        started = time.perf_counter()
+        try:
+            resp = llm.invoke(_messages(system_prompt, user_prompt))
+        except Exception as exc:  # Key 无效/限流/超时：换下一家，不把堆栈抛给用户
+            errors.append(f"{provider}: {type(exc).__name__}")
+            audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
+                        target=provider, detail={"error": str(exc)[:200]})
+            continue
+        content = resp.content if isinstance(resp.content, str) else str(resp.content)
+        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target=provider,
+                    detail={"chars": len(content),
+                            "cost_ms": round((time.perf_counter() - started) * 1000)})
+        return str(content).strip()
+    raise RuntimeError("LLM 调用失败：" + "；".join(errors))
 
 
 def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
                    on_token: Callable[[str], None]) -> str:
-    """流式调用：每收到一块就回调 on_token，最后返回完整正文（仍由 Critic 核验后定稿）。"""
+    """流式调用：每收到一块就回调 on_token。
+
+    只有「一个字都还没吐」时才允许换提供方；已经输出半截，换家会拼出两段不同回答。
+    """
     from app.audit import audit_event
 
-    llm = get_teacher_llm() if actor_type == "teacher" else get_student_llm()
-    started = time.perf_counter()
-    parts: list[str] = []
-    try:
-        for chunk in llm.stream(_messages(system_prompt, user_prompt)):
-            text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
-            if not text:
-                continue
-            parts.append(text)
-            on_token(text)
-    except Exception as exc:  # 中途断流同样归到这里，草稿退回模板直引
-        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
-                    target="", detail={"error": str(exc)[:200], "partial_chars": len("".join(parts))})
-        raise
-    content = "".join(parts)
-    audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target="",
-                detail={"chars": len(content), "stream": True,
-                        "cost_ms": round((time.perf_counter() - started) * 1000)})
-    return str(content).strip()
+    order = provider_order()
+    if not order:
+        raise RuntimeError("没有可用的 LLM Key")
+    errors: list[str] = []
+    for provider in order:
+        llm = _cached_llm(provider, _temperature(actor_type))
+        started = time.perf_counter()
+        parts: list[str] = []
+        try:
+            for chunk in llm.stream(_messages(system_prompt, user_prompt)):
+                text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                if not text:
+                    continue
+                parts.append(text)
+                on_token(text)
+        except Exception as exc:
+            if parts:
+                audit_event(actor_type=actor_type, actor_id=0,
+                            action=f"llm.{tag}.failed", target=provider,
+                            detail={"error": str(exc)[:200],
+                                    "partial_chars": len("".join(parts))})
+                raise
+            errors.append(f"{provider}: {type(exc).__name__}")
+            audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
+                        target=provider, detail={"error": str(exc)[:200]})
+            continue
+        content = "".join(parts)
+        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target=provider,
+                    detail={"chars": len(content), "stream": True,
+                            "cost_ms": round((time.perf_counter() - started) * 1000)})
+        return str(content).strip()
+    raise RuntimeError("LLM 流式调用失败：" + "；".join(errors))
 
 
 def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
                    tag: str = "draft",
                    on_token: Callable[[str], None] | None = None) -> str | None:
-    """生成一段回复；LLM 不可用时返回 None（让上层回退到模板，而不是给用户报错）。
-
-    on_token 非空时走流式：每块正文实时回调，返回值仍是完整正文。
-    """
+    """生成一段回复；所有提供方都不可用时返回 None（上层回退模板，不报错给用户）。"""
     try:
         if on_token is None:
             return _invoke(actor_type, system_prompt, user_prompt, tag=tag)
@@ -126,7 +189,7 @@ def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
 
 
 def smoke() -> None:
-    """冒烟测试：发一句话，打印回复内容与耗时（毫秒）。"""
+    """冒烟测试：发一句话，打印回复内容、提供方与耗时（毫秒）。"""
     llm = get_student_llm()
     messages = [
         {"role": "system", "content": SYSTEM_RULES},
@@ -137,7 +200,7 @@ def smoke() -> None:
     elapsed_ms = (time.perf_counter() - start) * 1000
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
     print(content)
-    print(f"耗时: {elapsed_ms:.0f}ms")
+    print(f"提供方: {provider_order()[0]}，耗时: {elapsed_ms:.0f}ms")
 
 
 if __name__ == "__main__":

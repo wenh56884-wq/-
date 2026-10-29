@@ -80,3 +80,26 @@ def student_grades(student_no: str,
                 target=str(student_no),
                 detail={"records": report["summary"]["record_count"]})
     return report
+
+
+@router.get("/class-rank")
+def class_rank(class_name: str, term: str | None = None,
+               ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
+    """教师端成绩分析：全班总体均分、个人均分，以及同专业内的班级排名与个人排名。
+
+    取数与计算都在 tools.class_grades_rank（和智能体用的是同一份），
+    路由只做鉴权与异常翻译，避免接口和智能体两套口径漂掉。
+    """
+    try:
+        result = tools.class_grades_rank(ctx, class_name, term)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        # 班级名写错不是越权，按 404 给出候选提示
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    audit_event(actor_type=ctx.actor_type, actor_id=ctx.teacher_id,
+                action="grades.class_rank", target=str(class_name),
+                detail={"term": result.get("term"),
+                        "student_cnt": len(result.get("students") or []),
+                        "class_cnt": len(result.get("classes") or [])})
+    return result

@@ -13,6 +13,7 @@ import pymysql
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app import workflow_approval as approval
 from app.audit import audit_event
 from app.auth import get_current_ctx, require_teacher
 from app.config import get_settings
@@ -53,6 +54,8 @@ class DefIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=500)
     steps: list[StepIn] = Field(min_length=1)
+    # 打开后，谁触发都不会立刻跑，必须等教师审批（wf-approval-v1）
+    needs_approval: bool = False
 
 
 @router.get("/tools")
@@ -68,12 +71,14 @@ def list_defs(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT `编号` AS id,`名称` AS name,`描述` AS description,`步骤` AS steps,"
-                        "`是否启用` AS enabled,`创建时间` AS created_at FROM `工作流定义`"
+                        "`是否启用` AS enabled,`是否需要审批` AS needs_approval,"
+                        "`创建时间` AS created_at FROM `工作流定义`"
                         " WHERE `租户编号`=%s ORDER BY `编号`", (ctx.tenant_id,))
             rows = list(cur.fetchall())
         for r in rows:
             r["steps"] = _json_list(r.get("steps"))
             r["step_count"] = len(r["steps"])
+            r["needs_approval"] = bool(int(r.get("needs_approval") or 0))
         return {"total": len(rows), "items": rows}
     finally:
         conn.close()
@@ -93,19 +98,24 @@ def create_def(inp: DefIn, ctx: ToolContext = Depends(require_teacher)) -> dict[
             exist = cur.fetchone()
             payload = json.dumps(steps, ensure_ascii=False)
             if exist:
-                cur.execute("UPDATE `工作流定义` SET `描述`=%s,`步骤`=%s,`是否启用`=1 WHERE `编号`=%s",
-                            (inp.description, payload, exist["编号"]))
+                cur.execute("UPDATE `工作流定义` SET `描述`=%s,`步骤`=%s,`是否启用`=1,"
+                            "`是否需要审批`=%s WHERE `编号`=%s",
+                            (inp.description, payload, 1 if inp.needs_approval else 0,
+                             exist["编号"]))
                 did = int(exist["编号"])
             else:
-                cur.execute("INSERT INTO `工作流定义`(`租户编号`,`名称`,`描述`,`步骤`,`创建人`)"
-                            " VALUES (%s,%s,%s,%s,%s)",
+                cur.execute("INSERT INTO `工作流定义`(`租户编号`,`名称`,`描述`,`步骤`,`创建人`,"
+                            "`是否需要审批`) VALUES (%s,%s,%s,%s,%s,%s)",
                             (ctx.tenant_id, inp.name, inp.description, payload,
-                             f"teacher:{ctx.teacher_id}"))
+                             f"teacher:{ctx.teacher_id}", 1 if inp.needs_approval else 0))
                 did = int(cur.lastrowid)
         conn.commit()
         audit_event(actor_type="teacher", actor_id=ctx.teacher_id or 0, action="workflow.define",
-                    target=str(did), detail={"name": inp.name, "steps": len(steps)})
-        return {"id": did, "name": inp.name, "steps": steps}
+                    target=str(did),
+                    detail={"name": inp.name, "steps": len(steps),
+                            "needs_approval": inp.needs_approval})
+        return {"id": did, "name": inp.name, "steps": steps,
+                "needs_approval": inp.needs_approval}
     finally:
         conn.close()
 
@@ -142,9 +152,13 @@ def run_definition(ctx: ToolContext, def_id: int, inputs: dict[str, Any] | None 
     finally:
         conn.close()
 
+    # 人工审批：定义了 needs_approval 的流程不立刻跑，挂起等教师点头
+    if approval.needs_approval(def_id, ctx.tenant_id):
+        return approval.submit_for_approval(ctx, def_id, name, inputs, steps=steps)
+
     started = datetime.now()
     try:
-        result = wf_engine.run(steps, _impl_for(ctx), extra_args=inputs or {})
+        result = wf_engine.run(steps, approval._impl_for(ctx), extra_args=inputs or {})
     except wf_engine.WorkflowError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -171,26 +185,34 @@ def run_definition(ctx: ToolContext, def_id: int, inputs: dict[str, Any] | None 
             **result, "summary": wf_engine.render_summary(result)}
 
 
-def _impl_for(ctx: ToolContext):
-    from agents import tools
-
-    return {
-        "my_warning": lambda **kw: tools.my_warning(ctx, **kw),
-        "my_recommendations": lambda **kw: tools.my_recommendations(ctx, **kw),
-        "class_list": lambda **kw: tools.class_list(ctx),
-        "class_overview": lambda **kw: tools.class_overview(ctx, **kw),
-        "warning_list": lambda **kw: tools.warning_list(ctx, **kw),
-        "career_gap": lambda **kw: tools.career_gap(ctx, **kw),
-        "student_profile": lambda **kw: tools.student_profile(ctx, **kw),
-        "kb_search": lambda **kw: tools.kb_search(ctx, **kw),
-        "job_search": lambda **kw: tools.search_jobs(ctx, **kw),
-    }
-
-
 @router.post("/defs/{def_id}/run")
 def run_def(def_id: int, inputs: dict[str, Any] | None = None,
             ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
     return run_definition(ctx, def_id, inputs)
+
+
+class DecideIn(BaseModel):
+    action: str = Field(pattern="^(approve|reject)$")
+    comment: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/approvals/pending")
+def pending_approvals(limit: int = 20,
+                      ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
+    """待我审批的运行单（教师视角）。"""
+    return approval.list_pending(ctx, limit)
+
+
+@router.post("/runs/{run_id}/decide")
+def decide_run(run_id: int, inp: DecideIn,
+               ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
+    """通过 / 驳回：通过才真正执行步骤，驳回一步都不跑。"""
+    try:
+        return approval.decide(ctx, run_id, inp.action, inp.comment)
+    except approval.ApprovalError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
 
 
 @router.get("/runs")

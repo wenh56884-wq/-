@@ -211,7 +211,7 @@ def match_rule(
     gates = cr.check_hard_gates(template.get("hard_gates") or [], facts)
 
     # 剩余周数：规则库关键节点只写"10月中旬"这类季节描述，无法解析成绝对日期
-    # （也不该解析——绝对日期必须来自真实公告，见 docs/数据来源说明.md）。
+    # （也不该解析——绝对日期必须来自真实公告，见 etl/docs/数据来源说明.md）。
     # 这里按学期制倒推：默认冲刺到本学期教学周结束。
     today = date.today()
     deadline = _semester_deadline(today)

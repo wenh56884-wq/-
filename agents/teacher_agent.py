@@ -35,6 +35,12 @@ TEACHER_CHAT_SYSTEM = (
 _TOOL_KEYWORDS = intents.tool_keywords
 # 兜底：没命中任何关键词 → 班级概貌（覆盖「整体情况怎么样」这类问法）
 OVERVIEW_KEYWORDS = lambda: tuple(intents.section("overview"))  # noqa: E731
+RANK_MARKERS = lambda: tuple(intents.section("rank_markers"))  # noqa: E731
+
+# 纯班级级统计工具：提问点名到某个具体学生时，这些工具要让位给个人工具。
+# class_grades_rank **不在这里**：它同时提供个人名次，点名到人时该不该让位
+# 要按「有没有名次信号词」单独判断（见 plan_teacher），不能一刀切让位。
+_CLASS_LEVEL_TOOLS = ("career_gap",)
 
 
 def extract_level(query: str) -> str | None:
@@ -169,7 +175,16 @@ def plan_teacher(ctx: ToolContext, intent: str, query: str,
     没点名班级的班级级工具一律走 default_class，不扫全租户。
     """
     tool_name = "class_overview"
+    # 点名到具体学生时，班级级统计让位给个人工具（成绩单 / 画像 / 预测）
+    named_student = bool(resolve_student_no(ctx, query))
     for name, keywords in _TOOL_KEYWORDS():
+        if named_student and name in _CLASS_LEVEL_TOOLS:
+            continue
+        # 例外：真的在问名次时不让位。个人名次算在班级排名里，
+        # 成绩单没有名次字段，「XX 排第几」交给成绩单会答不出来。
+        if named_student and name == "class_grades_rank" \
+                and not any(m in intent for m in RANK_MARKERS()):
+            continue
         if any(k in intent for k in keywords):
             tool_name = name
             break
@@ -178,7 +193,17 @@ def plan_teacher(ctx: ToolContext, intent: str, query: str,
     resolved_term = term or extract_term(ctx, query)
     class_name = _extract_class_name(query) or _extract_class_name(intent)
 
-    if tool_name == "student_profile":
+    # 教师点名了班级（或说「这个班 / 我们班」）却没点名到人时，「成绩 / 均分 / 绩点」
+    # 指的是全班统计：词表里的「成绩 / 均分 / 绩点」是按个人成绩单写的，不修的话
+    # 这类问法会落到 student_grades，再兜底成「第一个学生」的成绩——
+    # 教师问的是全班，看到的却是随机一个人的成绩，答非所问。
+    class_signal = bool(class_name) or any(
+        k in intent for k in ("这个班", "我们班", "全班", "班上", "班里"))
+    if class_signal and not named_student and tool_name == "student_grades":
+        tool_name = "class_grades_rank"
+
+    # 需要「查谁」的工具：成绩单 / 学业预测与画像一样，都得先把学号抠出来
+    if tool_name in ("student_profile", "student_grades", "student_forecast"):
         student_no = resolve_student_no(ctx, query)
         if not student_no:
             # 没点名任何人：兜底到该学期有成绩的第一个学生（与旧口径一致）

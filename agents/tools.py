@@ -1480,11 +1480,11 @@ TEACHER_TOOLS: tuple[str, ...] = (
     "class_overview", "class_list", "student_profile", "warning_list", "career_gap",
     "get_warning_thresholds", "save_warning_thresholds",
     # 成绩 / 预测（教师按学号查，任教范围校验在工具内）
-    "student_grades", "student_forecast",
+    "student_grades", "student_forecast", "class_grades_rank",
     # 岗位 / 图谱
     "search_jobs", "job_facets", "kg_major_skills", "kg_skill_jobs", "kg_path",
     # agent-entry-v2：招考公告 / 面试题库（师生通用，都带出处）
-    "exam_notices", "question_bank_lookup",
+    "exam_notices", "exam_positions", "question_bank_lookup",
 )
 STUDENT_TOOLS: tuple[str, ...] = (
     "my_warning", "my_recommendations", "job_search",
@@ -1496,7 +1496,7 @@ STUDENT_TOOLS: tuple[str, ...] = (
     # 岗位 / 图谱
     "search_jobs", "job_facets", "kg_major_skills", "kg_skill_jobs", "kg_path",
     # agent-entry-v2：招考公告 / 模拟面试历史（只本人）/ 面试题库
-    "exam_notices", "my_interviews", "question_bank_lookup",
+    "exam_notices", "exam_positions", "my_interviews", "question_bank_lookup",
 )
 
 
@@ -1766,6 +1766,63 @@ def student_grades(ctx: ToolContext, student_no: str = "") -> dict[str, Any]:
     return report
 
 
+# 排名取数：要连同专业的其他班一起取，否则算不出「同专业班级排名」
+_RANK_SQL_HEAD = (
+    "SELECT s.`编号` AS student_id, s.`学号` AS student_no, s.`姓名` AS name, "
+    "       s.`专业` AS major, s.`班级` AS class_name, sc.`学期` AS term, "
+    "       sc.`分数` AS score, sc.`是否重修` AS retake, sc.`编号` AS record_id, "
+    "       c.`课程编号` AS course_code, c.`课程名称` AS course_name, c.`学分` AS credit "
+    "FROM `成绩` sc "
+    "JOIN `课程` c ON c.`编号` = sc.`课程编号` "
+    "JOIN `学生` s ON s.`编号` = sc.`学生编号` "
+    "WHERE s.`租户编号` = %s AND sc.`学期` = %s"
+)
+
+
+def class_grades_rank(ctx: ToolContext, class_name: str = "",
+                      term: str | None = None) -> dict[str, Any]:
+    """教师端成绩分析：全班总体均分、个人均分、同专业内的班级排名与个人排名。
+
+    口径与成绩单严格一致（同一门课取最高分 → 按学分加权），所以排名里的个人均分
+    与成绩单上显示的加权均分是同一个数，不会出现两个页面数字打架。
+
+    统计范围 = 教师任教班级（未绑定时回退本租户全部班级）：带不到班的教师看不到
+    范围外班级的成绩——这是铁律 3 的落点，不是前端隐藏。
+    """
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "class_grades_rank", str(class_name))
+    term = _resolve_term(ctx, term)
+    roster = _require_class(ctx, str(class_name or ""), "class_grades_rank")
+    scope = _teacher_class_scope(ctx)
+
+    params: list[Any] = [ctx.tenant_id, term]
+    sql = _RANK_SQL_HEAD
+    if scope:
+        sql += " AND s.`班级` IN (" + ",".join(["%s"] * len(scope)) + ")"
+        params.extend(sorted(scope))
+    rows = _query(sql, params)
+
+    result = grades_engine.build_rank(rows, term=term, scope_classes=scope)
+    # 明细只回当前班：其他班的数据只用于算同专业名次，不随结果外发
+    result["students"] = [s for s in result["students"]
+                          if str(s["class_name"]) == str(class_name)]
+    # 学期下拉要用：本租户有成绩的学期（前端不必硬编码）
+    result["available_terms"] = [
+        str(r["term"]) for r in _query(
+            "SELECT DISTINCT sc.`学期` AS term FROM `成绩` sc "
+            "JOIN `学生` s ON s.`编号` = sc.`学生编号` "
+            "WHERE s.`租户编号` = %s ORDER BY sc.`学期` DESC", (ctx.tenant_id,))
+    ]
+    result["class_name"] = str(class_name)
+    result["headcount"] = int(roster.get("headcount") or 0)
+    result["scope"] = "assigned" if scope else "tenant"
+    result["tools_version"] = TOOLS_VERSION
+    _audit_call(ctx, "class_grades_rank", f"{class_name}/{term}",
+                {"student_cnt": len(result["students"]),
+                 "class_cnt": len(result["classes"]), "scope": result["scope"]})
+    return result
+
+
 def my_forecast(ctx: ToolContext) -> dict[str, Any]:
     """本人学业预测（学生端）：下学期绩点 / 挂科门次、风险课、预警等级走向。
     学期不足 2 个时引擎返回 available=False 并说明原因，**不冒充预测值**。"""
@@ -1936,6 +1993,74 @@ def exam_notices(ctx: ToolContext, keyword: str = "", exam_type: str = "",
         "exam_type": exam_type,
         "notice_total": int(total_rows[0]["total"]) if total_rows else 0,
         "items": items,
+    }
+
+
+def exam_positions(ctx: ToolContext, keyword: str = "", dept: str = "",
+                   education: str = "", political: str = "", place: str = "",
+                   year: int | None = None, limit: int = 8) -> dict[str, Any]:
+    """国考职位查询（师生通用）：只报 `国考职位` 表里实抓到的职位与人数。
+
+    数据来自国家公务员局《招考简章》逐职位明细；查不到就返回空列表并说明，
+    绝不拿往年职位或模型记忆凑一条。teacher/student 都可查（公共数据）。
+    """
+    ctx = _check_ctx(ctx)
+    limit = max(1, min(int(limit or 8), 20))
+    rows = _query(
+        "SELECT MAX(`年度`) AS y FROM `国考职位` WHERE `租户编号` = %s",
+        (ctx.tenant_id,))
+    latest = rows[0]["y"] if rows else None
+    if latest is None:
+        _audit_call(ctx, "exam_positions", "empty", {"reason": "no_data"})
+        return {
+            "capability_version": "agent-entry-v3", "year": None,
+            "position_total": 0, "total_headcount": 0, "positions": [],
+            "note": "职位表还没有同步，先运行 scripts/sync_guokao.py。",
+        }
+    use_year = int(year or latest)
+
+    where = ["`租户编号` = %s", "`年度` = %s"]
+    params: list[Any] = [ctx.tenant_id, use_year]
+    kw = str(keyword or "").strip()
+    if kw:
+        where.append("(`招考职位` LIKE %s OR `部门名称` LIKE %s OR `用人司局` LIKE %s "
+                     "OR `专业` LIKE %s OR `职位代码` LIKE %s)")
+        params.extend([f"%{kw}%"] * 5)
+    for value, column in ((dept, "部门名称"), (education, "学历"),
+                          (political, "政治面貌"), (place, "工作地点")):
+        text = str(value or "").strip()
+        if text:
+            where.append(f"`{column}` LIKE %s")
+            params.append(f"%{text}%")
+    cond = " AND ".join(where)
+
+    totals = _query(
+        f"SELECT COUNT(*) AS n, COALESCE(SUM(`招考人数`),0) AS p "
+        f"FROM `国考职位` WHERE {cond}", params)
+    rows = _query(
+        "SELECT `编号` AS id, `部门名称` AS dept_name, `用人司局` AS bureau, "
+        "`招考职位` AS position_name, `职位代码` AS position_code, "
+        "`招考人数` AS headcount, `学历` AS education, `学位` AS degree, "
+        "`政治面貌` AS political, `专业` AS major, `工作地点` AS work_place, "
+        "`公告链接` AS notice_url "
+        f"FROM `国考职位` WHERE {cond} "
+        "ORDER BY `招考人数` DESC, `编号` ASC LIMIT %s",
+        [*params, limit])
+    total = int(totals[0]["n"]) if totals else 0
+    people = int(totals[0]["p"]) if totals else 0
+    _audit_call(ctx, "exam_positions", kw or dept or place or "all",
+                {"year": use_year, "total": total})
+    return {
+        "capability_version": "agent-entry-v3",
+        "year": use_year,
+        "position_total": total,
+        "total_headcount": people,
+        "filters": {"keyword": kw, "dept": str(dept or "").strip(),
+                    "education": str(education or "").strip(),
+                    "political": str(political or "").strip(),
+                    "place": str(place or "").strip()},
+        "positions": [dict(r) for r in rows],
+        "note": "" if total else "国考职位表里没有匹配的职位——不拿往年职位凑数。",
     }
 
 

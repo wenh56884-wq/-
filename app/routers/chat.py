@@ -94,6 +94,49 @@ def stream_chat(body: ChatIn, ctx: ToolContext = Depends(get_current_ctx)) -> St
     return StreamingResponse(gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
+@router.get("/brain")
+def brain_status(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+    """自主大脑能力自检：模式、步数上限、记忆向量维度、被屏蔽的副作用工具。"""
+    from agents import brain
+
+    return brain.describe()
+
+
+@router.get("/memories")
+def list_memories(limit: int = 50,
+                  ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+    """本人的长期记忆（按重要度、更新时间倒序）。"""
+    from engine import agent_memory
+
+    conn = _conn()
+    try:
+        rows = agent_memory.list_memories(conn, ctx, limit=limit)
+        return {"total": len(rows), "items": rows}
+    except (pymysql.MySQLError, OSError):
+        return {"total": 0, "items": [], "note": "记忆库暂时不可用"}
+    finally:
+        conn.close()
+
+
+@router.delete("/memories/{memory_id}")
+def delete_memory(memory_id: int,
+                  ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+    """软删除本人一条记忆；别人的记忆一律 404（不暴露是否存在）。"""
+    from engine import agent_memory
+
+    conn = _conn()
+    try:
+        removed = agent_memory.archive(conn, ctx, memory_id)
+        conn.commit()
+    except (pymysql.MySQLError, OSError):
+        raise HTTPException(status_code=503, detail="记忆库暂时不可用")
+    finally:
+        conn.close()
+    if not removed:
+        raise HTTPException(status_code=404, detail="记忆不存在")
+    return {"deleted": True, "id": memory_id}
+
+
 @router.get("/sessions")
 def list_sessions(limit: int = 20, ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
     conn = _conn()
@@ -221,7 +264,10 @@ def metrics(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
 
 @router.get("/capabilities")
 def capabilities(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
-    """六项能力的真实状态（自检用）：不写「已支持」，只报可验证的事实。"""
+    """能力自检：不写「已支持」，只报可验证的事实（页面/演示前先看这里）。"""
+    from agents import brain
+
+    memory_rows = 0
     conn = _conn()
     try:
         with conn.cursor() as cur:
@@ -232,14 +278,26 @@ def capabilities(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
             cur.execute("SELECT COUNT(*) AS n FROM `工作流定义` WHERE `租户编号`=%s AND `是否启用`=1",
                         (ctx.tenant_id,))
             wf = int((cur.fetchone() or {}).get("n") or 0)
+            try:
+                cur.execute(
+                    "SELECT COUNT(*) AS n FROM `智能体记忆` WHERE `租户编号`=%s "
+                    "AND `角色`=%s AND `主体编号`=%s AND `状态`='active'",
+                    (ctx.tenant_id, ctx.actor_type, _actor(ctx)))
+                memory_rows = int((cur.fetchone() or {}).get("n") or 0)
+            except pymysql.MySQLError:
+                memory_rows = 0
     finally:
         conn.close()
 
     configured = web_engine.configured()
+    brain_info = brain.describe()
     return {
         "items": [
             {"key": "chatbot", "name": "AI 聊天机器人", "ready": True,
              "detail": "LangGraph 编排：意图 → 工具 → 草稿 → 核验"},
+            {"key": "brain", "name": "自主任务大脑", "ready": True,
+             "detail": f"{brain_info['mode']} 模式：规划 → 多工具 → 观察 → 反思；"
+                       f"最多 {brain_info['max_rounds']} 轮 / {brain_info['max_steps']} 步"},
             {"key": "rag", "name": "RAG 企业知识库", "ready": int(kb.get("docs") or 0) > 0,
              "detail": f"已入库 {int(kb.get('docs') or 0)} 份文档 / {int(kb.get('chunks') or 0)} 个分块"
                        f"（{rag.RAG_VERSION}）"},
@@ -247,9 +305,13 @@ def capabilities(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
              "detail": "pypdf 按页抽取，引用精确到页码"},
             {"key": "memory", "name": "多轮对话与上下文记忆", "ready": True,
              "detail": "会话与消息落库，超长会话自动规则摘要"},
+            {"key": "memory_vector", "name": "长期记忆向量库", "ready": True,
+             "detail": f"本人 {memory_rows} 条记忆，{brain_info['memory_vector_dim']} 维 "
+                       f"hashing 向量（MySQL 持久化，按租户+角色+主体隔离）"},
             {"key": "web", "name": "联网搜索与工具调用", "ready": configured,
              "detail": ("已配置 " + str(web_engine.provider())) if configured
-                       else "未配置密钥（SERPER_API_KEY / BING_SEARCH_KEY），当前不具备联网能力"},
+                       else "未配置密钥（BOCHA_API_KEY / SERPER_API_KEY / BING_SEARCH_KEY），"
+                            "当前不具备联网能力"},
             {"key": "workflow", "name": "工作流自动化", "ready": wf > 0,
              "detail": f"已定义 {wf} 个工作流（{wf_engine.WORKFLOW_VERSION}，白名单 "
                        f"{len(wf_engine.ALLOWED_TOOLS)} 个工具）"},

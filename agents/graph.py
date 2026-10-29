@@ -19,6 +19,7 @@ from langgraph.graph import END, StateGraph
 
 from agents import llm as llm_client
 from agents import intents as intents_cfg
+from agents import student_agent
 from agents import teacher_agent
 from agents import tools, auto_plan
 from agents.critic import (
@@ -38,6 +39,16 @@ GRAPH_VERSION = "graph-v5"
 # AGENT_LLM_DRAFT=0 可关闭「大模型润色」，退回机械直引（演示/对比用）
 def _llm_draft_enabled() -> bool:
     return str(os.getenv("AGENT_LLM_DRAFT", "1")).strip().lower() not in ("0", "false", "off", "no")
+
+
+def _is_brain_candidate(query: str,
+                        history: Sequence[Mapping[str, str]] | None) -> bool:
+    """问题是否交给自主大脑：寒暄不接；其余由 AGENT_BRAIN 的模式决定。"""
+    if _is_chitchat(query):
+        return False
+    from agents import brain       # 延迟导入：brain 会反过来调用本模块的工具分发
+
+    return brain.should_run(query, history)
 
 
 # 寒暄 / 关于助手本身的提问：不该触发任何取数
@@ -124,6 +135,23 @@ def _is_chitchat(query: str) -> bool:
     return any(key in text for key in _CHITCHAT_KEYS()) and len(text) <= 20
 
 
+# 联网检索词里的动作词：用户说的是「联网查一下 XXX」，搜索引擎要的是「XXX」。
+# 带着「联网」去搜，容易被召回一堆「什么是联网搜索」之类的页面。
+_WEB_NOISE = ("联网", "上网", "网上", "帮我", "给我", "我想", "请问",
+              "查一下", "查一查", "搜一下", "搜一搜", "搜索一下", "搜索", "查查", "看看")
+
+
+def _web_query(text: str) -> str:
+    """把「联网查一下最新的公开招聘信息」洗成「最新的公开招聘信息」。"""
+    raw = str(text or "").strip()
+    out = raw
+    for word in _WEB_NOISE:
+        out = out.replace(word, "")
+    out = re.sub(r"\s+", " ", out).strip(" ，,。?？、")
+    # 洗过头（比如整句就是「联网查一下」）就退回原句，别给搜索引擎发空词
+    return out if len(out) >= 2 else raw
+
+
 def plan_node(state: AgentState) -> dict[str, Any]:
     """按提问关键词挑工具；学生端强制映射到本人工具，忽略一切学号提取结果。"""
     ctx: ToolContext = state["ctx"]
@@ -156,9 +184,10 @@ def plan_node(state: AgentState) -> dict[str, Any]:
     # 学生端「本人数据」意图要排在知识库**之前**：否则「我的成绩」「我的学分」
     # 会被知识库词表里的「学分」这类制度词抢走，答出一堆管理办法而不是本人数据。
     if ctx.actor_type == "student":
-        personal = _student_data_tool(intent)
+        personal = student_agent.personal_tool(intent)
         if personal:
-            return {"plan": {"tool": personal, "args": _student_tool_args(personal, query)},
+            return {"plan": {"tool": personal,
+                             "args": student_agent.tool_args(personal, query)},
                     "tool_name": personal}
 
     if any(k in intent for k in _KB_KEYS()):
@@ -174,90 +203,15 @@ def plan_node(state: AgentState) -> dict[str, Any]:
         return {"plan": {"tool": "run_workflow", "args": {"name": _workflow_name(query)}},
                 "tool_name": "run_workflow"}
     if any(k in intent for k in _WEB_KEYS()):
-        return {"plan": {"tool": "web_search", "args": {"query": search_query}},
+        return {"plan": {"tool": "web_search", "args": {"query": _web_query(search_query)}},
                 "tool_name": "web_search"}
 
     if ctx.actor_type == "student":
-        tool_name = _student_default_tool(intent)
+        tool_name = student_agent.default_tool(intent)
         return {"plan": {"tool": tool_name}, "tool_name": tool_name}
 
     # 教师端：意图路由与参数抠取全部下沉到 teacher_agent 能力层
     return dict(teacher_agent.plan_teacher(ctx, intent, query, term))
-
-
-# 学生端「本人数据」意图表：命中即选工具，**未命中返回 None** 继续走后面的分支。
-# 只列明确指向本人数据的问法；「推荐 / 岗位」这类留给下面的默认分支，
-# 这样「实习管理办法」仍会正确落到知识库，而不是被塞进某个数据工具。
-_STUDENT_DATA_ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    # agent-entry-v2：招考/面试/题库放最前，具体词优先于宽泛词
-    #（「招考公告」要在 my_notices 的「公告」之前被吃掉）
-    ("question_bank_lookup", ("面试题", "题库", "会问什么", "都会问", "常问",
-                              "面试问什么", "面试一般")),
-    ("my_interviews", ("面试记录", "面试历史", "面试成绩", "我面过",
-                       "模拟面试成绩", "面试了多少", "面过几场")),
-    ("exam_notices", ("招考", "公务员考试", "事业单位招聘", "国考", "省考", "报名截止")),
-    # 预测要排在成绩之前：问「预测一下我下学期的绩点」时，
-    # 「绩点」会先被成绩路由吃掉，答成历史成绩而不是预测。
-    ("my_forecast", ("预测", "下学期", "走势", "未来", "会怎样", "会不会挂")),
-    ("my_grades", ("成绩", "成绩单", "分数", "绩点", "均分", "考了多少")),
-    ("my_career_forecast", ("竞争力", "上岸", "胜算", "把握", "考公", "考研", "考编", "报考")),
-    ("my_notices", ("通知", "消息", "公告")),
-    ("competition_guide", ("竞赛", "比赛", "挑战杯")),
-    ("my_career_guide", ("规划", "怎么准备", "怎么规划", "发展方向")),
-    ("kg_major_skills", ("专业学什么", "能学到什么", "专业能学")),
-)
-
-
-def _student_data_tool(intent: str) -> str | None:
-    """学生端数据意图路由：命中返回工具名，未命中返回 None。
-
-    放在知识库分支之前调用，原因是知识库词表含「学分 / 实习 / 管理办法」等词，
-    学生问「我的成绩怎么样」时会被误判成查制度文档。
-    """
-    for name, keywords in _STUDENT_DATA_ROUTES:
-        if any(k in intent for k in keywords):
-            return name
-    return None
-
-
-def _student_tool_args(tool_name: str, query: str) -> dict[str, Any]:
-    """按工具从提问里抠参数；抠不到就留空——工具层对空参有明确语义（不猜）。"""
-    import re
-
-    args: dict[str, Any] = {}
-    if tool_name == "exam_notices":
-        # 先剥掉「招考」再匹配目标词：「招考公告」里含子串「考公」，不剥会误判成考公
-        text = query.replace("招考", "")
-        for word, code in (("考公", "civil"), ("公务员", "civil"), ("国考", "civil"),
-                           ("省考", "civil"), ("考编", "institution"),
-                           ("事业单位", "institution"), ("考研", "postgraduate"),
-                           ("研究生", "postgraduate")):
-            if word in text:
-                args["exam_type"] = code
-                break
-        quoted = re.search(r"[\"“']([^\"”']{1,30})[\"”']", query)
-        if quoted:
-            args["keyword"] = quoted.group(1)
-    elif tool_name == "question_bank_lookup":
-        quoted = re.search(r"[\"“']([^\"”']{1,30})[\"”']", query)
-        if quoted:
-            args["query"] = quoted.group(1)
-        else:
-            # 去掉「面试会问什么」这类虚词后，剩余连续汉字当检索词
-            cleaned = re.sub(r"面试|题库|一般|都会|会问|什么|哪些|有|的|吗|？|\?", "", query)
-            cleaned = cleaned.strip(" 　，。")
-            if len(cleaned) >= 2:
-                args["query"] = cleaned[:20]
-    return args
-
-
-def _student_default_tool(intent: str) -> str:
-    """学生端兜底路由（知识库 / 联网 / 工作流都没命中时）。"""
-    if any(k in intent for k in ("推荐", "岗位", "工作")):
-        return "my_recommendations"
-    if any(k in intent for k in ("技能", "需要学", "要学什么")):
-        return "kg_skill_jobs"
-    return "my_warning"
 
 
 def _extract_class_name(query: str) -> str | None:
@@ -352,6 +306,9 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
         return tools.career_gap(ctx, a.get("class_name", ""), a.get("term", ""))
     if name == "student_grades":
         return tools.student_grades(ctx, a.get("student_no", ""))
+    if name == "class_grades_rank":
+        return tools.class_grades_rank(ctx, a.get("class_name", ""),
+                                       a.get("term") or None)
     if name == "student_forecast":
         return tools.student_forecast(ctx, a.get("student_no", ""))
     if name == "my_grades":
@@ -381,6 +338,14 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
         return tools.kg_skill_jobs(ctx, a.get("skill", ""), limit=int(a.get("limit") or 10))
     if name == "kg_path":
         return tools.kg_path(ctx, int(a.get("job_id") or 0), str(a.get("major") or ""))
+    if name == "exam_positions":
+        return tools.exam_positions(ctx, keyword=str(a.get("keyword") or ""),
+                                    dept=str(a.get("dept") or ""),
+                                    education=str(a.get("education") or ""),
+                                    political=str(a.get("political") or ""),
+                                    place=str(a.get("place") or ""),
+                                    year=int(a.get("year") or 0) or None,
+                                    limit=int(a.get("limit") or 8))
     if name == "exam_notices":
         return tools.exam_notices(ctx, keyword=str(a.get("keyword") or ""),
                                   exam_type=str(a.get("exam_type") or ""),
@@ -436,7 +401,41 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
             return f"这个数据查不了：{result.get('error')}"
         return f"该数据你没有访问权限：{result.get('error')}"
     parts: list[str] = []
-    if "classes" in result:
+    # 成绩排名结果同时带 classes / headcount，形状与 class_overview 撞车：
+    # 不先认出来，下面两个分支会把它当成班级概览，输出「None 个班 / 平均绩点 None」。
+    is_rank = "class_rank_in_major" in result and isinstance(result.get("students"), list)
+    if is_rank:
+        scope = "任教班级" if result.get("scope") == "assigned" else "本租户全部班级"
+        mine_class = str(result.get("class_name") or "")
+        cur_class = next((c for c in (result.get("classes") or [])
+                          if str(c.get("class_name")) == mine_class), None)
+        if cur_class:
+            parts.append(
+                f"班级 {mine_class} 在 {result.get('term') or '当前学期'} 学期："
+                f"{cur_class.get('graded_cnt')} 人有成绩（在册 {result.get('headcount')} 人），"
+                f"个人加权均分 {cur_class.get('weighted_avg')}，"
+                f"平均分 {cur_class.get('avg_score')}，"
+                f"最高 {cur_class.get('max_weighted_avg')} / "
+                f"最低 {cur_class.get('min_weighted_avg')}。"
+            )
+        for row in (result.get("class_rank_in_major") or []):
+            if str(row.get("class_name")) != mine_class:
+                continue
+            parts.append(
+                f"同专业（{row.get('major')}）班级排名：第 {row.get('rank')} / "
+                f"{row.get('rank_total')}（比较范围：{scope}）。"
+            )
+        students = result.get("students") or []
+        if students:
+            parts.append("个人排名（按加权均分）：" + "；".join(
+                f"{s.get('name')} {s.get('weighted_avg')}，"
+                f"班内第 {s.get('class_rank')}/{s.get('class_rank_total')}，"
+                f"同专业第 {s.get('major_rank')}/{s.get('major_rank_total')}"
+                for s in students[:3]) + "。")
+            if len(students) > 3:
+                parts.append(f"其余 {len(students) - 3} 人未逐条列出。")
+        parts.append("名次并列后跳号；无成绩者不参与排名。")
+    if "classes" in result and not is_rank:
         parts.append(
             f"本租户共 {result.get('class_cnt')} 个班、{result.get('student_cnt')} 名学生。"
         )
@@ -449,7 +448,7 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
         parts.append("各班人数：" + "、".join(
             f"{row.get('class_name')} {row.get('headcount')} 人"
             for row in (result.get("classes") or [])) + "。")
-    if "headcount" in result:
+    if "headcount" in result and not is_rank:
         parts.append(
             f"班级 {result.get('class_name')} 在 {result.get('term')} 学期共 "
             f"{result.get('headcount')} 人有成绩记录，平均绩点写实值 {result.get('avg_gpa')}，"
@@ -490,7 +489,9 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"差距维度 {gap.get('dimension')}：岗位侧 {gap.get('demand_rate')}，"
                 f"班级侧 {gap.get('class_rate')}，缺口 {gap.get('shortfall')}。"
             )
-    if "dimensions" in result:
+    # 画像的 dimensions 是 {维度: 分数}；报考分析的 dimensions 是列表，由 composite 分支处理。
+    # 不区分类型会直接 dict(list) 抛错，整轮草稿失败。
+    if "dimensions" in result and isinstance(result.get("dimensions"), Mapping):
         dims = dict(result.get("dimensions") or {})
         parts.append("四维得分：" + "、".join(
             f"{k} {v}" for k, v in dims.items()) + "。")
@@ -548,6 +549,22 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
             )
         if not result.get("items"):
             parts.append("没有命中任何公告——库里实抓的就这些，不拿往年凑数。")
+    if "position_total" in result:
+        parts.append(
+            f"{result.get('year') or '最新年度'} 国考职位共命中 "
+            f"{result.get('position_total')} 个，"
+            f"招录 {result.get('total_headcount')} 人。"
+        )
+        for p in (result.get("positions") or [])[:3]:
+            parts.append(
+                f"{p.get('dept_name') or '部门未标注'}"
+                + (f"·{p.get('bureau')}" if p.get("bureau") else "")
+                + f"：{p.get('position_name')}，招 {p.get('headcount')} 人，"
+                f"学历 {p.get('education') or '未标注'}，"
+                f"工作地点 {p.get('work_place') or '未标注'}。"
+            )
+        if not result.get("positions"):
+            parts.append(str(result.get("note") or "没有命中职位。"))
     if "bank_total" in result:
         parts.append(f"题库共 {result.get('bank_total')} 题，命中 {len(result.get('hits') or [])} 条。")
         for h in (result.get("hits") or [])[:3]:
@@ -610,6 +627,22 @@ _RAG_SYSTEM = (
     "3. 原文里没有的数字、日期、比例一律不得出现；不得换算（30 天不能写成一个月）。\n"
     "4. 原文没说的内容，直接回答「知识库里没有相关规定」，不要推测。\n"
     "5. 中文口语，200 字以内，不要写 Markdown 标题。"
+)
+
+# 联网专用：与知识库共用引用规矩，但「查不到」的说法必须区分开。
+# 之前联网也走 _RAG_SYSTEM，第 4 条直接把「网上没查到」说成了「知识库里没有」，
+# 用户会以为查的是校内知识库——两个来源混淆，溯源就废了。
+_WEB_SYSTEM = (
+    "你是「启航」的联网问答助手，只能依据【检索到的网页原文】回答，禁止使用任何模型记忆。\n"
+    "硬性要求：\n"
+    "1. 每条结论后面必须标引用编号，如 [1]；编号只能来自本次检索结果。\n"
+    "2. 引用网页内容时用「」逐字摘抄，一个字都不能改。\n"
+    "3. 原文里没有的数字、日期、比例一律不得出现；不得换算。\n"
+    "4. **严禁说「知识库里没有相关规定」**：本次查的是互联网，不是校内知识库；\n"
+    "   查不到就说「这次在网上没查到」，并说明查的是哪个检索词。\n"
+    "5. 结果里若混着招聘平台首页、导航页这类没有实质内容的页面，要说明"
+    "「查到的多是平台首页，不是具体公告」，别拿它当结论。\n"
+    "6. 中文口语，200 字以内，不要写 Markdown 标题。"
 )
 
 
@@ -712,7 +745,9 @@ def _llm_external_draft(state: AgentState, result: Mapping[str, Any],
                  + _evidence_lines(result, tool))
     if feedback:
         parts.append(f"【上一稿被退回的原因，务必逐条改正】\n{feedback}")
-    return llm_client.generate_reply(ctx.actor_type, system_prompt=_RAG_SYSTEM,
+    # 联网与知识库各用各的提示词：区别在于「查不到」时该怎么说（见 _WEB_SYSTEM）
+    system = _WEB_SYSTEM if tool == "web_search" else _RAG_SYSTEM
+    return llm_client.generate_reply(ctx.actor_type, system_prompt=system,
                                      user_prompt="\n\n".join(parts), tag="rag",
                                      on_token=on_token)
 
@@ -863,7 +898,14 @@ def draft_node(state: AgentState,
         mode = "workflow"
     elif str(state.get("tool_name") or "") in _EXTERNAL_TOOLS:
         # 知识库/联网：模型先写，引用校验不过就退回「原文直引」模板
-        if attempts >= 3 or not _llm_draft_enabled():
+        if str(state.get("tool_name") or "") == "web_search" and (
+                not result.get("configured") or result.get("error")
+                or not (result.get("results") or [])):
+            # 联网没结果（未配密钥 / 请求失败 / 空返回）时不让模型润色：
+            # RAG 规矩是「原文没说就答知识库里没有」，会把「没联网」说成
+            # 「知识库里没有」，用户以为搜过了，其实是没网——必须模板直说原因
+            draft = _external_draft(state, result)
+        elif attempts >= 3 or not _llm_draft_enabled():
             draft = _external_draft(state, result)
         else:
             draft = (_llm_external_draft(state, result, feedback, on_token)
@@ -1022,6 +1064,7 @@ def run_chat(
     tool_result: Mapping[str, Any] | None = None,
     history: Sequence[Mapping[str, str]] | None = None,
     last_tool: str | None = None,
+    session_id: int | None = None,
 ) -> dict[str, Any]:
     """跑一次对话：返回 answer / trace_id / degraded / verdict / attempts。
 
@@ -1032,6 +1075,33 @@ def run_chat(
     state = _initial_state(ctx, query, term, history, last_tool, trace_id)
     if draft_fn is not None:
         state["draft_fn"] = draft_fn
+
+    # 多意图/任务型问法走自主大脑（规划→多工具→观察→汇总），失败自动回退旧管线
+    if tool_result is None and draft_fn is None and _is_brain_candidate(query, history):
+        from agents import brain
+        brain_result = brain.run_brain(ctx, query, term=term,
+                                       history=state.get("history"),
+                                       session_id=session_id)
+        if brain_result is not None:
+            audit_event(
+                actor_type=ctx.actor_type,
+                actor_id=ctx.student_id or ctx.teacher_id or 0,
+                action="agent.chat",
+                target=str(brain_result.get("trace_id") or trace_id),
+                detail={
+                    "query": str(query)[:120], "term": term,
+                    "tool": brain_result.get("tool_name"),
+                    "planner": "brain",
+                    "steps": len(brain_result.get("steps") or []),
+                    "rounds": brain_result.get("rounds"),
+                    "passed": bool((brain_result.get("verdict") or {}).get("passed")),
+                    "degraded": bool(brain_result.get("degraded")),
+                    "brain_version": brain_result.get("brain_version"),
+                    "graph_version": GRAPH_VERSION,
+                    "critic_version": CRITIC_VERSION,
+                },
+            )
+            return brain_result
 
     if tool_result is not None:
         # 离线模式：直接进 draft → critic（跳过取数）
@@ -1102,6 +1172,7 @@ def run_chat_stream(
     tool_result: Mapping[str, Any] | None = None,
     history: Sequence[Mapping[str, str]] | None = None,
     last_tool: str | None = None,
+    session_id: int | None = None,
 ) -> Iterator[dict[str, Any]]:
     """流式跑一次对话：逐事件产出 status / replace / delta / done / error。
 
@@ -1121,6 +1192,78 @@ def run_chat_stream(
         state["draft_fn"] = draft_fn
 
     try:
+        # 多意图/任务型问法：先走自主大脑；大脑拿不到计划时继续旧管线
+        if tool_result is None and draft_fn is None and _is_brain_candidate(query, history):
+            from agents import brain
+            # 大脑在工作线程里跑，进度经队列回到生成器：规划/调用/观察/反思都能实时展示
+            event_q: Queue = Queue()
+            brain_box: dict[str, Any] = {}
+
+            def _run_brain() -> None:
+                try:
+                    brain_box["result"] = brain.run_brain(
+                        ctx, query, term=term, history=state.get("history"),
+                        session_id=session_id, on_event=event_q.put)
+                except Exception as exc:     # 交给主线程统一走安全话术
+                    brain_box["error"] = exc
+                finally:
+                    event_q.put(None)
+
+            worker = Thread(target=_run_brain, daemon=True)
+            worker.start()
+            while True:
+                event = event_q.get()
+                if event is None:
+                    break
+                payload: dict[str, Any] = {
+                    "type": "status", "planner": "brain",
+                    "stage": event.get("stage", ""),
+                    "text": event.get("text", ""),
+                }
+                for key in ("tool", "ok", "steps"):
+                    if key in event:
+                        payload[key] = event[key]
+                yield payload
+            worker.join()
+            if "error" in brain_box:
+                raise brain_box["error"]
+            brain_result = brain_box.get("result")
+            if brain_result is not None:
+                yield {"type": "replace", "text": brain_result["answer"], "attempt": 1}
+                audit_event(
+                    actor_type=ctx.actor_type,
+                    actor_id=ctx.student_id or ctx.teacher_id or 0,
+                    action="agent.chat",
+                    target=str(brain_result.get("trace_id") or trace_id),
+                    detail={
+                        "query": str(query)[:120], "term": term,
+                        "tool": brain_result.get("tool_name"), "stream": True,
+                        "planner": "brain",
+                        "steps": len(brain_result.get("steps") or []),
+                        "rounds": brain_result.get("rounds"),
+                        "passed": bool((brain_result.get("verdict") or {}).get("passed")),
+                        "degraded": bool(brain_result.get("degraded")),
+                        "brain_version": brain_result.get("brain_version"),
+                        "graph_version": GRAPH_VERSION,
+                        "critic_version": CRITIC_VERSION,
+                    },
+                )
+                yield {
+                    "type": "done",
+                    "answer": brain_result["answer"],
+                    "trace_id": brain_result["trace_id"],
+                    "term": term,
+                    "degraded": bool(brain_result.get("degraded")),
+                    "attempts": int(brain_result.get("attempts") or 0),
+                    "tool": str(brain_result.get("tool_name") or "brain"),
+                    "citations": brain_result.get("citations") or [],
+                    "suggested_followups": brain_result.get("suggested_followups") or [],
+                    "steps": brain_result.get("steps") or [],
+                    "planner": "brain",
+                    "agent_mode": "brain",
+                }
+                return
+
         if tool_result is not None:
             # 离线模式：跳过 plan/tool（测试与演示注入用）
             state["tool_result"] = dict(tool_result)

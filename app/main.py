@@ -9,6 +9,7 @@ import time
 import uuid
 
 import pymysql
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -42,6 +43,12 @@ from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
 
 APP_TITLE = "启航 · 学业预警与职业发展助手 API"
 APP_VERSION = "1.0.0"
+
+# .env → os.environ：get_settings 走 pydantic，只把值填进自己的字段，
+# 不会写回 os.environ；而 engine.web_search 这类适配层是直接读 os.getenv 的
+# （联网搜索密钥就挂在环境变量上）。不显式加载一次，.env 里配好的联网密钥
+# 在服务进程里根本读不到——表现是「明明配了 key，智能体却说没有联网能力」。
+load_dotenv()
 
 
 def _check_mysql() -> str:
