@@ -1,84 +1,40 @@
 <template>
-  <div class="shell" :class="{ 'shell-mobile': isMobile }">
-    <!-- 移动端抽屉遮罩：点击即收起，禁止在手机上常驻展开侧栏 -->
-    <div v-if="isMobile && drawer" class="scrim" @click="drawer = false" />
-
-    <aside
-      class="sidebar"
-      :class="{ 'is-open': drawer, 'is-collapsed': collapsed && !isMobile }"
-    >
-      <!-- 1) 品牌区 -->
-      <div class="sidebar-brand">
-        <span class="brand-mark">启</span>
-        <div v-if="!collapsedOnly" class="brand-text">
-          <div class="brand-title">启航 · 生涯与岗位匹配</div>
-          <div class="brand-sub">确定性引擎算数</div>
-        </div>
-      </div>
-
-      <!-- 2) 主导航（内容溢出可滚动） -->
-      <nav class="sidebar-nav" aria-label="主导航">
-        <p v-if="!collapsedOnly" class="nav-group">工作区</p>
-        <router-link
-          v-for="item in menus"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ 'is-active': isActive(item.path) }"
-          :title="collapsedOnly ? item.label : ''"
-          @click="drawer = false"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path :d="ICONS[item.icon]" />
-          </svg>
-          <span v-if="!collapsedOnly" class="nav-text">
-            <span class="nav-label">{{ item.label }}</span>
-            <span class="nav-hint">{{ item.hint }}</span>
+  <div class="shell">
+    <!-- ============ 顶栏导航（参考讯飞星辰 MaaS：冷白 + 紫蓝、顶栏 + 全宽内容） ============ -->
+    <header class="topnav" :class="{ 'is-scrolled': scrolled }">
+      <div class="topnav-inner">
+        <router-link class="brand" to="/" aria-label="启航首页">
+          <span class="brand-mark">启</span>
+          <span class="brand-text">
+            <span class="brand-title">启航</span>
+            <span class="brand-sub">生涯与岗位匹配</span>
           </span>
         </router-link>
-      </nav>
 
-      <!-- 3) 次要操作 + 4) 用户信息 -->
-      <div class="sidebar-foot">
-        <button class="side-btn" type="button" @click="toggleCollapse">
-          <span class="side-btn-icon">{{ collapsedOnly ? '»' : '«' }}</span>
-          <span v-if="!collapsedOnly" class="side-btn-text">收起侧边栏</span>
-        </button>
-        <div class="user-card">
-          <span class="user-avatar">{{ role === 'teacher' ? '教' : '学' }}</span>
-          <div v-if="!collapsedOnly" class="user-meta">
-            <div class="user-name">{{ identityText }}</div>
-            <div class="user-role">{{ role === 'teacher' ? '教师账号' : '学生账号' }}</div>
-          </div>
-          <button v-if="!collapsedOnly" class="logout-btn" type="button" @click="logout">退出</button>
-        </div>
-      </div>
-    </aside>
+        <!-- 桌面端：横向导航 pill；1024px 以下收起，改由汉堡打开抽屉 -->
+        <nav v-if="!isMobile" class="nav" aria-label="主导航">
+          <router-link
+            v-for="item in menus"
+            :key="item.path"
+            :to="item.path"
+            class="nav-pill"
+            :class="{ 'is-active': isActive(item.path) }"
+            :title="item.hint"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path :d="ICONS[item.icon]" />
+            </svg>
+            <span class="nav-label">{{ item.label }}</span>
+          </router-link>
+        </nav>
 
-    <div class="content" :style="{ marginLeft: contentMargin }">
-      <header class="topbar">
-        <button
-          v-if="isMobile"
-          class="icon-btn"
-          type="button"
-          aria-label="打开导航"
-          @click="drawer = true"
-        >
-          <span class="hamburger" />
-        </button>
-        <div class="topbar-title">
-          <h1 class="page-title">{{ currentLabel }}</h1>
-          <p class="page-sub">{{ currentHint }}</p>
-        </div>
-
-        <!-- 运维细节收进状态点：正常时只显示一个绿点，出问题才展开看详情 -->
-        <div class="pulse">
+        <div class="nav-right">
+          <!-- 运维细节收进状态点：正常时只显示一个绿点，出问题才展开看详情 -->
           <el-popover placement="bottom-end" :width="250" trigger="click">
             <template #reference>
-              <button class="ghost-btn status-btn" type="button">
+              <button class="status-btn" type="button" :title="statusText">
                 <i class="dot" :class="overallDot"></i>
-                <span>{{ statusText }}</span>
-                <i v-if="overallDot !== 'dot-ok'" class="dot inline-dot" :class="overallDot"></i>
+                <span class="status-text">{{ statusText }}</span>
               </button>
             </template>
             <div class="health-pop">
@@ -91,42 +47,112 @@
               </button>
             </div>
           </el-popover>
-        </div>
 
-        <div class="who">
-          <span class="who-clock">{{ timeText }}</span>
-        </div>
-      </header>
+          <span class="clock">{{ timeText }}</span>
 
-      <main class="page-main">
-        <!-- 本页 AI 助手条：每个板块都有专属问法，点击即让智能体带着问题作答 -->
-        <div v-if="aiChips.length" class="ai-strip">
-          <span class="ai-strip-label">
-            <span class="ai-strip-dot">AI</span>智能助手 · 本页可以直接问
-          </span>
+          <!-- 用户区：头像 + 身份，点开才出现账号信息与退出 -->
+          <el-popover placement="bottom-end" :width="222" trigger="click">
+            <template #reference>
+              <button class="user-btn" type="button" :title="identityText">
+                <span class="user-avatar">{{ role === 'teacher' ? '教' : '学' }}</span>
+                <span class="user-name">{{ identityText }}</span>
+              </button>
+            </template>
+            <div class="user-pop">
+              <p class="user-pop-name">{{ identityText }}</p>
+              <p class="user-pop-role">{{ role === 'teacher' ? '教师账号' : '学生账号' }}</p>
+              <button class="logout-btn" type="button" @click="logout">退出登录</button>
+            </div>
+          </el-popover>
+
           <button
-            v-for="c in aiChips"
-            :key="c.q"
-            class="ai-chip"
+            v-if="isMobile"
+            class="icon-btn"
             type="button"
-            :title="'让 AI 回答：' + c.q"
-            @click="askAI(c.q)"
+            aria-label="打开导航"
+            @click="drawer = true"
           >
-            {{ c.q }}
-          </button>
-          <button class="ai-more" type="button" @click="askAI()">
-            更多问题<template v-if="aiChips.length">…</template>
+            <span class="hamburger" />
           </button>
         </div>
-        <router-view v-slot="{ Component }">
-          <transition name="page-fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </main>
+      </div>
+    </header>
+
+    <!-- 本页 AI 助手条：每个板块都有专属问法，点击即让智能体带着问题作答 -->
+    <div v-if="aiChips.length" class="ai-strip">
+      <div class="ai-strip-inner">
+        <span class="ai-strip-label">
+          <span class="ai-strip-dot">AI</span>本页可以直接问
+        </span>
+        <button
+          v-for="c in aiChips"
+          :key="c.q"
+          class="ai-chip"
+          type="button"
+          :title="'让 AI 回答：' + c.q"
+          @click="askAI(c.q)"
+        >
+          {{ c.q }}
+        </button>
+        <button class="ai-more" type="button" @click="askAI()">更多问题…</button>
+      </div>
     </div>
 
-    <!-- 悬浮助手：右下角「摸鱼」形象按钮 → 右侧抽屉，不占侧栏导航位 -->
+    <main class="page-main">
+      <div class="page-head">
+        <h1 class="page-title">{{ currentLabel }}</h1>
+        <p class="page-sub">{{ currentHint }}</p>
+      </div>
+      <router-view v-slot="{ Component }">
+        <transition name="page-fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
+
+    <!-- 移动端导航抽屉：不保留常驻侧栏 -->
+    <template v-if="isMobile">
+      <div v-if="drawer" class="scrim" @click="drawer = false" />
+      <aside class="nav-drawer" :class="{ 'is-open': drawer }" aria-label="主导航">
+        <div class="drawer-brand">
+          <span class="brand-mark">启</span>
+          <div class="brand-text">
+            <span class="brand-title">启航</span>
+            <span class="brand-sub">生涯与岗位匹配</span>
+          </div>
+        </div>
+        <nav class="drawer-nav">
+          <router-link
+            v-for="item in menus"
+            :key="item.path"
+            :to="item.path"
+            class="drawer-item"
+            :class="{ 'is-active': isActive(item.path) }"
+            @click="drawer = false"
+          >
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path :d="ICONS[item.icon]" />
+            </svg>
+            <span class="drawer-text">
+              <span class="drawer-label">{{ item.label }}</span>
+              <span class="drawer-hint">{{ item.hint }}</span>
+            </span>
+          </router-link>
+        </nav>
+        <div class="drawer-foot">
+          <div class="user-card">
+            <span class="user-avatar">{{ role === 'teacher' ? '教' : '学' }}</span>
+            <div class="user-meta">
+              <div class="user-name">{{ identityText }}</div>
+              <div class="user-role">{{ role === 'teacher' ? '教师账号' : '学生账号' }}</div>
+            </div>
+            <button class="logout-btn" type="button" @click="logout">退出</button>
+          </div>
+        </div>
+      </aside>
+    </template>
+
+    <!-- 悬浮助手：右下角「摸鱼」形象按钮 → 右侧抽屉 -->
     <button
       class="assistant-fab"
       type="button"
@@ -176,9 +202,6 @@ const ICONS = {
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'
 }
 
-// 侧栏宽度：规范上限 280px，统一 256px；折叠态 64px
-const SIDEBAR_W = 256
-const SIDEBAR_COLLAPSED_W = 64
 const MOBILE_QUERY = '(max-width: 1023px)'
 
 const { health, refresh } = useSystemStatus()
@@ -187,7 +210,7 @@ const router = useRouter()
 const route = useRoute()
 const role = currentRole()
 
-// 智能助手改为右下角悬浮入口（抽屉），不再占用侧栏导航位
+// 智能助手是右下角悬浮入口（抽屉），不占导航位
 const MENUS = {
   teacher: [
     { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
@@ -211,7 +234,6 @@ const MENUS = {
 }
 
 const menus = computed(() => MENUS[role] || MENUS.student)
-const collapsed = ref(false)
 const drawer = ref(false)
 const chatOpen = ref(false)
 const chatSeed = ref('')
@@ -228,13 +250,15 @@ const PAGE_AI = {
     { q: 'AI2301 的预警阈值是多少', note: '当前班级的预警判定标准' }
   ],
   'teacher-grades': [
-    { q: 'AI2301 上学期红色预警有哪些人', note: '按学期 + 等级过滤的预警名单' }
+    { q: 'AI2301 上学期红色预警有哪些人', note: '按学期 + 等级过滤的预警名单' },
+    { q: 'AI2301 全班的成绩排名怎么样', note: '班级与同专业名次，引擎按加权均分实算' }
   ],
   'teacher-jobs': [
     { q: 'AI2301 和岗位要求的差距在哪', note: '班级能力 vs 目标岗位的缺口分析' }
   ],
   'teacher-exams': [
-    { q: '联网查一下最新的公开招聘信息', note: '联网搜索，带原文链接' }
+    { q: '联网查一下最新的公开招聘信息', note: '联网搜索，带原文链接' },
+    { q: '2027 国考职位表里有哪些计算机类岗位', note: '国家公务员局职位表逐职位明细，带官方链接' }
   ],
   'teacher-approvals': [
     { q: '帮我跑一遍班级周报', note: '工作流：多步流程一键执行，结果可送审' }
@@ -256,7 +280,8 @@ const PAGE_AI = {
     { q: '帮我跑一遍求职体检', note: '工作流：简历→差距→演练一站式体检' }
   ],
   'student-exams': [
-    { q: '联网查一下最新的公开招聘信息', note: '联网搜索招考公告，带原文链接' }
+    { q: '联网查一下最新的公开招聘信息', note: '联网搜索招考公告，带原文链接' },
+    { q: '2027 国考职位表里有哪些计算机类岗位', note: '职位表实抓，含学历与专业要求' }
   ],
   'student-kg': [
     { q: '公司制度里报销的住宿标准是多少', note: '知识库检索，给文档名和页码' }
@@ -276,18 +301,13 @@ function askAI(question) {
   chatSeed.value = String(question || '').trim()
   chatOpen.value = true
 }
+
 const isMobile = ref(false)
+const scrolled = ref(false)
 let media = null
 
-const collapsedOnly = computed(() => collapsed.value && !isMobile.value)
-
-const contentMargin = computed(() => {
-  if (isMobile.value) return '0px'
-  return `${collapsed.value ? SIDEBAR_COLLAPSED_W : SIDEBAR_W}px`
-})
-
 // 取「最长匹配」而非「第一个匹配」：否则 /teacher/exams 会被 /teacher 抢先命中，
-// 顶栏标题就永远停在「班级总览」。
+// 页头就永远停在「班级总览」。
 const currentItem = computed(() => {
   const hits = menus.value.filter(
     (item) => route.path === item.path || route.path.startsWith(`${item.path}/`)
@@ -311,26 +331,19 @@ function isActive(path) {
   )
 }
 
-function toggleCollapse() {
-  if (isMobile.value) {
-    drawer.value = !drawer.value
-    return
-  }
-  collapsed.value = !collapsed.value
-  localStorage.setItem('qh_sidebar_collapsed', collapsed.value ? '1' : '0')
-}
-
 function syncViewport(event) {
   isMobile.value = event.matches
-  if (!event.matches) {
-    drawer.value = false
-  }
+  if (!event.matches) drawer.value = false
+}
+
+function onScroll() {
+  scrolled.value = window.scrollY > 4
 }
 
 const identityText = computed(() => {
   if (role === 'teacher') {
     const tenant = localStorage.getItem('qh_tenant_id')
-    return tenant ? `教师 · 租户 ${tenant}` : '教师'
+    return tenant ? `教师 ${tenant} 校` : '教师'
   }
   return localStorage.getItem('qh_student_no') || '学生'
 })
@@ -338,11 +351,6 @@ const identityText = computed(() => {
 const statusText = computed(() => {
   const map = { ok: '服务正常', degraded: '部分降级', down: '服务不可达', checking: '检测中' }
   return map[health.status] || health.status
-})
-
-const statusTag = computed(() => {
-  const map = { ok: 'tag-ok', degraded: 'tag-warn', down: 'tag-bad', checking: 'tag-idle' }
-  return map[health.status] || 'tag-idle'
 })
 
 function dotClass(state) {
@@ -368,251 +376,257 @@ onMounted(() => {
   media = window.matchMedia(MOBILE_QUERY)
   isMobile.value = media.matches
   media.addEventListener('change', syncViewport)
-  // 折叠偏好持久化（但移动端永远不展开常驻）
-  collapsed.value = localStorage.getItem('qh_sidebar_collapsed') === '1'
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
 })
 
 onBeforeUnmount(() => {
   media?.removeEventListener('change', syncViewport)
+  window.removeEventListener('scroll', onScroll)
 })
 </script>
 
 <style scoped>
 .shell {
   min-height: 100vh;
-  background: #fafafa;
+  background: transparent;
 }
 
-/* ---------- 侧边栏：fixed 定位，宽 256px（≤280px 上限） ---------- */
-.sidebar {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: 256px;
+/* ---------- 顶栏：64px，白底 82% + 毛玻璃 ---------- */
+.topnav {
+  position: sticky;
+  top: 0;
   z-index: 40;
-  display: flex;
-  flex-direction: column;
-  background: #fafafa;
-  border-right: 1px solid #e4e4e7;
-  transform: translateX(0);
-  transition: width 150ms ease, transform 150ms ease;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid #eceef7;
+  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
-.sidebar.is-collapsed {
-  width: 64px;
+.topnav.is-scrolled {
+  box-shadow: 0 6px 20px rgba(33, 40, 90, 0.06);
+  border-bottom-color: #e6e9f5;
 }
 
-.sidebar-brand {
-  height: 56px;
-  flex: 0 0 56px;
+.topnav-inner {
+  height: 100%;
+  /* 与 .page-main 同一容器宽度：左右留白 = max(24, (视口-1680)/2)；≥1800px 见文末媒体查询 */
+  width: min(1680px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 0 24px;
   display: flex;
   align-items: center;
+  gap: 18px;
+}
+
+/* 品牌：紫蓝渐变方块 + 两行字 */
+.brand {
+  display: inline-flex;
+  align-items: center;
   gap: 10px;
-  padding: 0 16px;
-  border-bottom: 1px solid #e4e4e7;
-  overflow: hidden;
+  flex: 0 0 auto;
+  text-decoration: none;
 }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 8px;
-  background: #2563eb;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 10px;
+  background:
+    radial-gradient(120% 120% at 25% 10%, rgba(255, 255, 255, 0.45), transparent 45%),
+    linear-gradient(135deg, #6366f1 0%, #5b5bd6 55%, #7c3aed 100%);
   color: #fff;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 6px 14px rgba(99, 102, 241, 0.28);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
 }
 
 .brand-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 650;
   letter-spacing: -0.01em;
-  color: #18181b;
+  color: #171a2b;
   white-space: nowrap;
 }
 
 .brand-sub {
   font-size: 11px;
-  color: #a1a1aa;
+  color: #9297ab;
   white-space: nowrap;
 }
 
-/* 主导航区：内容溢出时自身滚动，不挤压底部信息 */
-.sidebar-nav {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 12px 8px;
-  scrollbar-width: thin;
-}
-
-.nav-group {
-  margin: 0 0 6px;
-  padding: 0 8px;
-  font-size: 11px;
-  color: #a1a1aa;
-  letter-spacing: 0.04em;
-}
-
-.nav-item {
+/* 导航 pill：横向排列，不换行；极窄时自身横向滚动（无滚动条） */
+.nav {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  margin: 2px 0;
-  border-radius: 8px;
-  color: #52525b;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #5b6178;
   text-decoration: none;
-  /* 仅颜色/背景过渡，150ms，无位移波纹 */
+  white-space: nowrap;
   transition: background-color 150ms ease, color 150ms ease;
-  position: relative;
 }
 
-.nav-item:hover {
-  background: #f4f4f5;
-  color: #18181b;
+.nav-pill:hover {
+  background: #f4f4fb;
+  color: #4a4ac0;
 }
 
-/* Magnetic Icon Shift：hover 时图标轻移 2px */
-.nav-item:hover .nav-icon {
-  transform: translateX(2px);
+.nav-pill.is-active {
+  background: #efedff;
+  color: #4f46e5;
+  font-weight: 600;
 }
 
 .nav-icon {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: transform 150ms ease;
+  opacity: 0.85;
 }
 
-/* 稳定激活锚点：左侧 2px 强调线 + 浅底 + 字重提升，不做浮动动画 */
-.nav-item.is-active {
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-weight: 500;
+.nav-pill.is-active .nav-icon {
+  opacity: 1;
 }
 
-.nav-item.is-active::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 6px;
-  bottom: 6px;
-  width: 2px;
-  border-radius: 8px;
-  background: #2563eb;
-}
-
-.nav-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.nav-label {
-  font-size: 13px;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.nav-hint {
-  font-size: 11px;
-  color: #a1a1aa;
-  white-space: nowrap;
-}
-
-.sidebar-foot {
-  flex: 0 0 auto;
-  border-top: 1px solid #e4e4e7;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.side-btn {
+.nav-right {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #52525b;
-  font-size: 13px;
+  gap: 10px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid #eceef7;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b6178;
+  font-size: 12px;
   font-family: inherit;
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
-.side-btn:hover {
-  background: #f4f4f5;
-  color: #18181b;
+.status-btn:hover {
+  background: #f1efff;
+  color: #4a4ac0;
 }
 
-.side-btn-icon {
-  width: 18px;
-  text-align: center;
-  font-size: 13px;
+.clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #9297ab;
+  white-space: nowrap;
 }
 
-.user-card {
-  display: flex;
+.user-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: #ffffff;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
+  gap: 8px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid #eceef7;
+  border-radius: 999px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: #171a2b;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.user-btn:hover {
+  background: #f7f7fd;
+  border-color: #e0e3f2;
 }
 
 .user-avatar {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
   border-radius: 8px;
-  background: #f4f4f5;
-  color: #52525b;
-  font-size: 12px;
+  background: linear-gradient(135deg, #eef0ff, #f3e8ff);
+  color: #4f46e5;
+  font-size: 11.5px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.user-meta {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
 .user-name {
-  font-size: 12px;
-  color: #18181b;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.user-role {
-  font-size: 11px;
-  color: #a1a1aa;
+.user-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-pop-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #171a2b;
+}
+
+.user-pop-role {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #9297ab;
 }
 
 .logout-btn {
-  flex: 0 0 auto;
   border: 0;
   border-radius: 8px;
-  padding: 4px 10px;
-  background: #f4f4f5;
-  color: #52525b;
-  font-size: 12px;
+  padding: 6px 10px;
+  background: #f4f3ff;
+  color: #5b5bd6;
+  font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease;
@@ -623,51 +637,12 @@ onBeforeUnmount(() => {
   color: #b91c1c;
 }
 
-/* ---------- 主内容区：左边距对齐侧栏宽度，自身滚动上下文 ---------- */
-.content {
-  min-height: 100vh;
-  transition: margin-left 150ms ease;
-  min-width: 0;
-}
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e4e7;
-}
-
-.topbar-title {
-  min-width: 0;
-  flex: 0 0 auto;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: #18181b;
-}
-
-.page-sub {
-  margin: 0;
-  font-size: 11px;
-  color: #a1a1aa;
-}
-
 .icon-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
-  background: #ffffff;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #eceef7;
+  border-radius: 10px;
+  background: #fff;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -676,7 +651,7 @@ onBeforeUnmount(() => {
 }
 
 .icon-btn:hover {
-  background: #f4f4f5;
+  background: #f1efff;
 }
 
 .hamburger,
@@ -685,7 +660,7 @@ onBeforeUnmount(() => {
   display: block;
   width: 16px;
   height: 1.5px;
-  background: #52525b;
+  background: #5b6178;
   content: '';
   position: relative;
 }
@@ -700,36 +675,12 @@ onBeforeUnmount(() => {
   top: 5px;
 }
 
-.pulse {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-  font-size: 12px;
-  color: #52525b;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.status-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.inline-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
 .health-pop {
   display: flex;
   flex-direction: column;
   gap: 8px;
   font-size: 12px;
-  color: #52525b;
+  color: #5b6178;
 }
 
 .hp-row {
@@ -740,11 +691,11 @@ onBeforeUnmount(() => {
 
 .hp-row span {
   width: 60px;
-  color: #a1a1aa;
+  color: #9297ab;
 }
 
 .hp-row b {
-  color: #18181b;
+  color: #171a2b;
   font-weight: 500;
   margin-left: auto;
 }
@@ -754,63 +705,21 @@ onBeforeUnmount(() => {
   align-self: flex-end;
 }
 
-.pulse-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.pulse-item b {
-  color: #18181b;
-  font-weight: 500;
-}
-
-.pulse-time {
-  color: #a1a1aa;
-}
-
-.pulse-tag {
-  padding: 1px 8px;
-  border-radius: 8px;
-  font-size: 11px;
-  border: 1px solid #e4e4e7;
-  background: #fafafa;
-  color: #52525b;
-}
-
-.tag-ok {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
-}
-
-.tag-warn {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #b45309;
-}
-
-.tag-bad {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
 .ghost-btn {
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #52525b;
+  border: 1px solid #eceef7;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b6178;
   font-size: 12px;
   font-family: inherit;
-  padding: 4px 10px;
+  padding: 5px 12px;
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
 .ghost-btn:hover:not(:disabled) {
-  background: #f4f4f5;
-  color: #18181b;
+  background: #f1efff;
+  color: #4a4ac0;
 }
 
 .ghost-btn:disabled {
@@ -818,26 +727,24 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 
-.who-clock {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: #52525b;
-}
-
-.page-main {
-  padding: 0;
-}
-
-/* ---------- 本页 AI 助手条：每个板块的专属问法入口 ---------- */
+/* ---------- 本页 AI 助手条：全宽浅紫渐变底，内容与页面同宽 ---------- */
 .ai-strip {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.09), rgba(124, 58, 237, 0.05) 55%, rgba(255, 255, 255, 0));
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.ai-strip-inner {
+  /* 与 .page-main 同宽同偏移，再各留 24px —— 这样 AI 问法条第一枚 chip、
+     页面标题、第一张卡片的左边缘落在同一条竖线上。
+     不用 100vw 参与计算：竖向滚动条会让 100vw 比 clientWidth 多 ~15px，
+     1920 下会偏 7~8px。 */
+  width: min(1680px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 9px 24px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 24px;
-  margin-bottom: 4px;
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.07), rgba(14, 165, 233, 0.05) 60%, transparent);
-  border-bottom: 1px solid rgba(99, 102, 241, 0.14);
 }
 
 .ai-strip-label {
@@ -845,7 +752,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 650;
   color: #4f46e5;
   white-space: nowrap;
 }
@@ -865,22 +772,25 @@ onBeforeUnmount(() => {
 }
 
 .ai-chip {
-  border: 1px solid rgba(99, 102, 241, 0.32);
-  background: rgba(255, 255, 255, 0.72);
-  color: #3730a3;
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  background: rgba(255, 255, 255, 0.86);
+  color: #4338ca;
   border-radius: 999px;
-  padding: 4px 12px;
+  padding: 5px 12px;
   font-size: 12.5px;
+  font-family: inherit;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.06);
 }
 
 .ai-chip:hover {
-  background: #4f46e5;
-  border-color: #4f46e5;
+  background: #5b5bd6;
+  border-color: #5b5bd6;
   color: #fff;
   transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(91, 91, 214, 0.24);
 }
 
 .ai-more {
@@ -888,6 +798,7 @@ onBeforeUnmount(() => {
   background: none;
   color: #6366f1;
   font-size: 12.5px;
+  font-family: inherit;
   cursor: pointer;
   padding: 4px 6px;
   white-space: nowrap;
@@ -897,12 +808,46 @@ onBeforeUnmount(() => {
   text-decoration: underline;
 }
 
+/* ---------- 内容区：与顶栏同容器（1680px 封顶，≥1800px 再放宽），页面自带 24px 内边距 ---------- */
+.page-main {
+  width: min(1680px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 0;
+}
+
+.page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 18px 24px 0;
+  min-width: 0;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: #171a2b;
+  white-space: nowrap;
+}
+
+.page-sub {
+  margin: 0;
+  font-size: 12px;
+  color: #9297ab;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dot {
   width: 7px;
   height: 7px;
   border-radius: 8px;
   display: inline-block;
   background: #d4d4d8;
+  flex: 0 0 7px;
 }
 
 .dot-ok {
@@ -917,12 +862,120 @@ onBeforeUnmount(() => {
   background: #dc2626;
 }
 
-/* ---------- 移动端：抽屉 + 汉堡 + 遮罩，主区占满宽度 ---------- */
+/* ---------- 移动端导航抽屉 ---------- */
 .scrim {
   position: fixed;
   inset: 0;
-  z-index: 35;
-  background: rgba(24, 24, 27, 0.45);
+  z-index: 44;
+  background: rgba(24, 24, 27, 0.42);
+}
+
+.nav-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 45;
+  width: 268px;
+  max-width: 84vw;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #eceef7;
+  box-shadow: 0 12px 40px rgba(24, 24, 27, 0.16);
+  transform: translateX(-100%);
+  transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.nav-drawer.is-open {
+  transform: translateX(0);
+}
+
+.drawer-brand {
+  height: 60px;
+  flex: 0 0 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid #eceef7;
+}
+
+.drawer-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 8px;
+}
+
+.drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  margin: 2px 0;
+  border-radius: 10px;
+  color: #5b6178;
+  text-decoration: none;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.drawer-item:hover {
+  background: #f4f4fb;
+  color: #4a4ac0;
+}
+
+.drawer-item.is-active {
+  background: #efedff;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.drawer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.drawer-label {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.drawer-hint {
+  font-size: 11px;
+  color: #9297ab;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drawer-item.is-active .drawer-hint {
+  color: #818cf8;
+}
+
+.drawer-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid #eceef7;
+  padding: 10px;
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  background: #fff;
+  border: 1px solid #eceef7;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(33, 40, 90, 0.04);
+}
+
+.user-meta {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.user-role {
+  font-size: 11px;
+  color: #9297ab;
 }
 
 /* ---------- 悬浮 AI 助手入口（右下角小人） ---------- */
@@ -930,7 +983,7 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 45;
+  z-index: 43;
   width: 92px;
   height: 92px;
   padding: 0;
@@ -967,11 +1020,12 @@ onBeforeUnmount(() => {
   right: 2px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: #2563eb;
-  color: #ffffff;
+  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  color: #fff;
   font-size: 11px;
   font-weight: 500;
-  border: 1px solid #ffffff;
+  border: 1px solid #fff;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
 }
 
 /* 抽屉本体：抹掉默认内边距，交给 ChatDrawer 自己排布 */
@@ -979,31 +1033,87 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
-@media (max-width: 1023px) {
-  .sidebar {
-    transform: translateX(-100%);
-    box-shadow: 0 8px 24px rgba(24, 24, 27, 0.08);
+/* ---------- 宽屏放宽容器：2200/2560 下左右不再空一大片。
+   三处必须同步放宽（顶栏 / AI 问法条 / 内容区），否则三者左缘会错开。
+   不用 100vw 参与计算：竖向滚动条会让 100vw 比 clientWidth 宽约 15px。 ---------- */
+@media (min-width: 1800px) {
+  .topnav-inner,
+  .ai-strip-inner,
+  .page-main {
+    width: min(1920px, calc(100% - 64px));
   }
+}
 
-  .sidebar.is-open {
-    transform: translateX(0);
-  }
-
-  .sidebar.is-collapsed {
-    width: 256px;
-  }
-
-  .topbar {
-    padding: 0 16px;
+/* ---------- 1180px 以下：顶栏收窄，先砍次要信息保「不换行」 ---------- */
+@media (max-width: 1180px) {
+  .topnav-inner {
     gap: 12px;
+    padding: 0 24px;
   }
 
-  .topbar-title {
-    flex: 1 1 auto;
-  }
-
-  .pulse {
+  .brand-sub,
+  .clock,
+  .status-text,
+  .user-name {
     display: none;
+  }
+
+  .status-btn {
+    padding: 5px 8px;
+  }
+
+  .user-btn {
+    padding: 3px;
+  }
+
+  .nav-pill {
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .topnav {
+    height: 56px;
+  }
+
+  .topnav-inner {
+    height: 56px;
+    width: 100%;
+    padding: 0 16px;
+    gap: 10px;
+  }
+
+  /* 手机上不再留 24px 容器内缩，交给页面自身的 16px 内边距 */
+  .page-main {
+    width: 100%;
+  }
+
+  /* 手机上 AI 问法条横向滑动，不折行占高 */
+  .ai-strip-inner {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 8px 16px;
+  }
+
+  .ai-strip-inner::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ai-strip-label span:last-child {
+    display: none;
+  }
+
+  .page-head {
+    flex-direction: column;
+    gap: 1px;
+    padding: 12px 16px 0;
+  }
+
+  .page-title {
+    font-size: 16px;
   }
 
   .assistant-fab {
@@ -1015,15 +1125,11 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar,
-  .content,
-  .nav-item,
-  .nav-icon,
-  .side-btn,
-  .ghost-btn,
-  .logout-btn,
-  .icon-btn,
-  .assistant-fab {
+  .nav-pill,
+  .ai-chip,
+  .assistant-fab,
+  .nav-drawer,
+  .topnav {
     transition: none;
   }
 }
