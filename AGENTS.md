@@ -94,12 +94,12 @@
 | 板块 | 学生端工具 | 教师端工具 | 数值来源 |
 |---|---|---|---|
 | 预警 | `my_warning` | `warning_list` / `class_overview` / `get_warning_thresholds` | engine.warning |
-| 成绩 | `my_grades` | `student_grades` | engine.grades |
+| 成绩 | `my_grades` | `student_grades` / `class_grades_rank` | engine.grades |
 | 学业预测 | `my_forecast` | `student_forecast` | engine.forecast |
 | 报考分析 | `my_career_forecast` | —（个人数据不出教师端） | engine.career_forecast |
 | 岗位 | `my_recommendations` / `search_jobs` / `job_facets` | `search_jobs` / `job_facets` | engine.recommend / SQL 实查 |
 | 图谱 | `kg_major_skills` / `kg_skill_jobs` / `kg_path` | 同左 | engine.kg |
-| 招考 | `exam_notices` | `exam_notices` | `招考公告` 表实查 |
+| 招考 | `exam_notices` / `exam_positions` | 同左 | `招考公告` / `国考职位` 表实查 |
 | 模拟面试 | `my_interviews` | —（只本人可见） | `面试会话` 表实查 |
 | 题库 | `question_bank_lookup` | `question_bank_lookup` | engine.question_bank（硬校验池） |
 | 规划/竞赛 | `my_career_guide` / `competition_guide` / `my_notices` | — | engine.career_guide / competition |
@@ -119,6 +119,8 @@ LangChain 工具壳与 EXECUTABLE 集合）。**三处必须同步**，新增工
 4. **草稿可直引**：每个工具的结果形状都要有 `_template_draft` 分支，
    保证 LLM 不可用时模板稿仍然可读。
 5. **测试三件套**：注册表覆盖、分发可达、路由与参数抠取，各至少一条。
+   `tests/test_agent_entry.py::test_every_dispatchable_tool_is_registered` 是**反向守卫**：
+   凡 `graph._dispatch` 认得的名字都必须在注册表里有归属，防止「能跑但注册表里没有」。
 
 ## 4. 编码约定
 

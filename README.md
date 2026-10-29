@@ -19,62 +19,119 @@
 
 ## 快速开始
 
+环境前提：Windows 11 + Python 3.12 + MySQL 8.0（已启动、`qihang` 库已建）+ Node 18+（构建前端用）。
+
+### 首次初始化
+
 ```powershell
 Set-Location D:\qihang
 & 'D:\data\python.exe' -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-copy .env.example .env      # 然后填 DEEPSEEK_API_KEY / MYSQL_PASSWORD / JWT_SECRET
-python -m agents.llm        # 验证 DeepSeek 链路
-python scripts\seed_freshman.py  # 可选：补 4 个 2026 级大一演示账号（学号即口令）
-python scripts\seed_intent_demo.py  # 可选：给非 2026 级补职业目标分布（教师端可见）
+copy .env.example .env              # 填 DEEPSEEK_API_KEY / MYSQL_PASSWORD / JWT_SECRET
+
+python scripts\init_db.py           # 建 MySQL + DuckDB 全部表（幂等，可重复执行）
+python scripts\seed_mock.py         # 灌四届学生约 1 万人（含 2026 级大一），确定性种子
+python scripts\load_jobs.py         # 清洗 5 份招聘数据灌入岗位库（职业差距/推荐依赖它）
+python scripts\seed_kb_academic.py  # 灌学业 / 职业规划类制度文档（知识库问答依赖它）
+python -m agents.llm                # 验证 DeepSeek 链路
 ```
+
+`seed_intent_demo.py` / `seed_notice.py` / `seed_competition.py` 等属于可选补充数据，按演示需要再跑。
+
+### 启动
+
+```powershell
+cd web; npm install; npm run build; cd ..     # 前端只需首次构建，产物在 web\dist
+scripts\start_qihang.bat                      # 默认 8000，只绑 127.0.0.1
+scripts\start_qihang.bat 8000 lan             # 绑 0.0.0.0，手机/平板可经局域网访问
+```
+
+启动脚本依次做：环境自检 → 前端产物检查 → 起 uvicorn → 等 `/health` 通过 → 开浏览器 → 打印演示账号。
+构建过 `web\dist` 后由 FastAPI 单服务托管，前后端同端口（默认 <http://127.0.0.1:8000>）。
+
+### 演示账号
+
+| 角色 | 账号 | 口令 | 说明 |
+|---|---|---|---|
+| 教师 | `T001` | `teacher@123` | 任教 40 个班 |
+| 学生（大四） | `AI20230001` | 与账号相同 | 2023 级 |
+| 学生（大一） | `AI20260001` | 与账号相同 | 2026 级，**学号是 8 位数字段**，不是 `AI2026001` |
+
+登录页「演示账号」区点一下即自动填入。要换别的学生，先查一个真实存在的学号：
+`SELECT 学号, 姓名, 班级 FROM 学生 WHERE 年级 = '2026' LIMIT 5;`
+
+> `scripts\seed_freshman.py` 已废弃：2026 级由 `seed_mock.py` 整届生成，运行它只会打印废弃提示。
+
+### 常用命令
+
+| 目的 | 命令 |
+|---|---|
+| 全量测试 | `.venv\Scripts\python.exe -m pytest tests -q` |
+| 端到端冒烟（12 项） | `powershell -ExecutionPolicy Bypass -File scripts\smoke_test.ps1` |
+| 考核指标报告 | `python scripts\gen_kpi_report.py --out etl\docs\KPI.md` |
+| 交付核验报告 | `python scripts\gen_verify_report.py`（输出路径写死 `etl\docs\VERIFY.md`，目录不存在会自建） |
+| 配置教师任教范围 | `python scripts\seed_teacher_scope.py --classes AI2301,RJ2301` |
 
 ## 目录结构
 
 ```
 D:\qihang\
 ├── .env.example          # 环境变量模板（复制为 .env 后填写）
-├── .gitignore            # 忽略 .venv / .env / data 产物 / logs
-├── AGENTS.md             # 项目宪法（六条铁律，P0 生成）
-├── requirements.txt      # 依赖锁版本（P1-1 生成）
-├── app\                  # FastAPI 网关：认证、路由、student_id 强制注入
-│   ├── main.py           # 入口 uvicorn app.main:app
-│   ├── auth.py           # JWT 解析 → 身份注入
-│   ├── audit.py          # 调用审计日志
-│   ├── schemas.py        # Pydantic 请求/响应模型
+├── .gitignore            # 忽略 .venv / .env / data 产物 / logs / shots
+├── AGENTS.md             # 项目宪法（六条铁律）
+├── requirements.txt      # 依赖锁版本
+├── app\                  # FastAPI 网关：认证、路由、身份强制注入
+│   ├── main.py           # 入口 uvicorn app.main:app；/auth/login、/chat
+│   ├── auth.py           # JWT 编解码 + 口令校验（bcrypt / 演示 sha256 双兼容）
+│   ├── audit.py          # 调用审计
+│   ├── schemas.py        # Pydantic 模型
 │   ├── config.py         # pydantic-settings 读取 .env
-│   ├── routers\          # teacher.py / student.py / career.py
-│   └── static\           # 静态资源
-├── web\                  # Vue 3 + Vite + ECharts 前端（P10 生成）
-│   ├── src\views\        # Login / TeacherDashboard / TeacherStudents / StudentHome / AgentChat
+│   ├── workflow_approval.py  # 工作流人工审批（挂起 / 通过 / 驳回）
+│   └── routers\          # teacher / student / career / chat / grades / job / kg /
+│                         # forecast / exam / interview / question_bank / kb / workflow
+├── web\                  # Vue 3 + Vite + ECharts（构建后由 FastAPI 单服务托管）
+│   ├── src\views\        # 11 个页面：Login / TeacherDashboard / TeacherStudents /
+│   │                     # StudentHome / GradeReport / JobList / ExamNotices / KgView /
+│   │                     # CareerForecast / StudentForecast / InterviewRoom
+│   ├── src\layout\       # ShellLayout（侧栏 + 顶栏 + 助手抽屉）
 │   ├── src\api\http.js   # axios + JWT 拦截器
-│   └── dist\             # 构建产物（由 FastAPI 托管，不入 git）
+│   └── dist\             # 构建产物（不入 git）
 ├── agents\               # LangGraph 多智能体层（DeepSeek 驱动）
-│   ├── llm.py            # ChatOpenAI(base_url=api.deepseek.com) 单例
-│   ├── graph.py          # router → teacher/student → critic 状态机
-│   ├── tools.py          # 工具层（入参只接受后端注入的 id）
-│   ├── teacher_agent.py  # 教师端 Agent
-│   ├── student_agent.py  # 学生端 Agent
+│   ├── llm.py            # DeepSeek 客户端（OpenAI 兼容接口）
+│   ├── graph.py          # plan → tool → draft → critic 状态机
+│   ├── tools.py          # 工具层（入参只接受后端注入的身份）
+│   ├── teacher_agent.py  # 教师端意图路由与参数抠取（不产生数值）
+│   ├── student_agent.py  # 学生端意图路由
+│   ├── intents.py        # 意图词表热加载（rules\agent_intents.json）
+│   ├── auto_plan.py      # 自主规划（AGENT_MODE=auto 时模型自己选工具，可切换）
+│   ├── interviewer.py    # 模拟面试官（出题 / 追问 / 点评）
 │   ├── critic.py         # 数值回查 + 驳回 + 降级模板
 │   └── career\           # 职业规划 5 节点（解析/匹配/周监控/通知/陪伴）
 ├── engine\               # 确定性引擎（大模型无权触碰数值）
-│   ├── store.py          # 存储抽象：DuckDBStore / ClickHouseStore
-│   ├── rules.py          # 预警规则与阈值（可按租户配置）
-│   ├── warning.py        # 预警引擎 V1（红/橙/黄三级）
+│   ├── warning.py        # 预警 V1（红/橙/黄 + 灰档 unknown）
+│   ├── rules.py          # 预警规则与阈值（可按租户 / 按班配置）
 │   ├── profile.py        # 四维画像（学业/行为/兴趣/能力）
-│   ├── recommend.py      # 规则打分 + 三段式理由（确定性、无随机数）
+│   ├── recommend.py      # 规则打分 + 三段式理由 + 协同过滤
+│   ├── career_guide.py   # 年级分层生涯规划（大一选目标 / 大二大三给路径）
 │   ├── career_rules.py   # 职业规划规则引擎（career-v1）
-│   └── career_guide.py   # 年级分层生涯规划（大一选目标 / 大二大三给路径）
-├── rules\                # 业务规则库（考公/考研/就业 JSON 模板）
-├── db\                   # MySQL / DuckDB / 职业规划建表脚本
-├── etl\                  # mask.py 脱敏与清洗
-├── scripts\              # init_db.py / seed_mock.py / smoke_test.ps1 / gen_verify_report.py
-├── tests\                # pytest 用例
+│   ├── career_forecast.py# 目标导向的学期路径预测
+│   ├── forecast.py       # 学业预测
+│   ├── interview.py      # 模拟面试引擎（出题池 / 评估 / 追问）
+│   ├── kg.py / kb_store.py / question_bank.py   # 知识图谱 / 知识库 / 题库
+│   ├── job_search.py     # 岗位检索
+│   ├── metrics.py        # 指标统计
+│   ├── rag.py / web_search.py / workflow.py     # 检索与工作流
+│   └── store.py          # 存储抽象（DuckDBStore；ClickHouseStore 留空）
+├── rules\                # 考公 / 考编 / 考研 / 就业模板 + 方向关键词 + 意图词表
+├── db\                   # MySQL / DuckDB / 职业规划 / 工作流审批建表脚本
+├── etl\                  # 数据接入：脱敏（mask）/ 清洗（clean_jobs）/ 抓取 / 校情参照
+│   └── docs\             # 文档（原根目录 docs\，2026-10-28 被移入，位置待确认）
+├── scripts\              # init_db / seed_* / load_jobs / smoke_test / gen_*_report / start_qihang
+├── tests\                # pytest（500+ 用例）
 ├── data\                 # analytics.duckdb 与生成数据（不入库）
-├── docs\                 # 目录说明 / VERIFY.md / KPI.md / 演示脚本 / 答辩大纲
-└── logs\                 # critic 日志与运行日志（不入库）
+└── logs\                 # critic 与运行日志（不入库）
 ```
 
 ## 架构铁律
@@ -94,7 +151,7 @@ D:\qihang\
 | 2.5 | 源表补齐：图书馆 / 一卡通 / 证书竞赛项目 / 岗位浏览（补 7 个缺失特征） | P2-3 |
 | 3 | 预警引擎 V1 | P3-1 |
 | 4 | 四维画像引擎 | P4-1 |
-| 4.5 | 口径统一与技术债清理（见 `docs\指标口径字典.md`） | P4-3 |
+| 4.5 | 口径统一与技术债清理（见 `etl\docs\指标口径字典.md`） | P4-3 |
 | 5 | tools 工具层 + LangGraph 图 | P5-1 / P5-2 |
 | 6 | FastAPI + JWT + 越权防护 | P6-1 |
 | 7 | Critic 防幻觉 | P7-1 |
@@ -105,24 +162,49 @@ D:\qihang\
 
 ## 验收指标
 
-> 以下为演示交付前需达到的验收基线，随阶段推进逐项勾选。
+> 状态依据最近一次实测（2026-10-28）：`pytest tests` 527 passed，
+> `scripts\smoke_test.ps1` PASS 12 / FAIL 0。
 
-| 编号 | 指标 | 验收标准 | 状态 |
-|---|---|---|---|
-| V1 | 学业预警 | 红橙黄三级分类，引擎输出与大模型陈述数值一致（critic 通过） | ☐ |
-| V2 | 班级画像 | 四维画像（学业/行为/兴趣/能力）可按班级聚合展示 | ☐ |
-| V3 | 职业差距分析 | 给出学生能力与目标岗位的差距项与数值 | ☐ |
-| V4 | 岗位推荐 | 基于画像的内容推荐 + 三段式理由，Top-K 可配置 | ☐ |
-| V5 | 身份安全 | student_id / teacher_id 仅来自 JWT，前端伪造无效 | ☐ |
-| V6 | 多租户隔离 | 跨租户查询在数据层被拦截，返回空 | ☐ |
-| V7 | 防幻觉 | critic 回查数值不一致即驳回，超 2 次降级为模板 | ☐ |
-| V8 | 冒烟测试 | 12 项冒烟用例全部通过，VERIFY.md 出报告 | ☐ |
-| V9 | 演示可用 | Vue 前端（构建后单服务托管）走通登录→教师看板→学生端全流程 | ☐ |
-| V10 | 文档完备 | 目录说明、答辩大纲、演示脚本齐备 | ☐ |
+| 编号 | 指标 | 验收标准 | 状态 | 依据 |
+|---|---|---|---|---|
+| V1 | 学业预警 | 红橙黄三级分类，引擎输出与大模型陈述数值一致（critic 通过） | ☑ | 冒烟 #4/#8 两端数值一致 |
+| V2 | 班级画像 | 四维画像（学业/行为/兴趣/能力）可按班级聚合展示 | ☑ | 冒烟 #3/#5；教师看板班级四维 + 学生抽屉 |
+| V3 | 职业差距分析 | 给出学生能力与目标岗位的差距项与数值 | ☑ | 冒烟 #6 `gaps=3`，接口 ~1.1s |
+| V4 | 岗位推荐 | 基于画像的内容推荐 + 三段式理由，Top-K 可配置 | ☑ | 冒烟 #10 `count=5 version=hybrid-v1` |
+| V5 | 身份安全 | student_id / teacher_id 仅来自 JWT，前端伪造无效 | ☑ | 冒烟 #9 学生查他人 403；`get_current_ctx` 单一入口 |
+| V6 | 多租户隔离 | 跨租户查询在数据层被拦截，返回空 | ☑ | `_fetch_student` / `_require_class` 均带 tenant_id |
+| V7 | 防幻觉 | critic 回查数值不一致即驳回，超 2 次降级为模板 | ☑ | `tests\test_critic.py` |
+| V8 | 冒烟测试 | 12 项冒烟用例全部通过，VERIFY.md 出报告 | ☑ | 2026-10-28 实测 PASS 12 / FAIL 0 |
+| V9 | 演示可用 | Vue 前端（构建后单服务托管）走通登录→教师看板→学生端全流程 | ☑ | 冒烟 #11/#12；登录→`/student` 实测 |
+| V10 | 文档完备 | 目录说明、答辩大纲、演示脚本齐备 | ◐ | 内容齐，但实际位于 `etl\docs\`，待迁回根 `docs\` |
 
 ## 更新记录
 
+### 2026-10-29
+- **教师端成绩单加「全班总体平均成绩 / 个人平均成绩 / 同专业班级排名 / 同专业个人排名」**：原先教师只能逐个学生查成绩单，看不到班级整体水平。新增 `engine\grades.py::build_rank`（纯函数，不连库）与接口 `GET /grades/class-rank`，前端 `GradeReport.vue` 教师端加三块：全班总体均分、同专业班级排名、班级个人均分与排名（点行即看该生成绩单）。口径按需求确认为**学分加权平均分**、**只统计教师任教范围内的班**、**按学期可切换**（默认最近学期）。
+  - 一个绕不开的数据事实：班级与专业是**多对多**（如 `JR2301` 里同时有金融学、金融科技、保险学、信用管理 4 个专业的学生），所以班级排名按 **(专业, 班级)** 聚合分别计名次，而不是按整个班算一个名次；名次并列后跳号（并列第 2 之后是第 4），无成绩者不参与排名。
+  - 班级均分定义为「该班各学生个人加权均分的算术平均」（学生等权），不选课多的学生主导；个人加权均分与成绩单**严格同口径**（同一门课取最高分 → 按学分加权），已用真实数据逐条比对，8/8 完全一致，不会出现两个页面数字打架。
+  - 权限落在数据层：`_require_class` 校验任教范围，统计 SQL 带 `tenant_id` 且只用任教班级；响应里**只回当前班的学生明细**，同专业其他班的数据只用于算名次、不随响应下发。
+  - 同步接入智能体：工具 `class_grades_rank`（仅教师端）、分发 `graph._dispatch`、auto_plan 声明、词表「排名 / 名次 / 平均成绩 / 全班平均」；词表刻意把排名排在成绩单之前，否则「班级成绩排名」里的「成绩」会被成绩单路由吃掉。新增 `tests\test_grades_rank.py`（11 项，主用例不连库）。
+  - 词表冲突回归（固化在 `tests\test_agent_entry.py`，22 种问法）：给班级排名加「平均成绩」后，**「AI20230001 的平均成绩」会被班级统计抢走**——问的是这个人、统计的却是全班。修法是 `plan_teacher` 增加「提问点名到具体学生时，班级级统计让位给成绩单 / 画像 / 预测」，但**真在问名次时不让位**：个人名次只存在于班级排名里，成绩单没有名次字段，「XX 排第几」交给成绩单会答不出来，靠 intents 新增的 `rank_markers` 名次信号词区分。另修一处老问题：`kg_skill_jobs` 原本写死「会了能做什么」，中间插个词（「会了 Python 能做什么」）就不认，掉到兜底的班级概貌。
+  - 上线自查（Edge 浏览器实测 + 问法压测）发现并修复：教师**点名班级但没点名到人**时，「成绩怎么样 / 的均分 / 平均绩点」会落到个人成绩单、再兜底成随机一个学生的成绩——问的是全班，看到的是一个人。修法是给 `plan_teacher` 加「班级信号」规则：提问里有班级名或说「这个班 / 我们班」且未点名到人时，成绩类问法一律归班级统计（10 种问法压测全对，含「点名到人归成绩单」「挂科归预警名单」的反例）。同时排名卡注明「任教范围内共 N 个班参与比较」，教师只带一个班时明确提示无法横向比较，不让用户对着只有 1 行的排名猜。
+- **联网搜索真正打通（web-v1 · 博查适配）**：原先教师问「联网查最新的公开招聘信息」，回答是「没检索到任何公开招聘信息」——实际上从来没连过网。逐层定位出三个原因，都在代码里修掉：① 项目里**没有任何 `load_dotenv`**，`.env` 只被 pydantic 的 `get_settings` 读走、从不写回 `os.environ`，而 `engine/web_search.py` 是读 `os.getenv` 的，等于服务进程里永远读不到搜索密钥 → `app/main.py` 启动时加载一次；② 补上**博查**（api.bochaai.com，国内可直连）适配层，与 serper / bing 形成三级选择；③ 联网与知识库共用 RAG 提示词，那条提示词要求「查不到就说知识库里没有相关规定」，于是「网上没查到」被说成「知识库里没有」，用户以为查的是校内知识库 → 给 `web_search` 单独写提示词 `_WEB_SYSTEM`，并规定联网无结果时**跳过模型润色**直出模板。附带一处：检索词里的「联网查一下」这类动作词要洗掉——带着「联网」去搜会被召回一堆「什么是联网搜索」的页面，洗完后引用从招聘平台首页变成真实公告与政府官网（武汉青山区政府、盐城新闻网、本溪人社局）。密钥经 `.env` 的 `BOCHA_API_KEY` 配置（注意是 `sk-` 开头的搜索服务密钥，`ak-` 开头的是别的平台的访问密钥，博查不认）。新增测试：无密钥话术断言、provider 选中博查。
+- **智能体成为统一入口（agent-entry-v1）**：原先智能体只有 9 个工具，成绩、学业预测、报考分析、知识图谱、竞赛、通知这些功能只能走页面接口，智能体根本调不到；学生端路由更只有两条（`推荐`→`my_recommendations`，其余一律 `my_warning`）。本轮把工具集扩到 **24 个**（教师 14 / 学生 16）：新增 `my_grades`、`student_grades`、`my_forecast`、`student_forecast`、`my_career_forecast`、`kg_major_skills`、`kg_skill_jobs`、`kg_path`，并把已实现却从未暴露给智能体的 `search_jobs`、`job_facets`、`competition_guide`、`my_notices`、`my_career_guide` 一并接入，学生端路由扩到 8 条。**铁律不变**：数值仍由 `engine/` 的确定性函数算出（成绩聚合走 `engine.grades`、预测走 `engine.forecast`、图谱走 `engine.kg`），智能体只做选工具、编排与表达；学生端工具集仍不含 `student_profile` / `warning_list` / `student_grades` 等查他人的工具。
+  - 一个必须排在前面的顺序问题：学生端「本人数据」意图要**先于**知识库判断，否则「我的成绩」会被知识库词表里的「学分」抢走，答出一堆管理办法；同理「预测」要排在「成绩」之前，否则「预测一下我下学期的绩点」里的「绩点」会被成绩路由吃掉。
+  - 工具分发从 11 个 `elif` 改成显式 `_dispatch` 表；`teacher_agent.plan_teacher` 给 `student_grades` / `student_forecast` 补了学号抠取（原来只有 `student_profile` 会抠，新工具会拿到空学号）。
+  - 新增 `tests\test_agent_entry.py`（14 项）：路由正确性、学号是否真的传下去、新工具名能否被分发、学生端无越权工具、`my_grades` 只用 `ctx.student_id`。
+- 知识库换成「学业职业规划」类（原来灌的是报销 / 请假 / 采购等企业制度，与项目主题不符、演示容易被问住）：新增 `scripts\seed_kb_academic.py`，走 `/kb/docs/text` 灌 6 份制度——学业预警帮扶、学籍与学分、实习实践、就业指导、职业资格证书认定、奖助学金评定，幂等可重复跑；加 `--purge-legacy` 会删掉早期的 4 份企业制度文档（不带则只增不删）。
+- `rules\agent_intents.json` 的 `kb` 节补 23 个学业职业词（学籍 / 学分 / 培养方案 / 学位 / 重修 / 补考 / 实习 / 管理办法 / 实施细则 / 职业规划 / 资格证书 等），让「学业预警管理办法里红色预警怎么定」这类问法能路由到 `kb_search`；**刻意避开** `考公` / `考研` / `考编` / `就业意向`（已被 `overview` 占用）与 `预警` / `挂科` / `名单`（已被 `warning_list` 占用），否则教师查班级数据会被误判到知识库。
+- Web 前端打磨：① 新增 `web\src\views\NotFound.vue` 404 兜底——顶层与 `/teacher`、`/student` 侧栏内各挂一份，后者**保留侧栏只换内容区**，输错地址不再整屏白屏；② 路由加 `meta.title` 并在 `afterEach` 写入 `document.title`，标签页标题随页面变化（与侧栏菜单 label 同源）；③ 加 `scrollBehavior`，切页回顶部、浏览器前进后退恢复原位置；④ 审批页「通过 / 驳回」加二次确认（通过会真实执行步骤且以提交者身份取数，两者都不可逆）；⑤ 路由全部改为按需加载，首屏 JS 由 2.33 MB 降到 1.06 MB（已验证 ECharts 不在首屏 chunk 内，改由访问图表页时才拉取）。
+- 测试语料同步改为学业职业类：`tests\test_chat_capabilities.py` 的 `POLICY` 由「员工报销制度」换成「学业预警与帮扶管理办法」（数字断言 500/350 元 → 6 门 / 15 日），`tests\test_approval_autoplan.py` 的多跳用例假命中改为「学业预警办法 / 学籍学分规定」；`test_agent_commercial.py` 的 `入职`、`test_profile_raw.py` 与 `test_metric_consistency.py` 的「考勤」属学生出勤数据或词表合并机制用例，保留不改。
+
 ### 2026-10-28
+- 新增三个智能体能力（**默认行为不变，均可开关**）：
+  1. **审批工作流（人工审核）**：`工作流定义` 加 `是否需要审批`，新增 `工作流审批` 表，`工作流运行.状态` 扩充 `pending` / `rejected`。教师把流程设为需审批后，师生触发**只挂起不执行**，教师通过才真正跑，驳回则一步都不跑；审批通过时用**提交者**身份执行（学生提交的流程只会取到本人数据，不会变成审批人视角）。新增 `app\workflow_approval.py`、`app\routers\workflow.py` 的 `/approvals/pending` 与 `/runs/{id}/decide`（学生调用返回 403、重复审批返回 409），教师端新增「工作流审批」页，智能体触发需审批流程时返回 pending 话术而非谎报已执行。
+  2. **多跳检索**：`agents\tools.py` 新增 `kb_search_deep`——模型判定第一跳不足以回答时改写检索词再补一跳（最多 2 跳），命中合并去重，引用编号与 `verify_citations` 口径不变；`AGENT_KB_MULTIHOP=0` 可退回单跳。补跳时**扩大召回**（`top_k` 翻倍至多 10），否则会把第一跳那几块再捞一遍、去重后等于白跳；返回新增 `new_hits` 字段标明多跳实际带回几块新原文，避免「跳了但没带回东西」被误当成收益。注：当前演示知识库仅 5 个分块，第一跳已捞完相关块，实测 `new_hits=0` 属正常；多跳的收益要在大语料上才体现。
+  3. **自主规划（可切换）**：新增 `agents\auto_plan.py`，`AGENT_MODE=auto` 时由模型用 LangChain tool calling 自主选工具；**只替换「规划」这一步**，工具执行 / Critic 校验 / 降级模板全部照旧，学生端只暴露本人工具集（不给 `student_profile`、`warning_list`），模型不可用或选中越权工具则自动退回确定性路由。默认 `AGENT_MODE=graph` 不变。
+- README 大修：快速开始补完整初始化链路（`init_db` → `seed_mock` → `load_jobs` → 构建前端 → `start_qihang.bat`，含 `lan` 局域网模式）、演示账号表与查学号方式、常用命令表（测试 / 冒烟 / KPI 报告 / 任教范围）；目录结构按实际模块重写（`engine\` 22 个模块、`app\routers\` 13 个路由、`web\src\views\` 11 个页面、`rules\` 6 份规则词表）；验收指标 V1–V10 按 2026-10-28 实测勾选并补「依据」列（冒烟 PASS 12 / FAIL 0，pytest 527 passed），V10 标注文档位置待迁回。
+- 修复大一账号登录不进去：根因是文档写的 `AI2026001`（7 位）与库中真实学号 `AI20260001`（8 位）不一致，认证要求「口令=学号」且账号必须精确存在，输错即 401。快速开始补账号表并注明 8 位格式，`seed_freshman.py` 标注废弃；登录页演示账号改为可点击填充，并补「学生（大一）AI20260001」；同步更正 `etl\docs\演示脚本.md`、`etl\docs\VERIFY.md` 的过期账号与班级规模描述。
 - 性能：修复教师端「学生档案」整页 14 秒才出数据——根因是 `read_features` 逐人读取画像，580 人的班级要开 580 次 DuckDB 连接（约 5.8 秒）。`engine\store.py` 新增 `read_student_features` 批量读取（一次连接 + IN 查询），`agents\tools.py` 的 `read_features` 改走批量；顺带把 `_job_demand` 的检索文本改为预构建、方向判定加单次调用内缓存（3 个维度不再各拼一遍、2 万条浏览记录不再重复匹配）。`/teacher/career-gap` 从 13.5~14.7s 降到约 1.1s，进程内 19969ms → 936ms，口径与返回结构不变（test_tools / test_profile / test_warning / test_api / test_metric_consistency 共 96 项通过）。
 - 前端：修复侧栏菜单双高亮（`web\src\layout\ShellLayout.vue`）——`isActive` 的前缀匹配导致访问 `/teacher/students` 时「班级总览」与「学生档案」同时点亮，改为与 `currentItem` 相同的最长匹配口径；学生端 `/student` 同类问题一并修复。
 - 前端：教师看板画像抽屉美化（`web\src\views\TeacherDashboard.vue`）——新增姓名头像摘要卡、标签圆角化、四维雷达图由预警红改为主题蓝并加网格底色；职业差距标题在无目标方向时不再显示占位符"—"，无有效数据时按原因给出三类空态文案，不再渲染全 0 空图。
@@ -135,7 +217,7 @@ D:\qihang\
 - P1-1：创建 16 个空模块骨架（app\*.py agents\*.py engine\*.py），仅含职责注释 + TODO。
 - P1-1：实现 `app\config.py`（pydantic-settings `Settings` 单例）。
 - P1-1：写 `requirements.txt`（依赖锁版本）。
-- P1-1：`docs\目录说明.md` 追加 P1-1 已落地文件清单。
+- P1-1：`etl\docs\目录说明.md` 追加 P1-1 已落地文件清单。
 - P1-2：实现 `agents\llm.py`——DeepSeek 客户端封装（工厂函数 + SYSTEM_RULES + smoke）。
 - P2：落地 `db\mysql_schema.sql`（9 表 + 外键索引 + 种子租户）与 `db\duckdb_schema.sql`（3 表）。
 - P2：实现 `engine\store.py`——Store 抽象接口 + DuckDBStore 实现 + ClickHouseStore 留空。
@@ -145,7 +227,7 @@ D:\qihang\
 - P2-ETL：实现 `etl\mask.py`（手机号/邮箱/微信号脱敏）、`etl\clean_jobs.py`（5 文件清洗统一 schema）、`scripts\load_jobs.py`（灌入 MySQL job + DuckDB job_feature）。
 
 ### 2026-10-26（巡检）
-- P3–P13 已落地：预警 / 画像 / 推荐 / Critic / FastAPI / Vue 前端 / 职业规划模块（详见 `git log` 与 `docs\VERIFY.md`）。
+- P3–P13 已落地：预警 / 画像 / 推荐 / Critic / FastAPI / Vue 前端 / 职业规划模块（详见 `git log` 与 `etl\docs\VERIFY.md`）。
 - 修复：`fetch_active_rule` 把 `hard_baseline`/`adjustable` 读成空列表；`recommend_log` 的 `hit_items`/`gap_items` 双重 JSON 编码。
 - 加固：MySQL 连接统一加 5 秒超时；库不可用时登录返回 401、工具层返回空结果而不是 500；`/chat` 改用已校验的 `get_current_ctx`。
 - 前端：403 不再清理登录态（只有 401 才跳登录），并保留错误原因展示。
