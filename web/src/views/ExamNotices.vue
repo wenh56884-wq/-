@@ -102,11 +102,10 @@
           <span v-if="it.signup_end" class="deadline">报名截止：{{ it.signup_end }}</span>
           <span v-if="it.headcount">招 {{ it.headcount }} 人</span>
         </div>
-        <!-- 要求摘要：缺失的显式写「详见公告」，不渲染成「不限」 -->
-        <div class="notice-reqs">
+        <!-- 要求摘要：只展示真抓到值的字段，全空就整行不渲染 -->
+        <div v-if="reqSummary(it).length" class="notice-reqs">
           <span v-for="r in reqSummary(it)" :key="r.label" class="req">
             <b>{{ r.label }}</b>{{ r.value }}
-            <em v-if="!r.filled" class="req-missing">详见公告</em>
           </span>
         </div>
       </div>
@@ -242,14 +241,21 @@ function tagType(t) {
 }
 
 function reqSummary(it) {
-  // 列表只挑 3 条最有代表性的要求做摘要
-  const pick = ['education_req', 'age_req', 'major_req']
-  const labelMap = { education_req: '学历', age_req: '年龄', major_req: '专业' }
-  return pick.map((k) => ({
-    label: `${labelMap[k]} `,
-    value: it[k] || '',
-    filled: Boolean(it[k])
-  }))
+  // 列表只挑「真的抓到值」的前 3 条要求展示；没抓到的字段直接不渲染，
+  // 不再刷一排「详见公告」——详情抽屉里本来就有完整的缺失清单。
+  const pick = ['education_req', 'major_req', 'political_req', 'age_req', 'cert_req', 'exp_req']
+  const labelMap = {
+    education_req: '学历',
+    major_req: '专业',
+    political_req: '政治面貌',
+    age_req: '年龄',
+    cert_req: '证书',
+    exp_req: '经历'
+  }
+  return pick
+    .filter((k) => it[k])
+    .slice(0, 3)
+    .map((k) => ({ label: `${labelMap[k]} `, value: it[k], filled: true }))
 }
 
 async function loadStats() {

@@ -114,44 +114,6 @@
         </div>
 
         <!-- 提升杠杆 -->
-        <div class="bento-card bento-span-4">
-          <p class="bento-eyebrow">提升杠杆 · 按「补上之后总分涨多少」排序</p>
-          <p class="bento-sub">
-            每一项都重算了一遍四维与档位：改的是你自己的可改变条件，不是话术。
-          </p>
-          <el-table v-if="leverage.length" :data="leverage" size="small" class="lev-table">
-            <el-table-column prop="项目" label="可改变项" min-width="150" />
-            <el-table-column label="当前 → 目标" min-width="180">
-              <template #default="{ row }">
-                <span class="lev-now">{{ row.当前 }}</span>
-                <span class="lev-arrow">→</span>
-                <span class="lev-goal">{{ row.目标 }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="总分变化" width="110">
-              <template #default="{ row }">
-                <b class="lev-delta">+{{ row.综合分变化 }}</b>
-              </template>
-            </el-table-column>
-            <el-table-column label="档位" width="120">
-              <template #default="{ row }">
-                <el-tag v-if="row.跨档" size="small" type="success" effect="dark">
-                  {{ row.当前档位 }} → {{ row.达成后档位 }}
-                </el-tag>
-                <span v-else class="lev-flat">{{ row.当前档位 }} → {{ row.达成后档位 }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="维度变化" min-width="150">
-              <template #default="{ row }">
-                <span v-for="(v, k) in row.维度变化" :key="k" class="dim-delta">{{ k }} +{{ v }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="代价" label="代价" min-width="130" />
-            <el-table-column prop="依据" label="依据" min-width="220" show-overflow-tooltip />
-          </el-table>
-          <el-empty v-else description="没有可再优化的可改变项" :image-size="56" />
-        </div>
-
         <!-- 门槛 -->
         <div class="bento-card bento-span-2">
           <p class="bento-eyebrow">硬门槛逐项比对</p>
@@ -207,61 +169,113 @@
           <el-empty v-else description="暂无需处理的短板" :image-size="56" />
         </div>
 
-        <!-- 真实机会 -->
+        <!-- 明细折叠区：三张大表默认收起，首屏只留结论 -->
         <div class="bento-card bento-span-4">
-          <p class="bento-eyebrow">真实招考公告 · {{ data.goal }} 对应的 {{ opp.total }} 条（官网抓取）</p>
-          <p class="bento-sub">
-            在报名 <b>{{ opp.open_count ?? 0 }}</b> 条
-            <template v-if="opp.headcount">· 已抓到招录人数合计 <b>{{ opp.headcount }}</b> 人</template>
-            <template v-if="opp.latest_published">· 最近一条发布于 {{ opp.latest_published }}</template>
-          </p>
-          <el-table v-if="opp.items && opp.items.length" :data="opp.items" size="small" max-height="300">
-            <el-table-column prop="标题" label="公告" min-width="260" show-overflow-tooltip />
-            <el-table-column prop="招录单位" label="单位" min-width="140" show-overflow-tooltip />
-            <el-table-column label="招录" width="80">
-              <template #default="{ row }">{{ row.招录人数 ?? '—' }}</template>
-            </el-table-column>
-            <el-table-column label="报名截止" width="150">
-              <template #default="{ row }">
-                <span>{{ row.报名截止 || '未抽取' }}</span>
-                <el-tag
-                  v-if="row.距截止天数 !== null && row.距截止天数 !== undefined"
-                  size="small"
-                  :type="row.距截止天数 >= 0 ? 'success' : 'info'"
-                  effect="plain"
-                  class="dl-tag"
-                >
-                  {{ row.距截止天数 >= 0 ? '剩 ' + row.距截止天数 + ' 天' : '已截止' }}
+          <el-collapse class="detail-collapse">
+            <el-collapse-item name="leverage">
+              <template #title>
+                <span class="dc-title">提升杠杆 · 按「补上之后总分涨多少」排序</span>
+                <el-tag v-if="leverage.length" size="small" effect="plain" class="dc-tag">{{ leverage.length }} 项</el-tag>
+              </template>
+              <p class="bento-sub">
+                每一项都重算了一遍四维与档位：改的是你自己的可改变条件，不是话术。
+              </p>
+              <el-table v-if="leverage.length" :data="leverage" size="small" class="lev-table">
+                <el-table-column prop="项目" label="可改变项" min-width="150" />
+                <el-table-column label="当前 → 目标" min-width="180">
+                  <template #default="{ row }">
+                    <span class="lev-now">{{ row.当前 }}</span>
+                    <span class="lev-arrow">→</span>
+                    <span class="lev-goal">{{ row.目标 }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="总分变化" width="110">
+                  <template #default="{ row }">
+                    <b class="lev-delta">+{{ row.综合分变化 }}</b>
+                  </template>
+                </el-table-column>
+                <el-table-column label="档位" width="120">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.跨档" size="small" type="success" effect="dark">
+                      {{ row.当前档位 }} → {{ row.达成后档位 }}
+                    </el-tag>
+                    <span v-else class="lev-flat">{{ row.当前档位 }} → {{ row.达成后档位 }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="维度变化" min-width="150">
+                  <template #default="{ row }">
+                    <span v-for="(v, k) in row.维度变化" :key="k" class="dim-delta">{{ k }} +{{ v }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="代价" label="代价" min-width="130" />
+                <el-table-column prop="依据" label="依据" min-width="220" show-overflow-tooltip />
+              </el-table>
+              <el-empty v-else description="没有可再优化的可改变项" :image-size="56" />
+            </el-collapse-item>
+
+            <el-collapse-item name="notice">
+              <template #title>
+                <span class="dc-title">真实招考公告 · {{ data.goal }} 对应的 {{ opp.total }} 条（官网抓取）</span>
+                <el-tag v-if="opp.open_count" size="small" type="success" effect="plain" class="dc-tag">
+                  在报名 {{ opp.open_count }} 条
                 </el-tag>
               </template>
-            </el-table-column>
-            <el-table-column label="原文" width="90">
-              <template #default="{ row }">
-                <a v-if="row.原文链接" :href="row.原文链接" target="_blank" rel="noreferrer" class="src-link">
-                  点开核对
-                </a>
-                <span v-else>—</span>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-else description="公告库里还没有该方向的记录" :image-size="56" />
-        </div>
+              <p class="bento-sub">
+                在报名 <b>{{ opp.open_count ?? 0 }}</b> 条
+                <template v-if="opp.headcount">· 已抓到招录人数合计 <b>{{ opp.headcount }}</b> 人</template>
+                <template v-if="opp.latest_published">· 最近一条发布于 {{ opp.latest_published }}</template>
+              </p>
+              <el-table v-if="opp.items && opp.items.length" :data="opp.items" size="small" max-height="300">
+                <el-table-column prop="标题" label="公告" min-width="260" show-overflow-tooltip />
+                <el-table-column prop="招录单位" label="单位" min-width="140" show-overflow-tooltip />
+                <el-table-column label="招录" width="80">
+                  <template #default="{ row }">{{ row.招录人数 ?? '—' }}</template>
+                </el-table-column>
+                <el-table-column label="报名截止" width="150">
+                  <template #default="{ row }">
+                    <span>{{ row.报名截止 || '未抽取' }}</span>
+                    <el-tag
+                      v-if="row.距截止天数 !== null && row.距截止天数 !== undefined"
+                      size="small"
+                      :type="row.距截止天数 >= 0 ? 'success' : 'info'"
+                      effect="plain"
+                      class="dl-tag"
+                    >
+                      {{ row.距截止天数 >= 0 ? '剩 ' + row.距截止天数 + ' 天' : '已截止' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="原文" width="90">
+                  <template #default="{ row }">
+                    <a v-if="row.原文链接" :href="row.原文链接" target="_blank" rel="noreferrer" class="src-link">
+                      点开核对
+                    </a>
+                    <span v-else>—</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-empty v-else description="公告库里还没有该方向的记录" :image-size="56" />
+            </el-collapse-item>
 
-        <!-- 口径说明 -->
-        <div class="bento-card bento-span-4">
-          <p class="bento-eyebrow">口径与限制 · 请先读完再看结论</p>
-          <ul class="caveat-list">
-            <li v-for="(c, i) in data.caveats || []" :key="i">{{ c }}</li>
-          </ul>
-          <div class="src-grid">
-            <div v-for="(s, i) in data.sources || []" :key="i" class="src-item">
-              <span class="src-dim">{{ s.维度 }}</span>
-              <span class="src-name">{{ s.来源 }}</span>
-              <el-tag size="small" :type="s.性质.startsWith('真实') ? 'success' : 'warning'" effect="plain">
-                {{ s.性质 }}
-              </el-tag>
-            </div>
-          </div>
+            <el-collapse-item name="caveat">
+              <template #title>
+                <span class="dc-title">口径与限制 · 请先读完再看结论</span>
+                <el-tag size="small" effect="plain" class="dc-tag">{{ (data.caveats || []).length }} 条</el-tag>
+              </template>
+              <ul class="caveat-list">
+                <li v-for="(c, i) in data.caveats || []" :key="i">{{ c }}</li>
+              </ul>
+              <div class="src-grid">
+                <div v-for="(s, i) in data.sources || []" :key="i" class="src-item">
+                  <span class="src-dim">{{ s.维度 }}</span>
+                  <span class="src-name">{{ s.来源 }}</span>
+                  <el-tag size="small" :type="s.性质.startsWith('真实') ? 'success' : 'warning'" effect="plain">
+                    {{ s.性质 }}
+                  </el-tag>
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </div>
       </template>
 
@@ -875,5 +889,20 @@ onMounted(load)
   .win-date {
     font-size: 24px;
   }
+}
+/* 明细折叠区：标题行与计数徽标 */
+.detail-collapse :deep(.el-collapse-item__header) {
+  height: 44px;
+  line-height: 44px;
+}
+
+.dc-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2329;
+}
+
+.dc-tag {
+  margin-left: 8px;
 }
 </style>

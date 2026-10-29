@@ -71,22 +71,26 @@
           <p class="page-sub">{{ currentHint }}</p>
         </div>
 
+        <!-- 运维细节收进状态点：正常时只显示一个绿点，出问题才展开看详情 -->
         <div class="pulse">
-          <span class="pulse-item">
-            <i class="dot" :class="dotClass(health.db)"></i>MySQL <b>{{ health.db }}</b>
-          </span>
-          <span class="pulse-item">
-            <i class="dot" :class="dotClass(health.duckdb)"></i>DuckDB <b>{{ health.duckdb }}</b>
-          </span>
-          <span class="pulse-item">
-            <i class="dot" :class="health.llm === 'configured' ? 'dot-ok' : 'dot-warn'"></i>
-            LLM <b>{{ health.llm }}</b>
-          </span>
-          <span class="pulse-tag" :class="statusTag">{{ statusText }}</span>
-          <span class="pulse-time">健康检测 {{ ago(health.lastCheckAt) }}</span>
-          <button class="ghost-btn" type="button" :disabled="health.checking" @click="refresh">
-            {{ health.checking ? '检测中' : '立即刷新' }}
-          </button>
+          <el-popover placement="bottom-end" :width="250" trigger="click">
+            <template #reference>
+              <button class="ghost-btn status-btn" type="button">
+                <i class="dot" :class="overallDot"></i>
+                <span>{{ statusText }}</span>
+                <i v-if="overallDot !== 'dot-ok'" class="dot inline-dot" :class="overallDot"></i>
+              </button>
+            </template>
+            <div class="health-pop">
+              <div class="hp-row"><span>MySQL</span><i class="dot" :class="dotClass(health.db)"></i><b>{{ health.db }}</b></div>
+              <div class="hp-row"><span>DuckDB</span><i class="dot" :class="dotClass(health.duckdb)"></i><b>{{ health.duckdb }}</b></div>
+              <div class="hp-row"><span>大模型</span><i class="dot" :class="health.llm === 'configured' ? 'dot-ok' : 'dot-warn'"></i><b>{{ health.llm === 'configured' ? '已配置' : health.llm }}</b></div>
+              <div class="hp-row"><span>上次检测</span><b>{{ ago(health.lastCheckAt) }}</b></div>
+              <button class="ghost-btn hp-refresh" type="button" :disabled="health.checking" @click="refresh">
+                {{ health.checking ? '检测中' : '重新检测' }}
+              </button>
+            </div>
+          </el-popover>
         </div>
 
         <div class="who">
@@ -168,6 +172,7 @@ const MENUS = {
     { path: '/teacher/grades', label: '成绩单', hint: '按学年看全部成绩', icon: 'doc' },
     { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
     { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
+    { path: '/teacher/approvals', label: '工作流审批', hint: '人工审核执行申请', icon: 'doc' },
     { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
   ],
   student: [
@@ -260,6 +265,14 @@ function dotClass(state) {
   if (state === 'down') return 'dot-bad'
   return 'dot-warn'
 }
+
+// 整体状态 = 最差的那个组件：全 ok 才亮绿灯，其余情况点开看是哪一项出问题
+const overallDot = computed(() => {
+  const states = [health.db, health.duckdb, health.llm === 'configured' ? 'ok' : 'warn']
+  if (states.every((s) => s === 'ok')) return 'dot-ok'
+  if (states.some((s) => s === 'down')) return 'dot-bad'
+  return 'dot-warn'
+})
 
 function logout() {
   clearSession()
@@ -611,6 +624,49 @@ onBeforeUnmount(() => {
   color: #52525b;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.health-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  color: #52525b;
+}
+
+.hp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hp-row span {
+  width: 60px;
+  color: #a1a1aa;
+}
+
+.hp-row b {
+  color: #18181b;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.hp-refresh {
+  margin-top: 2px;
+  align-self: flex-end;
 }
 
 .pulse-item {

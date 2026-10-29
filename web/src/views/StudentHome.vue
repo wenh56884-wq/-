@@ -2,7 +2,7 @@
   <div class="page bento-page">
     <div class="bento-grid">
     <el-alert class="trust-bar bento-span-4" type="success" :closable="false" show-icon
-      title="所有数值来自确定性引擎，经 Critic 审核通过" />
+      title="所有数值由确定性引擎实算，未通过校验的数字不会展示" />
 
     <div class="live-bar bento-span-4">
       <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
@@ -22,10 +22,9 @@
         <span>竞赛通知</span>
         <span v-if="unreadCnt" class="bell-badge">{{ unreadCnt > 99 ? '99+' : unreadCnt }}</span>
       </button>
-      <span class="live-tip">不想问？点右下角 AI 小人直接提问</span>
     </div>
 
-    <el-card v-loading="guideLoading" shadow="never" class="guide-card bento-span-2 bento-row-2">
+    <el-card v-loading="guideLoading" shadow="never" class="guide-card bento-span-2 bento-row-2 guide-self-start">
       <template #header>
         <div class="guide-head">
           <span class="card-title" style="margin: 0">生涯规划</span>
@@ -664,6 +663,11 @@ onBeforeUnmount(() => {
 .info-card,
 .rec-card {
   margin-bottom: 0;
+}
+
+/* 生涯规划内容少时不再被网格拉伸出大片空白（空白留在页面底色上，不留在空卡片里） */
+.guide-self-start {
+  align-self: start;
 }
 
 .guide-head {
