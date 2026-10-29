@@ -18,6 +18,12 @@
             <div class="chat-sub">LangGraph 多智能体 · 数值经 Critic 回查</div>
           </div>
         </div>
+        <button class="icon-btn" type="button" aria-label="AI 记忆" title="AI 记忆"
+          @click="toggleMemories">
+          <svg viewBox="0 0 24 24" class="ico">
+            <path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0 0 6v1a3 3 0 0 0 3 3h1V4H9zM15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 0 6v1a3 3 0 0 1-3 3h-1V4h1z" />
+          </svg>
+        </button>
         <button class="icon-btn" type="button" aria-label="新对话" title="新对话"
           :disabled="!messages.length" @click="newSession">
           <svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14M5 12h14" /></svg>
@@ -68,6 +74,22 @@
                 <span v-else-if="c.chunk_no" class="cite-pos">第 {{ c.chunk_no }} 段</span>
               </div>
             </div>
+            <details v-if="msg.role === 'assistant' && !msg.streaming
+                           && msg.steps && msg.steps.length" class="trace-box">
+              <summary>执行轨迹 · {{ msg.steps.length }} 步</summary>
+              <div v-for="step in msg.steps" :key="step.index" class="trace-step">
+                <div class="trace-head">
+                  <span class="trace-index">{{ step.index }}</span>
+                  <span class="trace-tool">{{ step.tool }}</span>
+                  <span class="trace-ok" :class="{ bad: !step.ok }">
+                    {{ step.ok ? '成功' : '失败' }}
+                  </span>
+                  <span class="trace-purpose">{{ step.purpose }}</span>
+                </div>
+                <div v-if="traceArgs(step)" class="trace-args">参数：{{ traceArgs(step) }}</div>
+                <div v-if="step.observation" class="trace-obs">{{ step.observation }}</div>
+              </div>
+            </details>
             <div v-if="msg.role === 'assistant' && !msg.streaming" class="bubble-foot">
               <span v-if="msg.tool" class="chip">{{ msg.tool }}</span>
               <span class="chip">trace {{ msg.trace_id }}</span>
@@ -122,12 +144,42 @@
           </button>
         </div>
       </div>
+
+      <!-- 长期记忆面板：盖在对话上，只读本人记忆，可删除 -->
+      <div v-if="memoryOpen" class="memory-overlay">
+        <div class="memory-head">
+          <div>
+            <div class="memory-title">AI 记住了什么</div>
+            <div class="memory-sub">只显示你自己的长期记忆；删除后不再参与召回</div>
+          </div>
+          <button class="clear-btn" type="button" :disabled="memoryLoading" @click="loadMemories">
+            刷新
+          </button>
+        </div>
+        <div v-if="memoryLoading" class="memory-empty">正在读取记忆…</div>
+        <div v-else-if="memoryError" class="memory-empty">{{ memoryError }}</div>
+        <div v-else-if="!memories.length" class="memory-empty">
+          还没有长期记忆。聊几轮后，助手会记住你的方向、偏好和约束。
+        </div>
+        <div v-else class="memory-list">
+          <div v-for="m in memories" :key="m.id" class="memory-item">
+            <div class="memory-item-head">
+              <span class="memory-kind">{{ memoryKindText(m.kind) }}</span>
+              <span class="memory-importance">重要度 {{ m.importance }}</span>
+              <button class="memory-del" type="button" @click="removeMemory(m)">删除</button>
+            </div>
+            <div class="memory-content">{{ m.content }}</div>
+            <div v-if="m.created_at" class="memory-time">{{ m.created_at }}</div>
+          </div>
+        </div>
+        <button class="memory-back" type="button" @click="memoryOpen = false">返回对话</button>
+      </div>
     </div>
   </el-drawer>
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import http from '../api/http'
 import { clearSession, currentRole } from '../api/http'
@@ -173,16 +225,20 @@ watch(visible, (opened) => {
   emit('update:modelValue', opened)
 })
 
-// 种子问题：抽屉打开时若带了具体问题，等动画稳定后自动发出（只发一次）
+// 种子问题：抽屉打开时若带了具体问题，等动画稳定后自动发出（只发一次）。
+// 两个来源：① 父级 seedQuestion（问题条 / 空状态点击）；② 窗口事件 qh:ask-ai（页面内「问 AI」按钮）。
+const pendingSeed = ref('')
+
 watch(
-  [visible, () => props.seedQuestion],
-  ([opened, seed]) => {
-    if (!opened || !seed || sending.value) return
-    const q = String(seed).trim()
+  [visible, () => props.seedQuestion, pendingSeed],
+  ([opened, seed, pending]) => {
+    if (!opened || sending.value) return
+    const q = String(pending || seed || '').trim()
     if (!q) return
     nextTick(() => {
       setTimeout(() => {
         if (!sending.value && visible.value) {
+          pendingSeed.value = ''
           emit('seed-consumed')
           send(q)
         }
@@ -190,6 +246,16 @@ watch(
     })
   }
 )
+
+// 页面内「问 AI」按钮走这条通道：抽屉常驻在 ShellLayout（不在本次改动范围），
+// 用窗口事件开抽屉并带上问题，不动 ShellLayout / 路由 / 接口。
+const ASK_EVENT = 'qh:ask-ai'
+function onAskEvent(event) {
+  pendingSeed.value = String(event?.detail?.question || '').trim()
+  visible.value = true
+}
+onMounted(() => window.addEventListener(ASK_EVENT, onAskEvent))
+onBeforeUnmount(() => window.removeEventListener(ASK_EVENT, onAskEvent))
 
 // 抽屉宽度：桌面 420px（不挤主内容），窄屏占满
 const drawerSize = computed(() => (window.innerWidth < 768 ? '100%' : '420px'))
@@ -200,13 +266,19 @@ const sending = ref(false)
 const messages = ref([])
 const sessionId = ref(null)   // 后端会话：关掉抽屉再打开还能接着聊
 const listRef = ref(null)
+const memoryOpen = ref(false)
+const memories = ref([])
+const memoryLoading = ref(false)
+const memoryError = ref('')
 let seq = 0
 
 function close() {
+  memoryOpen.value = false
   visible.value = false
 }
 
 function newSession() {
+  memoryOpen.value = false
   sessionId.value = null
   messages.value = []
 }
@@ -215,6 +287,17 @@ function push(roleName, text, extra = {}) {
   seq += 1
   messages.value.push({ id: seq, role: roleName, text, ...extra })
   scrollBottom()
+}
+
+// 执行轨迹里的参数展示（模板里不直接调 JSON，避免表达式沙箱限制）
+function traceArgs(step) {
+  const args = step?.args
+  if (!args || typeof args !== 'object' || !Object.keys(args).length) return ''
+  try {
+    return JSON.stringify(args)
+  } catch {
+    return ''
+  }
 }
 
 async function scrollBottom() {
@@ -323,6 +406,7 @@ async function sendOneShot(pending, content, history, started) {
       tool: data?.tool || '',
       citations: data?.citations || [],
       followups: Array.isArray(data?.suggested_followups) ? data.suggested_followups : [],
+      steps: Array.isArray(data?.steps) ? data.steps : [],
       cost: Math.round(performance.now() - started),
       streaming: false,
       status: ''
@@ -363,6 +447,7 @@ async function send(text) {
     tool: '',
     citations: [],
     followups: [],
+    steps: [],
     feedback: '',
     cost: 0
   })
@@ -396,6 +481,7 @@ async function send(text) {
         pending.citations = data?.citations || []
         pending.followups = Array.isArray(data?.suggested_followups)
           ? data.suggested_followups : []
+        pending.steps = Array.isArray(data?.steps) ? data.steps : []
         pending.cost = Math.round(performance.now() - started)
         pending.status = ''
         pending.streaming = false
@@ -432,6 +518,49 @@ async function send(text) {
   }
 }
 
+// 长期记忆：只读本人记忆（后端按 JWT 身份隔离），删除是软删除
+function memoryKindText(kind) {
+  const labels = { fact: '事实', preference: '偏好', goal: '目标', constraint: '约束' }
+  return labels[kind] || kind || '记忆'
+}
+
+async function loadMemories() {
+  memoryLoading.value = true
+  memoryError.value = ''
+  try {
+    const { data } = await http.get('/chat/memories')
+    const rows = Array.isArray(data?.items) ? data.items : []
+    memories.value = rows.map((row) => ({
+      id: row['编号'] ?? row.id,
+      kind: row['记忆类型'] ?? row.kind ?? 'fact',
+      content: row['内容'] ?? row.content ?? '',
+      importance: row['重要度'] ?? row.importance ?? 3,
+      created_at: row['创建时间'] ?? row.created_at ?? ''
+    }))
+  } catch (err) {
+    memoryError.value = err?.response?.data?.detail || '记忆加载失败，稍后再试'
+    memories.value = []
+  } finally {
+    memoryLoading.value = false
+  }
+}
+
+async function toggleMemories() {
+  memoryOpen.value = !memoryOpen.value
+  if (memoryOpen.value) await loadMemories()
+}
+
+async function removeMemory(item) {
+  if (!item?.id) return
+  if (!window.confirm('删除后这条记忆不会再参与召回，确定删除？')) return
+  try {
+    await http.delete(`/chat/memories/${item.id}`)
+    memories.value = memories.value.filter((row) => row.id !== item.id)
+  } catch (err) {
+    memoryError.value = err?.response?.data?.detail || '删除失败，稍后再试'
+  }
+}
+
 function clearChat() {
   newSession()
 }
@@ -450,21 +579,25 @@ async function vote(msg, rating) {
 
 <style scoped>
 .chat-shell {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #fafafa;
+  background: #f7f8fd;
 }
 
 .chat-head {
   flex: 0 0 auto;
-  height: 56px;
+  height: 60px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e4e7;
+  /* 白毛玻璃：半透明白底 + 背景模糊，消息从头部下方穿过时仍有层次 */
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
+  border-bottom: 1px solid rgba(236, 238, 247, 0.9);
 }
 
 .chat-title {
@@ -483,22 +616,22 @@ async function vote(msg, rating) {
 
 .chat-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.01em;
-  color: #18181b;
+  color: #171a2b;
 }
 
 .chat-sub {
   font-size: 11px;
-  color: #a1a1aa;
+  color: #9297ab;
 }
 
 .icon-btn {
   width: 30px;
   height: 30px;
   margin-left: auto;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
+  border: 1px solid #eceef7;
+  border-radius: 10px;
   background: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -508,14 +641,14 @@ async function vote(msg, rating) {
 }
 
 .icon-btn:hover {
-  background: #f4f4f5;
+  background: #f1efff;
 }
 
 .ico {
   width: 16px;
   height: 16px;
   fill: none;
-  stroke: #52525b;
+  stroke: #5b6178;
   stroke-width: 1.8;
   stroke-linecap: round;
 }
@@ -525,10 +658,10 @@ async function vote(msg, rating) {
   margin: 12px 16px 0;
   padding: 8px 10px;
   font-size: 12px;
-  color: #52525b;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
+  color: #5b5bd6;
+  background: #f0eeff;
+  border: 1px solid #e4e0ff;
+  border-radius: 10px;
 }
 
 .chat-body {
@@ -544,26 +677,26 @@ async function vote(msg, rating) {
 
 .chat-empty-title {
   font-size: 14px;
-  font-weight: 600;
-  color: #18181b;
+  font-weight: 650;
+  color: #171a2b;
 }
 
 .chat-empty-sub {
   margin-top: 4px;
   font-size: 12px;
-  color: #a1a1aa;
+  color: #9297ab;
 }
 
 .example-btn {
   display: block;
   width: 100%;
   margin-top: 8px;
-  padding: 8px 10px;
+  padding: 9px 11px;
   text-align: left;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
+  border: 1px solid #eceef7;
+  border-radius: 10px;
   background: #ffffff;
-  color: #52525b;
+  color: #5b6178;
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -571,8 +704,8 @@ async function vote(msg, rating) {
 }
 
 .example-btn:hover:not(:disabled) {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #f1efff;
+  color: #4a4ac0;
 }
 
 .example-btn:disabled {
@@ -609,7 +742,8 @@ async function vote(msg, rating) {
 }
 
 .msg-row.user .avatar {
-  background: #52525b;
+  background: linear-gradient(135deg, #6d5bd0, #3b82f6);
+  color: #ffffff;
 }
 
 .bubble {
@@ -623,7 +757,11 @@ async function vote(msg, rating) {
 }
 
 .msg-row.user .bubble {
-  background: #f4f4f5;
+  /* 用户气泡：紫蓝渐变，与 AI 白底气泡拉开视觉层级 */
+  background: linear-gradient(135deg, #6d5bd0 0%, #4f6ff0 55%, #3b82f6 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(91, 91, 214, 0.22);
 }
 
 .bubble-text {
@@ -668,6 +806,67 @@ async function vote(msg, rating) {
 .cite-pos { color: #64748b; margin-left: 6px; }
 .cite-item a { color: #2563eb; text-decoration: none; }
 .cite-item a:hover { text-decoration: underline; }
+
+/* 自主大脑执行轨迹 */
+.trace-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 2px solid #d8b4fe;
+  background: #faf5ff;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #3f3f46;
+}
+.trace-box summary {
+  cursor: pointer;
+  color: #7e22ce;
+  font-weight: 600;
+  user-select: none;
+}
+.trace-step {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #e9d5ff;
+}
+.trace-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.trace-index {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f3e8ff;
+  color: #7e22ce;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.trace-tool {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  color: #52525b;
+}
+.trace-ok { color: #15803d; font-size: 11px; }
+.trace-ok.bad { color: #b91c1c; }
+.trace-purpose { color: #64748b; }
+.trace-args {
+  margin-top: 3px;
+  color: #7c3aed;
+  word-break: break-all;
+}
+.trace-obs {
+  margin-top: 3px;
+  max-height: 90px;
+  overflow: auto;
+  color: #71717a;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .chip {
   padding: 1px 6px;
@@ -859,6 +1058,102 @@ async function vote(msg, rating) {
     transform: translateY(-3px);
     opacity: 1;
   }
+}
+
+/* 长期记忆面板：盖住对话区，保持抽屉内操作，不新开页面 */
+.memory-overlay {
+  position: absolute;
+  inset: 60px 0 0 0;   /* 保留顶部 60px 头部：关闭 / 新对话 / 记忆按钮仍可点 */
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px;
+  background: #f7f8fd;
+  overflow-y: auto;
+}
+.memory-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.memory-title {
+  font-size: 16px;
+  font-weight: 650;
+  color: #171a2b;
+}
+.memory-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9297ab;
+}
+.memory-empty {
+  padding: 32px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #9297ab;
+}
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.memory-item {
+  padding: 12px;
+  border: 1px solid #eceef7;
+  border-radius: 12px;
+  background: #fff;
+}
+.memory-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.memory-kind {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f0eeff;
+  color: #5b5bd6;
+  font-size: 11px;
+  font-weight: 600;
+}
+.memory-importance {
+  font-size: 11px;
+  color: #9297ab;
+}
+.memory-del {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  font-size: 12px;
+  cursor: pointer;
+}
+.memory-content {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #171a2b;
+  white-space: pre-wrap;
+}
+.memory-time {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #9297ab;
+}
+.memory-back {
+  flex: 0 0 auto;
+  height: 38px;
+  margin-top: auto;
+  border: 1px solid #eceef7;
+  border-radius: 10px;
+  background: #fff;
+  color: #5b5bd6;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: reduce) {

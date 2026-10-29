@@ -41,8 +41,13 @@
           <el-checkbox v-model="onlyOpen" @change="reload">只看在招</el-checkbox>
           <el-checkbox v-model="includeClosed" @change="reload">含已截止</el-checkbox>
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="filter-actions">
+          <span class="filter-total">
+            共 <b>{{ total }}</b> 条
+            <template v-if="lastSuccess">· 上次同步 {{ lastSuccess }}</template>
+          </span>
           <el-button type="primary" :loading="loading" @click="reload">查询</el-button>
+          <el-button @click="resetFilter">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -57,10 +62,11 @@
       @keyup.enter="pickType('')"
     >
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5L12 3zM4 12l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" /></svg>
         </span>
         <span class="stat-label">全部公告</span>
+        <span class="qh-arrow" aria-hidden="true">↗</span>
       </div>
       <div class="bento-stat">{{ statTotals.total }}<small>在招 {{ statTotals.open }}</small></div>
     </article>
@@ -76,13 +82,35 @@
       @keyup.enter="pickType(t.exam_type)"
     >
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M14 3v4h4M9 13h6M9 17h4" /></svg>
         </span>
         <span class="stat-label">{{ t.label }}</span>
+        <span class="qh-arrow" aria-hidden="true">↗</span>
       </div>
       <div class="bento-stat">{{ t.total }}<small>在招 {{ t.open }}</small></div>
     </article>
+
+    <!-- 国考职位表入口：公告只有通用条件，具体岗位在这里逐条可查 -->
+    <el-card v-if="gk.total_positions" shadow="never" class="bento-span-4 gk-entry">
+      <div class="gk-entry-main">
+        <span class="bento-icon qh-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+            <path d="M14 3v4h4M9 13h6M9 17h4" /></svg>
+        </span>
+        <div class="gk-entry-text">
+          <div class="gk-entry-title">
+            {{ gk.year }} 国家公务员考试职位表
+            <el-tag size="small" type="danger" effect="plain">国考</el-tag>
+          </div>
+          <div class="gk-entry-sub">
+            共 {{ gk.total_positions }} 个职位、计划招录 {{ gk.total_headcount }} 人
+            · 可按部门 / 学历 / 政治面貌 / 工作地点筛选
+          </div>
+        </div>
+        <el-button type="primary" @click="openGk">查看具体职位</el-button>
+      </div>
+    </el-card>
 
     <el-card shadow="never" v-loading="loading" class="bento-span-4 list-card">
       <el-empty v-if="!loading && !items.length" description="没有符合条件的公告" />
@@ -167,11 +195,172 @@
         </el-button>
       </div>
     </el-drawer>
+
+    <!-- 国考职位表：逐职位明细（部门 / 用人司局 / 专业 / 学历 / 人数 / 地点） -->
+    <el-drawer v-model="gkDrawer" :title="`${gk.year || ''} 国考职位表`" size="80%">
+      <div class="gk-toolbar">
+        <el-input
+          v-model="gkQuery.keyword"
+          placeholder="职位 / 部门 / 专业 / 职位代码"
+          clearable
+          style="width: 220px"
+          @keyup.enter="loadGk(1)"
+          @clear="loadGk(1)"
+        />
+        <el-input
+          v-model="gkQuery.dept"
+          placeholder="部门名称，如 国家税务总局"
+          clearable
+          style="width: 210px"
+          @keyup.enter="loadGk(1)"
+          @clear="loadGk(1)"
+        />
+        <el-select
+          v-model="gkQuery.education"
+          placeholder="学历"
+          clearable
+          style="width: 170px"
+          @change="loadGk(1)"
+        >
+          <el-option
+            v-for="e in gk.educations || []"
+            :key="e.name"
+            :label="`${e.name}（${e.positions}）`"
+            :value="e.name"
+          />
+        </el-select>
+        <el-select
+          v-model="gkQuery.political"
+          placeholder="政治面貌"
+          clearable
+          style="width: 180px"
+          @change="loadGk(1)"
+        >
+          <el-option
+            v-for="p in gk.politicals || []"
+            :key="p.name"
+            :label="`${p.name}（${p.positions}）`"
+            :value="p.name"
+          />
+        </el-select>
+        <el-input
+          v-model="gkQuery.place"
+          placeholder="工作地点，如 重庆"
+          clearable
+          style="width: 160px"
+          @keyup.enter="loadGk(1)"
+          @clear="loadGk(1)"
+        />
+        <el-button type="primary" @click="loadGk(1)">查询</el-button>
+        <el-button @click="resetGk">重置</el-button>
+      </div>
+
+      <div class="gk-summary">
+        匹配 <b>{{ gkTotal }}</b> 个职位，计划招录 <b>{{ gkTotalHeadcount }}</b> 人
+        <span class="gk-summary-note">· 点击任意一行查看完整要求</span>
+      </div>
+
+      <el-table
+        v-loading="gkLoading"
+        :data="gkItems"
+        size="small"
+        class="gk-table"
+        @row-click="openGkDetail"
+      >
+        <el-table-column prop="dept_name" label="部门" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="bureau" label="用人司局" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="position_name" label="招考职位" min-width="190" show-overflow-tooltip />
+        <el-table-column prop="headcount" label="人数" width="70" align="center" />
+        <el-table-column prop="education" label="学历" width="140" show-overflow-tooltip />
+        <el-table-column prop="major" label="专业" min-width="230" show-overflow-tooltip />
+        <el-table-column prop="political" label="政治面貌" width="140" show-overflow-tooltip />
+        <el-table-column prop="work_place" label="工作地点" width="150" show-overflow-tooltip />
+      </el-table>
+
+      <el-pagination
+        v-if="gkTotal > gkPageSize"
+        class="pager"
+        background
+        layout="prev, pager, next, total"
+        :total="gkTotal"
+        :page-size="gkPageSize"
+        :current-page="gkPage"
+        @current-change="loadGk"
+      />
+
+      <div class="gk-source">
+        数据来源：国家公务员局《中央机关及其直属机构 {{ gk.year }} 年度考试录用公务员招考简章》（.xls 逐职位解析，原文可核对）
+        <a v-if="gk.source_url" :href="gk.source_url" target="_blank" rel="noopener noreferrer">
+          打开官方专题
+        </a>
+      </div>
+    </el-drawer>
+
+    <el-dialog
+      v-model="gkDetailVisible"
+      :title="gkDetail?.position_name || '职位详情'"
+      width="780px"
+    >
+      <div v-if="gkDetail" class="gk-detail">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="年度">{{ gkDetail.year }}</el-descriptions-item>
+          <el-descriptions-item label="简章分类">{{ gkDetail.category || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="部门">{{ gkDetail.dept_name }}</el-descriptions-item>
+          <el-descriptions-item label="部门代码">{{ gkDetail.dept_code }}</el-descriptions-item>
+          <el-descriptions-item label="用人司局">{{ gkDetail.bureau || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="机构性质">{{ gkDetail.org_nature || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="招考职位">{{ gkDetail.position_name }}</el-descriptions-item>
+          <el-descriptions-item label="职位代码">{{ gkDetail.position_code }}</el-descriptions-item>
+          <el-descriptions-item label="招录人数">{{ gkDetail.headcount ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="机构层级">{{ gkDetail.org_level || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="考试类别">{{ gkDetail.exam_category || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="职位属性">{{ gkDetail.position_attr || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="学历">{{ gkDetail.education || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="学位">{{ gkDetail.degree || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="政治面貌">{{ gkDetail.political || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="基层工作最低年限">{{ gkDetail.work_years || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="服务基层项目经历">{{ gkDetail.grassroots_project || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="专业能力测试">{{ gkDetail.pro_test || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="面试人员比例">{{ gkDetail.interview_ratio || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="工作地点">{{ gkDetail.work_place || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="落户地点">{{ gkDetail.settle_place || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="部门网站">{{ gkDetail.dept_site || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="咨询电话" :span="2">
+            {{ [gkDetail.phone1, gkDetail.phone2, gkDetail.phone3].filter(Boolean).join(' / ') || '—' }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <div class="gk-detail-block">
+          <b>专业要求</b>
+          <p>{{ gkDetail.major || '公告未写专业要求' }}</p>
+        </div>
+        <div v-if="gkDetail.intro" class="gk-detail-block">
+          <b>职位简介</b>
+          <p>{{ gkDetail.intro }}</p>
+        </div>
+        <div v-if="gkDetail.remark" class="gk-detail-block">
+          <b>备注</b>
+          <p>{{ gkDetail.remark }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <el-button
+          v-if="gkDetail?.notice_url"
+          type="primary"
+          tag="a"
+          :href="gkDetail.notice_url"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          打开官方专题核对
+        </el-button>
+        <el-button @click="gkDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 import http from '../api/http'
 import { decodeEntities } from '../utils/text'
@@ -195,6 +384,19 @@ const lastSuccess = ref('')
 
 const drawer = ref(false)
 const detail = ref(null)
+
+// 国考职位表
+const gk = ref({ year: null, total_positions: 0, total_headcount: 0, educations: [], politicals: [] })
+const gkDrawer = ref(false)
+const gkLoading = ref(false)
+const gkItems = ref([])
+const gkTotal = ref(0)
+const gkTotalHeadcount = ref(0)
+const gkPage = ref(1)
+const gkPageSize = 20
+const gkQuery = reactive({ keyword: '', dept: '', education: '', political: '', place: '' })
+const gkDetail = ref(null)
+const gkDetailVisible = ref(false)
 
 const REQ_FIELDS = [
   { key: 'education_req', label: '学历' },
@@ -290,6 +492,16 @@ function reload() {
   loadList()
 }
 
+// 筛选条件一次性归零（「只看在招 / 含已截止」两个开关一起复位，避免留下隐性过滤）
+function resetFilter() {
+  examType.value = ''
+  keyword.value = ''
+  region.value = ''
+  onlyOpen.value = false
+  includeClosed.value = false
+  reload()
+}
+
 function pickType(t) {
   examType.value = examType.value === t ? '' : t
   reload()
@@ -306,9 +518,66 @@ async function openDetail(it) {
   drawer.value = true
 }
 
+// ----------------------------------------------------------------
+// 国考职位表
+// ----------------------------------------------------------------
+async function loadGkFacets() {
+  try {
+    const { data } = await http.get('/exam/positions/facets')
+    gk.value = data
+  } catch {
+    gk.value = {
+      year: null,
+      total_positions: 0,
+      total_headcount: 0,
+      educations: [],
+      politicals: [],
+      source_url: ''
+    }
+  }
+}
+
+async function loadGk(page = 1) {
+  gkPage.value = page
+  gkLoading.value = true
+  try {
+    const params = { page, page_size: gkPageSize }
+    for (const [key, value] of Object.entries(gkQuery)) {
+      if (value) params[key] = value
+    }
+    const { data } = await http.get('/exam/positions', { params })
+    gkItems.value = data.items || []
+    gkTotal.value = data.total || 0
+    gkTotalHeadcount.value = data.total_headcount || 0
+    if (data.year) gk.value.year = data.year
+  } finally {
+    gkLoading.value = false
+  }
+}
+
+function openGk() {
+  gkDrawer.value = true
+  if (!gkItems.value.length) loadGk(1)
+}
+
+function resetGk() {
+  Object.keys(gkQuery).forEach((key) => {
+    gkQuery[key] = ''
+  })
+  gkItems.value = []
+  loadGk(1)
+}
+
+async function openGkDetail(row) {
+  const { data } = await http.get(`/exam/positions/${row.id}`)
+  gkDetail.value = data
+  gkDetailVisible.value = true
+}
+
 onMounted(() => {
   loadStats()
   loadList()
+  loadGkFacets()
 })
 </script>
 
@@ -325,14 +594,71 @@ onMounted(() => {
   font-size: 12px;
   margin-left: 6px;
 }
+.filter-bar {
+  background: #ffffff;
+  border: 1px solid var(--bento-border);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.05);
+}
+
+.filter-bar :deep(.el-card__body) {
+  padding: 16px 18px;
+}
+
+/* 查询/重置整组靠右：内联表单改成 flex，右侧不再空一大片 */
+.filter-bar :deep(.el-form) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .filter-bar :deep(.el-form-item) {
   margin-bottom: 0;
 }
+
+.filter-actions {
+  margin-left: auto;
+  margin-right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-total {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.filter-total b {
+  color: #18181b;
+  font-size: 13px;
+}
+
 .stat-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 128px;
+  background: #ffffff;
+  border: 1px solid var(--bento-border);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.05);
+  transition:
+    transform 220ms var(--bento-ease),
+    box-shadow 220ms var(--bento-ease),
+    border-color 220ms var(--bento-ease);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #ded9ff;
+  box-shadow:
+    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 12px 28px rgba(23, 26, 43, 0.07);
 }
 
 .stat-top {
@@ -341,10 +667,43 @@ onMounted(() => {
   gap: 10px;
 }
 
-.stat-card .bento-icon {
+/* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
+.qh-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
-  flex-basis: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+}
+
+.bento-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qh-arrow {
+  font-size: 13px;
+  line-height: 1;
+  color: #b9b1ea;
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition:
+    opacity 180ms var(--bento-ease),
+    transform 180ms var(--bento-ease);
+}
+
+.stat-card:hover .qh-arrow {
+  opacity: 1;
+  transform: translate(0, 0);
 }
 
 .stat-label {
@@ -492,5 +851,106 @@ onMounted(() => {
 }
 .official-link {
   align-self: flex-start;
+}
+
+/* 国考职位表：入口卡同样走白卡 + 软阴影，与统计卡同一套观感 */
+.gk-entry {
+  background: #ffffff;
+  border: 1px solid var(--bento-border);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.05);
+}
+
+.gk-entry :deep(.el-card__body) {
+  padding: 18px 20px;
+}
+
+.gk-entry-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.gk-entry-text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.gk-entry-main :deep(.el-button) {
+  margin-left: auto;
+}
+.gk-entry-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.gk-entry-sub {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.gk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.gk-summary {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.gk-summary b {
+  color: #18181b;
+  font-size: 16px;
+}
+.gk-summary-note {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.gk-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+/* 职位抽屉保持信息密度：行高收紧、列宽不动，一屏能多看几行 */
+.gk-table :deep(.el-table__cell) {
+  padding: 5px 0;
+}
+.gk-source {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+}
+.gk-source a {
+  margin-left: 6px;
+  color: #2563eb;
+}
+.gk-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gk-detail-block {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--el-fill-color-lighter);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--el-text-color-regular);
+}
+.gk-detail-block b {
+  color: var(--el-text-color-primary);
+}
+.gk-detail-block p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

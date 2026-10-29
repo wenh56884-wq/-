@@ -1,6 +1,43 @@
 <template>
   <div class="page bento-page">
     <div class="bento-grid">
+    <!-- Hero：一句话结论 + 关键指标 + 主按钮。结论只组织引擎返回的数值，不做任何推断 -->
+    <section class="bento-card bento-span-4 page-hero">
+      <div class="ph-main">
+        <div class="ph-left">
+          <p class="ph-eyebrow">本学期结论 · {{ warning.term || term || '-' }}</p>
+          <h2 class="ph-title">{{ heroConclusion }}</h2>
+          <p class="ph-desc">
+            预警、画像、推荐三处数值全部由确定性引擎实算，未通过 Critic 回查的数字不会展示。
+          </p>
+          <div class="ph-actions">
+            <el-button type="primary" class="ph-btn" @click="goJobs">查看岗位</el-button>
+            <el-button class="ph-btn" @click="goWarning">查看预警</el-button>
+            <el-button class="ph-btn" @click="askAI('我这学期的学业预警情况怎么样？')">
+              问 AI
+            </el-button>
+          </div>
+        </div>
+
+        <div class="ph-stats">
+          <div class="ph-stat">
+            <span class="ph-stat-label">预警等级</span>
+            <b class="ph-stat-value" :class="'lv-' + (warning.level || 'unknown')">
+              {{ levelText(warning.level) }}
+            </b>
+          </div>
+          <div class="ph-stat">
+            <span class="ph-stat-label">风险分</span>
+            <b class="ph-stat-value"><count-number :value="warning.risk_score" /></b>
+          </div>
+          <div class="ph-stat">
+            <span class="ph-stat-label">已匹配岗位</span>
+            <b class="ph-stat-value">{{ items.length }}<small>个</small></b>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <el-alert class="trust-bar bento-span-4" type="success" :closable="false" show-icon
       title="所有数值由确定性引擎实算，未通过校验的数字不会展示" />
 
@@ -24,7 +61,9 @@
       </button>
     </div>
 
-    <el-card v-loading="guideLoading" shadow="never" class="guide-card bento-span-2 bento-row-2 guide-self-start">
+    <el-card v-loading="guideLoading" shadow="never"
+      class="guide-card bento-span-2 bento-row-2"
+      :class="{ 'guide-stretch': !(guide.needs_intent) && (guide.steps || []).length }">
       <template #header>
         <div class="guide-head">
           <span class="card-title" style="margin: 0">生涯规划</span>
@@ -83,6 +122,27 @@
             </ul>
           </div>
         </div>
+        <!-- 底部补齐：本周行动（取规划第一步前 3 条）+ 两个落地 CTA，左侧不留空槽 -->
+        <div v-if="weekActions.length" class="week-box">
+          <div class="week-head">
+            <span class="week-title">本周行动</span>
+            <span class="week-sub">摘自「{{ guide.steps[0]?.阶段 || '第一步' }}」</span>
+          </div>
+          <label v-for="(action, i) in weekActions" :key="i" class="week-item">
+            <input type="checkbox" class="week-check" />
+            <span class="week-text">{{ action }}</span>
+          </label>
+        </div>
+
+        <div class="guide-cta">
+          <router-link to="/student/grades" class="guide-cta-btn">
+            去看成绩单<span class="cta-arrow" aria-hidden="true">↗</span>
+          </router-link>
+          <router-link to="/student/jobs" class="guide-cta-btn">
+            去看岗位库<span class="cta-arrow" aria-hidden="true">↗</span>
+          </router-link>
+        </div>
+
         <div class="engine-line">
           规划引擎 {{ guide.engine_version || '-' }} · {{ guide.note }}
           <span v-if="guideTip" class="err">{{ guideTip }}</span>
@@ -90,7 +150,7 @@
       </template>
     </el-card>
 
-    <el-card v-loading="warningLoading" shadow="never" class="info-card bento-span-2">
+    <el-card ref="warningCard" v-loading="warningLoading" shadow="never" class="info-card bento-span-2">
       <div class="card-title">本人信息</div>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="学号">{{ warning.student_no || '-' }}</el-descriptions-item>
@@ -134,25 +194,13 @@
         <div class="card-title" style="margin: 0">快捷入口</div>
       </template>
       <div class="quick-grid">
-        <router-link to="/student/grades" class="quick-item">
-          <span class="quick-name">成绩单</span>
-          <span class="quick-desc">每学年课程成绩</span>
-        </router-link>
-        <router-link to="/student/interview" class="quick-item">
-          <span class="quick-name">模拟面试</span>
-          <span class="quick-desc">简历出题 · 逐题点评</span>
-        </router-link>
-        <router-link to="/student/jobs" class="quick-item">
-          <span class="quick-name">岗位库</span>
-          <span class="quick-desc">按方向筛选岗位</span>
-        </router-link>
-        <router-link to="/student/exams" class="quick-item">
-          <span class="quick-name">招考信息</span>
-          <span class="quick-desc">考公 / 考编 / 考研</span>
-        </router-link>
-        <router-link to="/student/kg" class="quick-item">
-          <span class="quick-name">知识图谱</span>
-          <span class="quick-desc">专业—课程—岗位</span>
+        <router-link v-for="q in quickLinks" :key="q.to" :to="q.to" class="quick-item">
+          <span class="bento-icon qh-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path :d="q.icon" /></svg>
+          </span>
+          <span class="qh-arrow" aria-hidden="true">↗</span>
+          <span class="quick-name">{{ q.name }}</span>
+          <span class="quick-desc">{{ q.desc }}</span>
         </router-link>
       </div>
     </el-card>
@@ -356,6 +404,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import http from '../api/http'
+import router from '../router'
 import CountNumber from '../components/CountNumber.vue'
 import { useClock } from '../composables/useSystemStatus'
 
@@ -382,6 +431,87 @@ const recTip = ref('')
 const warning = ref({})
 const recs = ref({})
 const items = ref([])
+
+// 快捷入口：6 个刚好填满 2 列网格，与侧栏可见页面一一对应（不新增不存在的路由）
+const QUICK_LINKS = [
+  {
+    to: '/student/grades',
+    name: '成绩单',
+    desc: '每学年课程成绩',
+    icon: 'M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM14 3v4h4M9 13h6M9 17h4'
+  },
+  {
+    to: '/student/forecast',
+    name: '学业预测',
+    desc: '下学期绩点与风险',
+    icon: 'M4 18V9M10 18V5M16 18v-6M2 18h20'
+  },
+  {
+    to: '/student/interview',
+    name: '模拟面试',
+    desc: '简历出题 · 逐题点评',
+    icon: 'M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3'
+  },
+  {
+    to: '/student/jobs',
+    name: '岗位库',
+    desc: '按方向筛选岗位',
+    icon: 'M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18'
+  },
+  {
+    to: '/student/exams',
+    name: '招考信息',
+    desc: '考公 / 考编 / 考研',
+    icon: 'M12 4l9 4-9 4-9-4 9-4zM5 11v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5'
+  },
+  {
+    to: '/student/kg',
+    name: '知识图谱',
+    desc: '专业—课程—岗位',
+    icon: 'M6 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7.5 7.5l3 5M16.5 7.5l-3 5M8 9h8'
+  }
+]
+
+const quickLinks = QUICK_LINKS
+const warningCard = ref(null)
+
+// Hero 一句话结论：只把引擎返回的等级 / 触发项 / 推荐条数组装成一句话，不产生新数值
+const heroConclusion = computed(() => {
+  const info = warning.value || {}
+  const who = info.name ? `${info.name}，` : ''
+  const jobCnt = items.value.length
+  if (!info.level) return '本学期预警数据还在计算，稍后可查看完整结论'
+  if (info.level === 'none') {
+    return `${who}本学期未触发预警项，已按你的画像匹配 ${jobCnt} 个岗位`
+  }
+  if (info.level === 'unknown') {
+    return `${who}本学期可用指标不足，暂不判定等级；已按现有数据匹配 ${jobCnt} 个岗位`
+  }
+  const reasons = info.reasons || []
+  const why = reasons.length ? `触发原因：${reasons.slice(0, 2).join('、')}` : '暂无触发项'
+  return `${who}本学期为${levelText(info.level)}，${why}；已匹配 ${jobCnt} 个岗位，优先补齐下方缺口`
+})
+
+// 本周行动：直接取规划第一步的前 3 条，缺数据就不渲染这一段（不造数）
+const weekActions = computed(() => {
+  const first = (guide.value?.steps || [])[0]
+  return ((first?.行动) || []).slice(0, 3)
+})
+
+function goJobs() {
+  router.push('/student/jobs')
+}
+
+// 预警明细就在本页，主按钮直接滚过去，而不是把用户带走
+function goWarning() {
+  const node = warningCard.value?.$el || warningCard.value
+  node?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+
+// 让常驻的助手抽屉打开并自动发问：ShellLayout 不在本次改动范围，走窗口事件
+function askAI(question) {
+  window.dispatchEvent(new CustomEvent('qh:ask-ai', { detail: { question } }))
+}
 
 const directionSourceText = computed(() => {
   const map = { 'profile.interest': '来自画像兴趣', intent: '由目标推导', none: '待补充' }
@@ -618,6 +748,151 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
+/* ---------- 顶部 Hero：一句话结论 + 关键指标 + 主按钮 ---------- */
+.page-hero {
+  padding: 20px 22px;
+  background:
+    radial-gradient(
+      115% 140% at 100% 0%,
+      var(--bento-accent-soft) 0%,
+      rgba(240, 238, 255, 0) 62%
+    ),
+    #ffffff;
+}
+
+.ph-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.ph-left {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+
+.ph-eyebrow {
+  display: inline-flex;
+  margin: 0 0 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.ph-title {
+  margin: 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--bento-text);
+}
+
+.ph-desc {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--bento-mute);
+}
+
+.ph-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ph-btn {
+  border-radius: var(--bento-radius-sm);
+}
+
+.ph-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.ph-stat {
+  min-width: 100px;
+  padding: 12px 14px;
+  border: 1px solid var(--bento-border);
+  border-radius: 14px;
+  background: #fbfbff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ph-stat-label {
+  font-size: 12px;
+  color: var(--bento-mute);
+}
+
+.ph-stat-value {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--bento-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ph-stat-value small {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bento-mute);
+}
+
+.ph-stat-value.lv-red { color: var(--qh-red); }
+.ph-stat-value.lv-orange { color: var(--qh-orange); }
+.ph-stat-value.lv-yellow { color: #b98900; }
+.ph-stat-value.lv-none { color: #16a34a; }
+.ph-stat-value.lv-unknown { color: #86909c; }
+
+/* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
+.qh-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+}
+
+.bento-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qh-arrow {
+  font-size: 13px;
+  line-height: 1;
+  color: #b9b1ea;
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition:
+    opacity 180ms var(--bento-ease),
+    transform 180ms var(--bento-ease);
+}
+
+.quick-item:hover .qh-arrow {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -625,38 +900,50 @@ onBeforeUnmount(() => {
 }
 
 .quick-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'icon blank arrow'
+    'name name name'
+    'desc desc desc';
+  align-items: center;
+  gap: 4px 10px;
   padding: 14px;
-  border: 1px solid #f4f4f5;
+  border: 1px solid var(--bento-border);
   border-radius: 16px;
-  background: #fafafa;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.04);
   text-decoration: none;
   transition:
-    transform 220ms var(--qh-ease),
-    background-color 220ms var(--qh-ease),
-    color 220ms var(--qh-ease);
+    transform 220ms var(--bento-ease),
+    box-shadow 220ms var(--bento-ease),
+    border-color 220ms var(--bento-ease);
 }
 
 .quick-item:hover {
   transform: translateY(-2px);
-  background: #18181b;
-  color: #fff;
+  border-color: #ded9ff;
+  box-shadow:
+    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 12px 28px rgba(23, 26, 43, 0.07);
 }
 
+.quick-item .qh-icon { grid-area: icon; }
+.quick-item .qh-arrow { grid-area: arrow; }
+
 .quick-name {
+  grid-area: name;
   font-size: 14px;
   font-weight: 600;
+  color: var(--bento-text);
 }
 
 .quick-desc {
+  grid-area: desc;
   font-size: 12px;
-  color: #71717a;
-}
-
-.quick-item:hover .quick-desc {
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--bento-mute);
 }
 
 .guide-card,
@@ -665,9 +952,22 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
-/* 生涯规划内容少时不再被网格拉伸出大片空白（空白留在页面底色上，不留在空卡片里） */
+/* 生涯规划卡占左侧两行：有步骤数据时撑满，底部两块贴底，中间不留空槽；
+   大一待选方向（内容本身很短）时退回 start，避免卡内出现大片空白 */
 .guide-self-start {
   align-self: start;
+}
+
+.guide-stretch {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+
+.guide-stretch :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
 }
 
 .guide-head {
@@ -712,6 +1012,92 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
   margin-top: 10px;
+}
+
+/* 本周行动：卡片底部占位，内容直接取规划第一步，缺数据则整块不渲染 */
+.week-box {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px dashed var(--bento-border-strong);
+}
+
+.week-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.week-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bento-text);
+}
+
+.week-sub {
+  font-size: 11.5px;
+  color: var(--bento-mute);
+}
+
+.week-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--bento-sub);
+  cursor: pointer;
+}
+
+.week-check {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 4px 0 0;
+  accent-color: var(--bento-accent);
+  cursor: pointer;
+}
+
+.week-text {
+  min-width: 0;
+}
+
+/* 卡片底部两个落地 CTA */
+.guide-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.guide-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--bento-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--bento-sub);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition:
+    transform 200ms var(--bento-ease),
+    background-color 200ms var(--bento-ease),
+    color 200ms var(--bento-ease),
+    border-color 200ms var(--bento-ease);
+}
+
+.guide-cta-btn:hover {
+  transform: translateY(-1px);
+  border-color: #ded9ff;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+}
+
+.guide-cta .cta-arrow {
+  opacity: 0.6;
 }
 
 .guide-step {
@@ -799,14 +1185,15 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
-/* 推荐小格子：自适应列数，窄屏 1 列，中屏 2 列，宽屏 3 列 */
+/* 推荐小格子：改用 flex 等宽铺满——5 张卡在 4 列网格里会在第二行剩 3 个空槽 */
 .rec-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .rec-cell {
+  flex: 1 1 240px;
   border: 1px solid var(--qh-border);
   border-radius: var(--qh-radius-lg);
   padding: 10px 12px;

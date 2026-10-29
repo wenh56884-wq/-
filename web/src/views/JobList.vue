@@ -49,7 +49,11 @@
         <el-form-item>
           <el-checkbox v-model="includeClosed" @change="reload">含已下架</el-checkbox>
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="filter-actions">
+          <span class="filter-total">
+            共 <b>{{ total }}</b> 条
+            <template v-if="lastSuccess">· 上次同步 {{ lastSuccess }}</template>
+          </span>
           <el-button type="primary" :loading="loading" @click="reload">查询</el-button>
         </el-form-item>
       </el-form>
@@ -58,7 +62,7 @@
     <!-- 概览：总量 / 在招 / 单位数 / 行业数 -->
     <article class="bento-card stat-card">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="3" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18" /></svg>
         </span>
         <span class="stat-label">岗位总数</span>
@@ -68,7 +72,7 @@
 
     <article class="bento-card stat-card">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg>
         </span>
         <span class="stat-label">在招</span>
@@ -78,7 +82,7 @@
 
     <article class="bento-card stat-card">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 20V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14M15 10h3a2 2 0 0 1 2 2v8M3 20h18M8 8h3M8 12h3M8 16h3" /></svg>
         </span>
         <span class="stat-label">招聘单位</span>
@@ -88,7 +92,7 @@
 
     <article class="bento-card stat-card">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5-8 4.5-8-4.5L12 3zM4 12l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" /></svg>
         </span>
         <span class="stat-label">覆盖行业</span>
@@ -113,29 +117,37 @@
       <el-empty v-if="!loading && !items.length" description="没有符合条件的岗位" />
 
       <div v-for="it in items" :key="it.id" class="job-item" @click="openDetail(it)">
-        <div class="job-head">
-          <span class="job-title">{{ it.title }}</span>
-          <!-- 薪资缺失时显示「未标注」，绝不显示 0 或「面议」 -->
-          <span v-if="it.salary_text" class="job-salary">{{ it.salary_text }}</span>
-          <span v-else class="job-salary missing">薪资未标注</span>
-          <el-tag v-if="it.status === 'closed'" size="small" type="info">已下架</el-tag>
+        <div class="job-top">
+          <span class="bento-icon qh-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path :d="industryIcon(it.industry)" /></svg>
+          </span>
+          <div class="job-main">
+            <div class="job-head">
+              <span class="job-title">{{ it.title }}</span>
+              <!-- 薪资缺失时显示「未标注」，绝不显示 0 或「面议」 -->
+              <span v-if="it.salary_text" class="job-salary">{{ it.salary_text }}</span>
+              <span v-else class="job-salary missing">薪资未标注</span>
+              <el-tag v-if="it.status === 'closed'" size="small" type="info">已下架</el-tag>
+            </div>
+            <div class="job-meta">
+              <span class="job-company">{{ it.company }}</span>
+              <span v-if="it.industry">{{ it.industry }}</span>
+              <span>{{ it.city }}{{ it.district ? '-' + it.district : '' }}</span>
+              <span v-if="it.experience">{{ it.experience }}</span>
+              <!-- 学历同为缺失：显示未标注，与「不限」区分开 -->
+              <el-tag v-if="it.education" size="small" effect="plain">{{ it.education }}</el-tag>
+              <span v-else class="missing">学历未标注</span>
+              <span v-if="it.headcount">招 {{ it.headcount }} 人</span>
+            </div>
+            <div v-if="it.skill_tags?.length" class="job-skills">
+              <el-tag v-for="s in it.skill_tags" :key="s" size="small" type="info" effect="plain">
+                {{ s }}
+              </el-tag>
+            </div>
+            <div v-if="it.description" class="job-desc">{{ it.description }}</div>
+          </div>
+          <span class="qh-arrow" aria-hidden="true">↗</span>
         </div>
-        <div class="job-meta">
-          <span class="job-company">{{ it.company }}</span>
-          <span v-if="it.industry">{{ it.industry }}</span>
-          <span>{{ it.city }}{{ it.district ? '-' + it.district : '' }}</span>
-          <span v-if="it.experience">{{ it.experience }}</span>
-          <!-- 学历同为缺失：显示未标注，与「不限」区分开 -->
-          <el-tag v-if="it.education" size="small" effect="plain">{{ it.education }}</el-tag>
-          <span v-else class="missing">学历未标注</span>
-          <span v-if="it.headcount">招 {{ it.headcount }} 人</span>
-        </div>
-        <div v-if="it.skill_tags?.length" class="job-skills">
-          <el-tag v-for="s in it.skill_tags" :key="s" size="small" type="info" effect="plain">
-            {{ s }}
-          </el-tag>
-        </div>
-        <div v-if="it.description" class="job-desc">{{ it.description }}</div>
       </div>
 
       <el-pagination
@@ -241,6 +253,26 @@ const detail = ref(null)
 // 职位介绍按「小标题 + 编号条目 + 中英分行」解析，纯展示层结构，不改写原文
 const jdSections = computed(() => parseJd(detail.value?.description))
 
+// 行业图标块：只按行业名挑图形，不动任何岗位数据；认不出就用通用公文包
+const INDUSTRY_ICONS = [
+  { test: /互联网|软件|信息|计算机|通信|电子|数据/, path: 'M3 5h18v11H3zM2 19h20M8 16h8' },
+  { test: /金融|银行|证券|保险|投资|基金|会计/, path: 'M3 8h18v8H3zM12 8v8M7 12h10' },
+  { test: /教育|培训|学校|院校/, path: 'M12 4l9 4-9 4-9-4 9-4zM5 11v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5' },
+  { test: /医疗|医药|生物|健康|护理/, path: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8v8M8 12h8' },
+  { test: /制造|机械|汽车|工业|材料|化工|能源/, path: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 3v3M12 18v3M4.2 7l2.6 1.5M17.2 15.5l2.6 1.5M4.2 17l2.6-1.5M17.2 8.5l2.6-1.5' },
+  { test: /地产|建筑|工程|物业|装饰/, path: 'M4 20V8l8-4 8 4v12M9 20v-6h6v6' }
+]
+
+const DEFAULT_INDUSTRY_ICON =
+  'M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18'
+
+function industryIcon(industry) {
+  const name = String(industry || '').trim()
+  if (!name) return DEFAULT_INDUSTRY_ICON
+  const hit = INDUSTRY_ICONS.find((item) => item.test.test(name))
+  return hit ? hit.path : DEFAULT_INDUSTRY_ICON
+}
+
 async function loadStats() {
   try {
     const { data } = await http.get('/job/stats')
@@ -303,14 +335,72 @@ onMounted(() => {
   font-size: 12px;
   margin-left: 6px;
 }
+/* 筛选区：白色圆角卡 + 软阴影，与统计卡同一套观感 */
+.filter-bar {
+  background: #ffffff;
+  border: 1px solid var(--bento-border);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.05);
+}
+
+.filter-bar :deep(.el-card__body) {
+  padding: 16px 18px;
+}
+
+.filter-bar :deep(.el-form) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .filter-bar :deep(.el-form-item) {
   margin-bottom: 0;
 }
+
+/* 查询整组靠右：右侧不再空一大片，并显示当前筛选出的条数 */
+.filter-actions {
+  margin-left: auto;
+  margin-right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-total {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.filter-total b {
+  color: #18181b;
+  font-size: 13px;
+}
+
 .stat-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 128px;
+  background: #ffffff;
+  border: 1px solid var(--bento-border);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.05);
+  transition:
+    transform 220ms var(--bento-ease),
+    box-shadow 220ms var(--bento-ease),
+    border-color 220ms var(--bento-ease);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #ded9ff;
+  box-shadow:
+    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 12px 28px rgba(23, 26, 43, 0.07);
 }
 
 .stat-top {
@@ -319,10 +409,53 @@ onMounted(() => {
   gap: 10px;
 }
 
-.stat-card .bento-icon {
+/* 统计卡右上角 ↗：与左侧淡紫图标块配成统一的卡片收口 */
+.stat-card .stat-top::after {
+  content: '↗';
+  margin-left: auto;
+  font-size: 13px;
+  line-height: 1;
+  color: #b9b1ea;
+  opacity: 0.45;
+  transition: opacity 180ms var(--bento-ease);
+}
+
+.stat-card:hover .stat-top::after {
+  opacity: 1;
+}
+
+/* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
+.qh-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
-  flex-basis: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+}
+
+.bento-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qh-arrow {
+  font-size: 13px;
+  line-height: 1;
+  color: #b9b1ea;
+  opacity: 0.45;
+}
+
+.stat-card:hover .qh-arrow {
+  opacity: 1;
 }
 
 .stat-label {
@@ -369,6 +502,27 @@ onMounted(() => {
 .job-item:hover {
   background: var(--el-fill-color-light);
 }
+
+/* 岗位卡：左侧行业图标块（淡紫），右侧 ↗ 提示可点开看完整 JD */
+.job-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.job-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.job-top .qh-arrow {
+  margin-top: 4px;
+}
+
+.job-item:hover .qh-arrow {
+  opacity: 1;
+}
+
 .job-head {
   display: flex;
   align-items: center;

@@ -1,6 +1,41 @@
 <template>
   <div class="page bento-page">
     <div class="bento-grid">
+    <!-- Hero：一句话结论 + 关键指标 + 主按钮。数值取自 class-overview / warnings 的分布 -->
+    <section class="bento-card bento-span-4 page-hero">
+      <div class="ph-main">
+        <div class="ph-left">
+          <p class="ph-eyebrow">本学期结论 · {{ overview.term || term || '-' }}</p>
+          <h2 class="ph-title">{{ heroConclusion }}</h2>
+          <p class="ph-desc">
+            班级概貌、预警名单与阈值同源同口径，未通过 Critic 回查的数字不会展示。
+          </p>
+          <div class="ph-actions">
+            <el-button type="primary" class="ph-btn" @click="goJobs">查看岗位</el-button>
+            <el-button class="ph-btn" @click="goWarning">查看预警</el-button>
+            <el-button class="ph-btn" @click="askAI('给我班级的整体学业情况')">
+              问 AI
+            </el-button>
+          </div>
+        </div>
+
+        <div class="ph-stats">
+          <div class="ph-stat">
+            <span class="ph-stat-label">红/橙/黄预警</span>
+            <b class="ph-stat-value lv-red">{{ warnTotal }}<small>人</small></b>
+          </div>
+          <div class="ph-stat">
+            <span class="ph-stat-label">班级均分</span>
+            <b class="ph-stat-value">{{ gpaText }}</b>
+          </div>
+          <div class="ph-stat">
+            <span class="ph-stat-label">挂科率</span>
+            <b class="ph-stat-value">{{ fmtRate(overview.fail_rate) }}</b>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="bento-card bento-span-4 filter-bar">
       <el-form inline @submit.prevent>
         <el-form-item label="学院">
@@ -67,42 +102,50 @@
       </div>
     </section>
 
-    <article class="bento-card stat-card stat-red">
+    <article class="bento-card stat-card stat-red" role="button" tabindex="0"
+      @click="goWarning" @keyup.enter="goWarning">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z" /><path d="M12 9v4M12 16h.01" /></svg>
         </span>
         <span class="stat-label">红色预警</span>
+        <span class="qh-arrow" aria-hidden="true">↗</span>
       </div>
       <div class="bento-stat"><count-number :value="dist.red" /></div>
     </article>
 
-    <article class="bento-card stat-card stat-orange">
+    <article class="bento-card stat-card stat-orange" role="button" tabindex="0"
+      @click="goWarning" @keyup.enter="goWarning">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
+        <span class="bento-icon qh-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>
         </span>
         <span class="stat-label">橙色预警</span>
+        <span class="qh-arrow" aria-hidden="true">↗</span>
       </div>
       <div class="bento-stat"><count-number :value="dist.orange" /></div>
     </article>
 
-    <article class="bento-card stat-card stat-yellow">
+    <article class="bento-card stat-card stat-yellow" role="button" tabindex="0"
+      @click="goWarning" @keyup.enter="goWarning">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 4a6 6 0 0 0-6 6v4l-2 3h16l-2-3v-4a6 6 0 0 0-6-6z" /><path d="M10 19a2 2 0 0 0 4 0" /></svg>
+        <span class="bento-icon qh-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 4a6 6 0 0 0-6 6v4l-2 3h16l-2-3v-4a6 6 0 0 0-6-6z" /><path d="M10 19a2 2 0 0 0 4 0" /></svg>
         </span>
         <span class="stat-label">黄色预警</span>
+        <span class="qh-arrow" aria-hidden="true">↗</span>
       </div>
       <div class="bento-stat"><count-number :value="dist.yellow" /></div>
     </article>
 
-    <article class="bento-card stat-card stat-normal">
+    <article class="bento-card stat-card stat-normal" role="button" tabindex="0"
+      @click="goOverview" @keyup.enter="goOverview">
       <div class="stat-top">
-        <span class="bento-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 20a5 5 0 0 0-3-4.5" /></svg>
+        <span class="bento-icon qh-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 20a5 5 0 0 0-3-4.5" /></svg>
         </span>
         <span class="stat-label">班级人数 / 均分</span>
+        <span class="qh-arrow" aria-hidden="true">↗</span>
       </div>
       <div class="bento-stat">
         <count-number :value="overview.headcount" />
@@ -111,7 +154,8 @@
       </div>
     </article>
 
-    <section class="bento-card bento-span-2 bento-row-2 hero-card" v-loading="loading">
+    <section ref="overviewCard" class="bento-card bento-span-2 bento-row-2 overview-card"
+      v-loading="loading">
       <div class="hero-head">
         <div>
           <p class="bento-eyebrow">班级概貌</p>
@@ -218,7 +262,7 @@
       </div>
     </section>
 
-    <section class="bento-card bento-span-4 table-card">
+    <section ref="warningTableCard" class="bento-card bento-span-4 table-card">
       <div class="card-title">
         预警名单（点击行看四维画像）
         <el-tag v-if="!loading" size="small" :type="(warnings.items || []).length ? 'danger' : 'success'"
@@ -380,6 +424,7 @@ import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
 import http from '../api/http'
+import router from '../router'
 import CountNumber from '../components/CountNumber.vue'
 import { useClock } from '../composables/useSystemStatus'
 
@@ -410,6 +455,56 @@ let radarChart = null
 
 const dist = computed(() => warnings.value.distribution || {})
 
+// Hero：红/橙/黄合计与一句话结论，全部取自 /teacher/warnings 的分布与 /teacher/class-overview
+const warnTotal = computed(() =>
+  ['red', 'orange', 'yellow'].reduce((acc, key) => acc + Number(dist.value[key] || 0), 0)
+)
+
+const gpaText = computed(() => {
+  const value = overview.value?.avg_gpa
+  return value === null || value === undefined ? '-' : Number(value).toFixed(1)
+})
+
+const heroConclusion = computed(() => {
+  const ov = overview.value || {}
+  if (!ov.class_name) return '先在上方选择班级，即可看到本学期整体结论与预警名单'
+  const total = Number(ov.headcount || 0)
+  if (!warnTotal.value) {
+    return `${ov.class_name} 本学期共 ${total} 人、均分 ${gpaText.value}，暂无红/橙/黄色预警学生`
+  }
+  const rate = total ? ((warnTotal.value / total) * 100).toFixed(1) : '-'
+  return (
+    `${ov.class_name} 本学期共 ${total} 人、均分 ${gpaText.value}，` +
+    `红/橙/黄色预警 ${warnTotal.value} 人（占 ${rate}%），建议先看下方名单`
+  )
+})
+
+const overviewCard = ref(null)
+const warningTableCard = ref(null)
+
+function scrollToCard(target) {
+  const node = target.value?.$el || target.value
+  node?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+
+function goJobs() {
+  router.push('/teacher/jobs')
+}
+
+// 预警名单就在本页，主按钮滚动过去，而不是把教师带走
+function goWarning() {
+  scrollToCard(warningTableCard)
+}
+
+function goOverview() {
+  scrollToCard(overviewCard)
+}
+
+// 让常驻的助手抽屉打开并自动发问：ShellLayout 不在本次改动范围，走窗口事件
+function askAI(question) {
+  window.dispatchEvent(new CustomEvent('qh:ask-ai', { detail: { question } }))
+}
+
 const INTENT_META = [
   { key: '考公', label: '考公', color: '#dc2626' },
   { key: '考研', label: '考研', color: '#d97706' },
@@ -438,6 +533,9 @@ const thresholdLoading = ref(false)
 const thresholdSaving = ref(false)
 const thresholdRows = ref([])
 const thresholdTip = ref('')
+// 阈值列存的是「加权得分」而非原始门次/出勤率；不写清楚，教师按直觉填 1/2/3 或 0.9
+// 会把整班风险分压到 0（2026-10-29 已踩过这个坑），所以打开弹窗先显示口径。
+const THRESHOLD_TIP = '口径：挂科门次填加权得分（黄15/橙30/红45）；出勤率黄色=起算率、橙色=拿满率、红色=得分上限；均分下滑黄色=起算分差、橙色=起算固定分、红色=得分上限。'
 
 const drawer = ref(false)
 const profileLoading = ref(false)
@@ -640,7 +738,7 @@ async function openThresholds() {
   }
   thresholdDialog.value = true
   thresholdLoading.value = true
-  thresholdTip.value = ''
+  thresholdTip.value = THRESHOLD_TIP
   try {
     const { data } = await http.get('/teacher/warning-thresholds', {
       params: { class_name: klass }
@@ -889,11 +987,180 @@ onBeforeUnmount(() => {
   margin-left: 12px;
 }
 
+/* ---------- 顶部 Hero：一句话结论 + 关键指标 + 主按钮 ---------- */
+.page-hero {
+  padding: 20px 22px;
+  background:
+    radial-gradient(
+      115% 140% at 100% 0%,
+      var(--bento-accent-soft) 0%,
+      rgba(240, 238, 255, 0) 62%
+    ),
+    #ffffff;
+}
+
+.ph-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.ph-left {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+
+.ph-eyebrow {
+  display: inline-flex;
+  margin: 0 0 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.ph-title {
+  margin: 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--bento-text);
+}
+
+.ph-desc {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--bento-mute);
+}
+
+.ph-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ph-btn {
+  border-radius: var(--bento-radius-sm);
+}
+
+.ph-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.ph-stat {
+  min-width: 100px;
+  padding: 12px 14px;
+  border: 1px solid var(--bento-border);
+  border-radius: 14px;
+  background: #fbfbff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ph-stat-label {
+  font-size: 12px;
+  color: var(--bento-mute);
+}
+
+.ph-stat-value {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--bento-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ph-stat-value small {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bento-mute);
+}
+
+.ph-stat-value.lv-red { color: var(--qh-red); }
+.ph-stat-value.lv-orange { color: var(--qh-orange); }
+.ph-stat-value.lv-yellow { color: #b98900; }
+.ph-stat-value.lv-none { color: #16a34a; }
+.ph-stat-value.lv-unknown { color: #86909c; }
+
+/* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
+.qh-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+}
+
+.bento-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qh-arrow {
+  font-size: 13px;
+  line-height: 1;
+  color: #b9b1ea;
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition:
+    opacity 180ms var(--bento-ease),
+    transform 180ms var(--bento-ease);
+}
+
+.stat-card .qh-arrow {
+  opacity: 0.45;
+  transform: none;
+}
+
+.stat-card:hover .qh-arrow {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
 .stat-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 128px;
+  cursor: pointer;
+  background: #ffffff;
+  border: 1px solid var(--bento-border);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(23, 26, 43, 0.04),
+    0 8px 20px rgba(23, 26, 43, 0.05);
+  transition:
+    transform 220ms var(--bento-ease),
+    box-shadow 220ms var(--bento-ease),
+    border-color 220ms var(--bento-ease);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #ded9ff;
+  box-shadow:
+    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 12px 28px rgba(23, 26, 43, 0.07);
 }
 
 .stat-top {
@@ -914,15 +1181,10 @@ onBeforeUnmount(() => {
   color: var(--qh-text-mute);
 }
 
-.stat-red .bento-icon { color: var(--qh-red); background: #fef2f2; }
-.stat-orange .bento-icon { color: var(--qh-orange); background: #fffbeb; }
-.stat-yellow .bento-icon { color: var(--qh-yellow); background: #fefce8; }
-.stat-normal .bento-icon { color: #52525b; background: #f4f4f5; }
-
-.stat-red:hover .bento-icon { color: var(--qh-red); background: #fee2e2; }
-.stat-orange:hover .bento-icon { color: var(--qh-orange); background: #fef3c7; }
-.stat-yellow:hover .bento-icon { color: var(--qh-yellow); background: #fef9c3; }
-.stat-normal:hover .bento-icon { color: #18181b; background: #e4e4e7; }
+/* 三张预警统计卡保留语义色：数字按等级着色，图标块统一淡紫 */
+.stat-red .bento-stat { color: var(--qh-red); }
+.stat-orange .bento-stat { color: var(--qh-orange); }
+.stat-yellow .bento-stat { color: #b98900; }
 
 .stat-value {
   font-size: 24px;
@@ -950,7 +1212,8 @@ onBeforeUnmount(() => {
   color: var(--bento-mute);
 }
 
-.hero-card {
+/* 班级概貌卡：已从 hero-card 改名，避免与顶部 Hero 撞样式（渐变紫底会让深色文字发灰） */
+.overview-card {
   display: flex;
   flex-direction: column;
   gap: 18px;

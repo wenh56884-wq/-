@@ -11,8 +11,13 @@
           </el-form-item>
           <el-form-item label="学生">
             <el-select v-model="studentNo" filterable style="width: 260px" @change="loadGrades">
-              <el-option v-for="s in students" :key="s.student_no"
+              <el-option v-for="s in studentOptions" :key="s.student_no"
                 :label="`${s.student_no} ${s.name || ''}`" :value="s.student_no" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="学期">
+            <el-select v-model="rankTerm" style="width: 160px" @change="loadRank">
+              <el-option v-for="t in terms" :key="t" :label="t" :value="t" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -22,6 +27,60 @@
           </el-form-item>
         </el-form>
         <div v-if="err" class="err">{{ err }}</div>
+      </section>
+
+      <!-- 教师：全班总体平均成绩 -->
+      <section v-if="isTeacher && rank" class="bento-card bento-span-2 rank-card">
+        <div class="card-head">
+          <h3 class="bento-title">全班总体平均成绩</h3>
+          <span class="bento-eyebrow">{{ rank.term }} · {{ rank.class_name }}</span>
+        </div>
+        <div class="class-stats">
+          <div>
+            <span>加权均分</span>
+            <b>{{ curClass?.weighted_avg ?? '—' }}</b>
+          </div>
+          <div>
+            <span>平均分</span>
+            <b>{{ curClass?.avg_score ?? '—' }}</b>
+          </div>
+          <div>
+            <span>在册 / 有成绩</span>
+            <b>{{ curClass?.student_cnt ?? 0 }} / {{ curClass?.graded_cnt ?? 0 }}</b>
+          </div>
+          <div>
+            <span>最高 / 最低</span>
+            <b>{{ curClass?.max_weighted_avg ?? '—' }} / {{ curClass?.min_weighted_avg ?? '—' }}</b>
+          </div>
+        </div>
+        <p class="rank-note">
+          班级均分 = 该班各学生个人加权均分的算术平均（学生等权），口径与成绩单一致
+        </p>
+      </section>
+
+      <!-- 教师：同专业之间的班级排名 -->
+      <section v-if="isTeacher && rank" class="bento-card bento-span-2 rank-card">
+        <div class="card-head">
+          <h3 class="bento-title">同专业班级排名</h3>
+          <span class="bento-eyebrow">按「专业 + 班级」聚合</span>
+        </div>
+        <el-table :data="majorClassRank" size="small" border stripe max-height="300">
+          <el-table-column prop="major" label="专业" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="class_name" label="班级" width="86" />
+          <el-table-column label="名次" width="76">
+            <template #default="{ row }">
+              <b :class="{ 'is-top': row.rank === 1 }">{{ row.rank }} / {{ row.rank_total }}</b>
+            </template>
+          </el-table-column>
+          <el-table-column prop="student_cnt" label="人数" width="66" />
+          <el-table-column label="加权均分" width="88">
+            <template #default="{ row }"><b>{{ row.weighted_avg ?? '—' }}</b></template>
+          </el-table-column>
+        </el-table>
+        <p class="rank-note">
+          一个班里可能有多个专业，各专业分别计名次；任教范围内共
+          {{ comparedClassCnt }} 个班参与比较{{ singleClassHint ? '，该专业范围内仅 1 个班，无法横向比较，如需跨班比较请联系管理员扩充任教班级' : '' }}
+        </p>
       </section>
 
       <!-- 学生信息 + 汇总 -->
@@ -69,6 +128,47 @@
           共 {{ summary.year_count || 0 }} 个学年 · {{ summary.term_count || 0 }} 个学期 ·
           {{ summary.record_count || 0 }} 条原始记录
         </div>
+      </section>
+
+      <!-- 教师：班级每个人的平均成绩与排名 -->
+      <section v-if="isTeacher && rank" class="bento-card bento-span-4 rank-card">
+        <div class="card-head">
+          <h3 class="bento-title">班级个人平均成绩与排名</h3>
+          <span class="bento-eyebrow">
+            点一行看该生成绩单 · 引擎 {{ rank.engine_version }} · 范围
+            {{ rank.scope === 'assigned' ? '任教班级' : '本租户' }}
+          </span>
+        </div>
+        <el-table :data="rankStudents" size="small" border stripe max-height="420"
+          highlight-current-row @row-click="pickStudent">
+          <el-table-column prop="student_no" label="学号" width="130" />
+          <el-table-column prop="name" label="姓名" width="86" />
+          <el-table-column prop="major" label="专业" min-width="130" show-overflow-tooltip />
+          <el-table-column label="加权均分" width="92">
+            <template #default="{ row }"><b>{{ row.weighted_avg ?? '—' }}</b></template>
+          </el-table-column>
+          <el-table-column prop="avg_score" label="平均分" width="84" />
+          <el-table-column label="班内名次" width="96">
+            <template #default="{ row }">
+              <span :class="{ 'is-top': row.class_rank === 1 }">
+                {{ row.class_rank ?? '—' }} / {{ row.class_rank_total }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="同专业名次" width="104">
+            <template #default="{ row }">
+              <span :class="{ 'is-top': row.major_rank === 1 }">
+                {{ row.major_rank ?? '—' }} / {{ row.major_rank_total }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="credits" label="学分" width="76" />
+          <el-table-column label="挂科" width="72">
+            <template #default="{ row }">
+              <span :class="{ fail: row.failed_count }">{{ row.failed_count ?? 0 }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
       </section>
 
       <!-- 学年 tabs：每学期一张全量成绩表 -->
@@ -148,10 +248,35 @@ const loading = ref(false)
 const err = ref('')
 const activeYear = ref('')
 const chartRef = ref(null)
+// 教师端新增：班级成绩分析（全班均分 / 班级排名 / 个人排名）
+const rank = ref(null)
+const terms = ref([])
+const rankTerm = ref('')
 let chart = null
 
 const summary = computed(() => report.value?.summary || {})
 const student = computed(() => report.value?.student || {})
+const curClass = computed(
+  () => (rank.value?.classes || []).find((c) => c.class_name === className.value) || null
+)
+const rankStudents = computed(() => rank.value?.students || [])
+// 同专业班级排名里只保留本班涉及的专业，免得把无关专业也铺出来
+const majorClassRank = computed(() => {
+  const majors = new Set((rankStudents.value || []).map((s) => s.major))
+  return (rank.value?.class_rank_in_major || []).filter((r) => majors.has(r.major))
+})
+// 参与比较的班级数：教师只带一个班时排名没有横向意义，界面要直说，不能让用户猜
+const comparedClassCnt = computed(
+  () => new Set((rank.value?.class_rank_in_major || []).map((r) => r.class_name)).size
+)
+const singleClassHint = computed(
+  () => majorClassRank.value.length > 0
+    && majorClassRank.value.every((r) => (r.rank_total || 0) < 2)
+)
+// 排名字段给出的是全班名单，比预警名单全，优先用它填学生下拉
+const studentOptions = computed(() =>
+  rankStudents.value.length ? rankStudents.value : students.value
+)
 const termSeries = computed(() => (report.value?.years || []).flatMap(
   (year) => (year.terms || []).map((term) => ({
     term: term.term,
@@ -197,9 +322,32 @@ async function loadStudents() {
       studentNo.value = students.value[0]?.student_no || ''
     }
     if (studentNo.value) await loadGrades()
+    await loadRank()
   } catch (e) {
     err.value = e?.response?.data?.detail || '学生名单加载失败'
   }
+}
+
+async function loadRank() {
+  if (!isTeacher || !className.value) return
+  try {
+    const { data } = await http.get('/grades/class-rank', {
+      params: { class_name: className.value, term: rankTerm.value || undefined }
+    })
+    rank.value = data
+    if (!terms.value.length && data?.available_terms?.length) terms.value = data.available_terms
+    if (!rankTerm.value && data?.term) rankTerm.value = data.term
+  } catch (e) {
+    rank.value = null
+    ElMessage.error(e?.response?.data?.detail || '班级成绩分析加载失败')
+  }
+}
+
+// 点排名表里的一行就看这个学生的成绩单：不必先在下拉里找到他
+function pickStudent(row) {
+  if (!row?.student_no) return
+  studentNo.value = row.student_no
+  loadGrades()
 }
 
 async function loadGrades() {
@@ -430,6 +578,60 @@ onBeforeUnmount(() => {
   color: var(--bento-mute);
 }
 
+.rank-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px 20px;
+}
+
+.rank-card .card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.class-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.class-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fafafa;
+}
+
+.class-stats span {
+  font-size: 12px;
+  color: var(--bento-mute);
+}
+
+.class-stats b {
+  font-size: 20px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+  color: var(--bento-text);
+}
+
+.rank-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--bento-mute);
+}
+
+.is-top {
+  color: #ea580c;
+  font-weight: 650;
+}
+
 .fail {
   color: var(--qh-red);
 }
@@ -442,6 +644,10 @@ onBeforeUnmount(() => {
   .summary-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     min-width: 100%;
+  }
+
+  .class-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
