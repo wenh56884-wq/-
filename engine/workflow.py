@@ -15,6 +15,24 @@ from typing import Any, Callable, Mapping, Sequence
 WORKFLOW_VERSION = "wf-v1"
 MAX_STEPS = 8
 
+# 运行状态：pending / rejected 由「人工审批」引入（wf-approval-v1）
+#   running  —— 正在跑（无人审时的中间态，跑完即改成 success/failed）
+#   pending  —— 已提交，等教师审批，**尚未执行任何步骤**
+#   success  —— 全部步骤成功
+#   failed   —— 中途失败即停
+#   rejected —— 被审批人驳回，步骤一步都没跑
+STATUS_RUNNING = "running"
+STATUS_PENDING = "pending"
+STATUS_SUCCESS = "success"
+STATUS_FAILED = "failed"
+STATUS_REJECTED = "rejected"
+
+# 审批动作
+ACTION_APPROVE = "approve"
+ACTION_REJECT = "reject"
+
+APPROVAL_VERSION = "wf-approval-v1"
+
 # 白名单：名称 → 中文说明。新增能力必须显式登记，防止配置里塞进任意函数名。
 ALLOWED_TOOLS: dict[str, str] = {
     "my_warning": "本人学业预警",

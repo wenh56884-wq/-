@@ -59,7 +59,7 @@ def _fmt(value: float) -> str:
 def normalize_metrics(raw: Mapping[str, Any]) -> dict[str, Any]:
     """把原始行（MySQL Decimal / 手工 dict）统一转成标准 metrics 字典。
 
-    **缺失即 None，不参与加权**：不写 0 / 0.0 / 1.0 填充（见 docs\指标口径字典.md 第 3.2 节）。
+    **缺失即 None，不参与加权**：不写 0 / 0.0 / 1.0 填充（见 etl/docs/指标口径字典.md 第 3.2 节）。
     class_rank_pct 仅供展示，不参与打分；缺失同样为 None。
     """
     def _f(key: str) -> float | None:
@@ -310,7 +310,7 @@ def coverage_and_score(metrics: Mapping[str, Any], rules: WarningRules) -> tuple
 
     factor = Σ三项 weight / Σ可用项 weight，**仅当 coverage >= MIN_COVERAGE_TO_RESCALE 时启用**；
     coverage < 2 时 factor = 1.0 —— 只有 1 项可用时外推会把 1 门挂科放大成 45 分，
-    凭空造出高风险档，比不放大更糟（docs\指标口径字典.md 第 3.2 节第 2 条）。
+    凭空造出高风险档，比不放大更糟（etl/docs/指标口径字典.md 第 3.2 节第 2 条）。
     """
     scorers = {
         "fail_count": rules.fail_count.score,

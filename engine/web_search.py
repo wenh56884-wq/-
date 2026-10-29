@@ -19,11 +19,17 @@ _cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
 
 
 def provider() -> str | None:
-    """按优先级选 provider；都没有就返回 None（上层据此诚实降级）。"""
+    """按优先级选 provider；都没有就返回 None（上层据此诚实降级）。
+
+    博查（BOCHA_API_KEY，key 形如 ak-xxx）放在最后：国内网络可直接访问，
+    且是专为大模型设计的搜索接口；前两家在境外，配了才轮得到它们。
+    """
     if os.getenv("SERPER_API_KEY", "").strip():
         return "serper"
     if os.getenv("BING_SEARCH_KEY", "").strip():
         return "bing"
+    if os.getenv("BOCHA_API_KEY", "").strip():
+        return "bocha"
     return None
 
 
@@ -55,11 +61,14 @@ def search(query: str, top_k: int = 5, timeout: float = 8.0) -> dict[str, Any]:
     try:
         if prov == "serper":
             out = _serper(q, top_k, timeout)
+        elif prov == "bocha":
+            out = _bocha(q, top_k, timeout)
         else:
             out = _bing(q, top_k, timeout)
     except Exception as exc:  # 网络/配额异常一律如实返回，不编结果
+        # 带上原始原因（如「密钥无效」），否则排障时只看到异常类型，看不出该去换 key
         return {"configured": True, "provider": prov, "query": q, "results": [],
-                "error": f"搜索请求失败：{type(exc).__name__}", "engine_version": WEB_SEARCH_VERSION}
+                "error": f"搜索请求失败：{exc}", "engine_version": WEB_SEARCH_VERSION}
     out["took_ms"] = int((time.time() - started) * 1000)
     out["engine_version"] = WEB_SEARCH_VERSION
     _cache[key] = (now, out)
@@ -101,6 +110,40 @@ def _bing(query: str, top_k: int, timeout: float) -> dict[str, Any]:
                 "snippet": str(it.get("snippet") or ""), "source": "bing"}
                for it in ((data.get("webPages") or {}).get("value") or []) if it.get("url")]
     return {"configured": True, "provider": "bing", "query": query,
+            "results": results[:top_k], "error": None}
+
+
+def _bocha(query: str, top_k: int, timeout: float) -> dict[str, Any]:
+    """博查（api.bochaai.com / v1/web-search）：国内可直连，key 形如 ak-xxx。
+
+    401 单独拎出来：那是「密钥无效 / 已禁用」，和「网络不通」不是一回事，
+    不说清楚会让人以为是服务挂了，其实是该去控制台换 key。
+    """
+    import httpx
+
+    resp = httpx.post(
+        "https://api.bochaai.com/v1/web-search",
+        headers={"Authorization": f"Bearer {os.environ['BOCHA_API_KEY'].strip()}",
+                 "Content-Type": "application/json"},
+        json={"query": query, "count": max(1, min(top_k, 10)), "summary": True},
+        timeout=timeout,
+    )
+    if resp.status_code in (401, 403):
+        raise PermissionError(f"博查密钥无效或已禁用（HTTP {resp.status_code}），"
+                              "请到 open.bochaai.com 控制台核对")
+    resp.raise_for_status()
+    data = resp.json()
+    # 官方返回是顶层 webPages（见 open.bochaai.com 文档示例），
+    # 再兜一层 data.webPages 防接口改版，免得哪天悄悄返回空列表
+    pages = (((data.get("data") or {}).get("webPages")
+              or data.get("webPages") or {}).get("value") or [])
+    results = [{"title": str(it.get("name") or it.get("title") or ""),
+                "url": str(it.get("url") or ""),
+                # 博查正文摘要字段是 summary，老版本可能叫 snippet，都兜一下
+                "snippet": str(it.get("summary") or it.get("snippet") or ""),
+                "source": "bocha"}
+               for it in pages if it.get("url")]
+    return {"configured": True, "provider": "bocha", "query": query,
             "results": results[:top_k], "error": None}
 
 

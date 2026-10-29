@@ -258,6 +258,32 @@ def build_index(rows: Iterable[Mapping[str, Any]]):
     return _build_index(signature, norm_rows)
 
 
+# 口语同义词：演示现场常问「挂科了还能毕业吗」「补考没过怎么办」，
+# 这些词与制度文本的字面重叠很低；只扩查询、不改入库原文，引用仍逐字可回溯。
+_QUERY_EXPANSIONS: tuple[tuple[str, str], ...] = (
+    ("挂科", "不及格 补考 重修 成绩 学业预警"),
+    ("补考", "补考 重修 不及格 成绩"),
+    ("没过", "不及格 补考 重修 成绩"),
+    ("重修", "重修 补考 不及格"),
+    ("毕业", "毕业学分 学籍 毕业资格 培养方案"),
+    ("退学", "退学 休学 学籍 学业警示"),
+    ("休学", "休学 复学 学籍"),
+    ("奖学金", "奖学金 助学金 评定 国家奖学金"),
+    ("助学贷款", "助学贷款 贷款 还款 征信"),
+    ("三方协议", "就业协议 违约金 档案 报到证"),
+    ("实习", "实习 实践 学分 安全"),
+)
+
+
+def expand_query(query: str) -> str:
+    """把口语词扩成制度用语；只改检索串，不改展示与引用原文。"""
+    extra: list[str] = []
+    for word, expansion in _QUERY_EXPANSIONS:
+        if word in query:
+            extra.append(expansion)
+    return f"{query} {' '.join(extra)}" if extra else query
+
+
 def search(query: str, rows: Iterable[Mapping[str, Any]], top_k: int = 4,
            min_score: float = 0.03) -> list[dict[str, Any]]:
     """检索最相关的分块。空查询/空库/全低于阈值 → 返回 []（上层明说没查到）。
@@ -271,7 +297,7 @@ def search(query: str, rows: Iterable[Mapping[str, Any]], top_k: int = 4,
     items, vectorizer, matrix = build_index(rows)
     if not items or vectorizer is None or matrix is None:
         return []
-    qv = vectorizer.transform([q])
+    qv = vectorizer.transform([expand_query(q)])
     sims = (matrix @ qv.T).toarray().ravel()
 
     q_norm = _norm(q)
