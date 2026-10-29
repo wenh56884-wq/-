@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -19,7 +20,11 @@ import pymysql
 from agents.career import context as career_context
 from app.config import Settings, get_settings
 from engine import career_guide, competition, hybrid, job_search, profile, recommend, warning
+from engine import forecast as forecast_engine      # 学业预测（绩点/挂科/等级走向）
+from engine import grades as grades_engine          # 成绩聚合（纯函数）
 from engine import kb_store, rag
+from engine import kg as kg_engine                  # 知识图谱（专业-课程-岗位-技能）
+from engine import question_bank as qbank           # 面试题库（与出题同源硬校验池）
 from engine import web_search as web_engine
 from engine import workflow as workflow_engine
 from engine.career_rules import CAREER_ENGINE_VERSION
@@ -27,7 +32,7 @@ from engine.rules import LEVELS
 from engine.store import DuckDBStore
 
 # 工具层版本（随返回值下发，便于前端/Critic 溯源）
-TOOLS_VERSION = "tools-v1"
+TOOLS_VERSION = "tools-v2"
 # 角色常量
 ACTOR_TEACHER = "teacher"
 ACTOR_STUDENT = "student"
@@ -1469,13 +1474,29 @@ def job_facets(ctx: ToolContext) -> dict[str, Any]:
 
 
 # 对外工具清单：便于 FastAPI / LangGraph 统一注册与自检
+# 「智能体统一入口」注册表（agent-entry-v1）：覆盖系统全部板块的只读工具，
+# 铁律不变——数值全部由 engine 确定性计算，工具层只做校验、取数与审计。
 TEACHER_TOOLS: tuple[str, ...] = (
     "class_overview", "class_list", "student_profile", "warning_list", "career_gap",
     "get_warning_thresholds", "save_warning_thresholds",
+    # 成绩 / 预测（教师按学号查，任教范围校验在工具内）
+    "student_grades", "student_forecast",
+    # 岗位 / 图谱
+    "search_jobs", "job_facets", "kg_major_skills", "kg_skill_jobs", "kg_path",
+    # agent-entry-v2：招考公告 / 面试题库（师生通用，都带出处）
+    "exam_notices", "question_bank_lookup",
 )
 STUDENT_TOOLS: tuple[str, ...] = (
     "my_warning", "my_recommendations", "job_search",
     "career_guide", "save_career_intent",
+    # 成绩 / 预测 / 报考分析（本人视角，学号只来自登录态）
+    "my_grades", "my_forecast", "my_career_forecast",
+    # 通知 / 竞赛 / 规划
+    "my_notices", "mark_notices_read", "competition_guide", "my_career_guide",
+    # 岗位 / 图谱
+    "search_jobs", "job_facets", "kg_major_skills", "kg_skill_jobs", "kg_path",
+    # agent-entry-v2：招考公告 / 模拟面试历史（只本人）/ 面试题库
+    "exam_notices", "my_interviews", "question_bank_lookup",
 )
 
 
@@ -1687,3 +1708,311 @@ def run_workflow(ctx: ToolContext, name: str = "", inputs: Mapping[str, Any] | N
             "steps": result["steps"], "outputs": result.get("outputs") or {},
             "sources": [], "engine_version": result["engine_version"],
             "summary": workflow_engine.render_summary(result)}
+
+
+# ----------------------------------------------------------------
+# 学业数据类工具（agent-entry-v1）
+# ----------------------------------------------------------------
+# 为什么扩这些：原先智能体只有 9 个工具，成绩 / 学业预测 / 报考分析 / 知识图谱
+# 这些功能只能走页面接口，智能体根本调不到——「以智能体为主」就无从谈起。
+#
+# 铁律不变：数值一律由 engine 的确定性函数算出。这里只做四步：
+#   权限校验 → 取数（带租户 / 任教班级隔离）→ 调引擎 → 结构化返回（禁止自然语言）。
+# 表达仍交给上层 draft，工具不替模型编话。
+
+_GRADE_SQL = (
+    "SELECT sc.`编号` AS record_id, sc.`学期` AS term, sc.`分数` AS score, "
+    "       sc.`是否重修` AS retake, c.`课程编号` AS course_code, "
+    "       c.`课程名称` AS course_name, c.`学分` AS credit "
+    "FROM `成绩` sc "
+    "JOIN `课程` c ON c.`编号` = sc.`课程编号` "
+    "JOIN `学生` s ON s.`编号` = sc.`学生编号` "
+    "WHERE s.`租户编号` = %s AND sc.`学生编号` = %s "
+    "ORDER BY sc.`学期`, c.`课程编号`, sc.`编号`"
+)
+
+
+def _grades_report(ctx: ToolContext, stu: Mapping[str, Any]) -> dict[str, Any]:
+    """取数 → 交给 engine.grades 聚合（均分 / 加权 / 学分 / 挂科门次全由引擎算）。"""
+    rows = _query(_GRADE_SQL, (ctx.tenant_id, int(stu["student_id"])))
+    student = {k: stu.get(k) for k in
+               ("student_no", "name", "major", "class_name", "college", "enroll_year")}
+    student["grade"] = career_guide.grade_label(stu.get("enroll_year"))
+    report = grades_engine.build_report(rows, student)
+    report["tools_version"] = TOOLS_VERSION
+    return report
+
+
+def my_grades(ctx: ToolContext) -> dict[str, Any]:
+    """本人成绩单（学生端）：各学年 / 学期均分、加权均分、学分、挂科门次。
+    学号只来自登录态，不接受任何「查谁」的入参。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_grades", "self")
+    me = _resolve_self(ctx, "my_grades")
+    report = _grades_report(ctx, me)
+    _audit_call(ctx, "my_grades", str(me["student_no"]),
+                {"records": report["summary"]["record_count"]})
+    return report
+
+
+def student_grades(ctx: ToolContext, student_no: str = "") -> dict[str, Any]:
+    """某个学生的成绩单（教师端）；租户 + 任教范围校验在 _fetch_student 内完成。"""
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "student_grades", str(student_no))
+    stu = _fetch_student(ctx, str(student_no or ""), "student_grades")
+    report = _grades_report(ctx, stu)
+    _audit_call(ctx, "student_grades", str(stu["student_no"]),
+                {"records": report["summary"]["record_count"]})
+    return report
+
+
+def my_forecast(ctx: ToolContext) -> dict[str, Any]:
+    """本人学业预测（学生端）：下学期绩点 / 挂科门次、风险课、预警等级走向。
+    学期不足 2 个时引擎返回 available=False 并说明原因，**不冒充预测值**。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_forecast", "self")
+    me = _resolve_self(ctx, "my_forecast")
+    result = forecast_engine.compute_student_forecast(ctx.tenant_id, str(me["student_no"]))
+    _audit_call(ctx, "my_forecast", str(me["student_no"]),
+                {"available": bool(result.get("available"))})
+    return dict(result)
+
+
+def student_forecast(ctx: ToolContext, student_no: str = "") -> dict[str, Any]:
+    """某个学生的学业预测（教师端）；班级预警阈值由引擎按该生所在班级取。"""
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "student_forecast", str(student_no))
+    stu = _fetch_student(ctx, str(student_no or ""), "student_forecast")
+    result = forecast_engine.compute_student_forecast(ctx.tenant_id, str(stu["student_no"]))
+    _audit_call(ctx, "student_forecast", str(stu["student_no"]),
+                {"available": bool(result.get("available"))})
+    return dict(result)
+
+
+def my_career_forecast(ctx: ToolContext, goal: str = "") -> dict[str, Any]:
+    """本人报考竞争力分析（学生端）：考公 / 考编 / 考研 三选一，含硬门槛校验、
+    四维评分、时间窗与提分杠杆。goal 留空时沿用学生自己填的发展意向。
+
+    只给学生本人：这是个人竞争力数据，教师端不暴露。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_career_forecast", "self")
+    from agents.career import nodes as career_nodes   # 延迟导入：nodes 反过来依赖 tools
+
+    result = career_nodes.forecast_career(ctx.tenant_id, ctx.student_id, goal or None)
+    _audit_call(ctx, "my_career_forecast", f"student:{ctx.student_id}",
+                {"goal": str(goal or ""), "available": bool(result.get("available"))})
+    return dict(result)
+
+
+# 知识图谱：构图要扫全表（课程 / 岗位），进程内缓存一份，避免每次对话重建
+_KG_CACHE: Any = None
+_KG_LOCK = threading.Lock()
+
+
+def _kg_graph() -> Any:
+    global _KG_CACHE
+    if _KG_CACHE is None:
+        with _KG_LOCK:
+            if _KG_CACHE is None:
+                _KG_CACHE = kg_engine.build_graph()
+    return _KG_CACHE
+
+
+def _my_major(ctx: ToolContext, action: str) -> str:
+    """学生端只能看自己专业的链路，不接受外部传专业。"""
+    return str(_resolve_self(ctx, action).get("major") or "")
+
+
+def kg_major_skills(ctx: ToolContext, major: str = "") -> dict[str, Any]:
+    """某专业通过课程能学到哪些技能（专业 → 课程 → 技能）。
+    学生端强制用本人专业；教师端可指定专业。"""
+    ctx = _check_ctx(ctx)
+    m = str(major or "").strip()
+    if ctx.actor_type == ACTOR_STUDENT or not m:
+        m = _my_major(ctx, "kg_major_skills")
+    if not m:
+        raise ValueError("请说明要查哪个专业")
+    result = kg_engine.query_skills_by_major(_kg_graph(), m)
+    _audit_call(ctx, "kg_major_skills", m, {"total": int(result.get("total") or 0)})
+    return dict(result)
+
+
+def kg_skill_jobs(ctx: ToolContext, skill: str = "", limit: int = 10) -> dict[str, Any]:
+    """掌握某项技能能胜任哪些岗位。"""
+    ctx = _check_ctx(ctx)
+    s = str(skill or "").strip()
+    if not s:
+        raise ValueError("请说明要查哪项技能")
+    result = kg_engine.query_jobs_by_skill(_kg_graph(), s, limit=int(limit))
+    _audit_call(ctx, "kg_skill_jobs", s, {"total": int(result.get("total") or 0)})
+    return dict(result)
+
+
+def kg_path(ctx: ToolContext, job_id: int = 0, major: str = "") -> dict[str, Any]:
+    """从专业到目标岗位的达成路径：已具备什么、还缺什么、中间经过哪些课程与技能。
+    学生端强制按本人专业算（忽略 major 入参），免得跨专业看别人的链。"""
+    ctx = _check_ctx(ctx)
+    m = str(major or "").strip()
+    if ctx.actor_type == ACTOR_STUDENT:
+        m = _my_major(ctx, "kg_path")
+    if not m:
+        raise ValueError("请说明要查哪个专业")
+    result = kg_engine.explain_path(_kg_graph(), m, int(job_id or 0))
+    _audit_call(ctx, "kg_path", f"{m}->{job_id}",
+                {"found": bool(result.get("found"))})
+    return dict(result)
+
+
+# ----------------------------------------------------------------
+# 统一入口补全（agent-entry-v2）：招考公告 / 模拟面试 / 题库
+# ----------------------------------------------------------------
+_EXAM_TYPES: tuple[str, ...] = ("civil", "institution", "postgraduate")
+_EXAM_GOAL_WORDS: tuple[tuple[str, str], ...] = (
+    ("考公", "civil"), ("公务员", "civil"),
+    ("考编", "institution"), ("事业单位", "institution"),
+    ("考研", "postgraduate"), ("研究生", "postgraduate"),
+)
+
+
+def exam_notices(ctx: ToolContext, keyword: str = "", exam_type: str = "",
+                 only_open: bool = False, limit: int = 6) -> dict[str, Any]:
+    """招考公告检索（师生通用）：只报库里实抓到的标题/单位/截止/原文链接。
+
+    数据来自 `招考公告` 表（清洗管线写入），查不到就返回空列表并说明——
+    绝不拿模型记忆补一条「往年公告」。exam_type 用考公/考编/考研的口语词也行。
+    """
+    ctx = _check_ctx(ctx)
+    exam_type = str(exam_type or "").strip()
+    if exam_type and exam_type not in _EXAM_TYPES:
+        # 口语词归一：「考公」→ civil；归不上就报错，不静默吞掉用户意图
+        matched = [code for word, code in _EXAM_GOAL_WORDS if word in exam_type]
+        if not matched:
+            raise ValueError(
+                f"考试类型不认识：{exam_type}。可用 {'/'.join(_EXAM_TYPES)}"
+                "，或直接说 考公 / 考编 / 考研。")
+        exam_type = matched[0]
+    limit = max(1, min(int(limit or 6), 10))
+    where = ["`租户编号` = %s"]
+    params: list[Any] = [ctx.tenant_id]
+    kw = str(keyword or "").strip()
+    if kw:
+        where.append("`标题` LIKE %s")
+        params.append(f"%{kw}%")
+    if exam_type:
+        where.append("`考试类型` = %s")
+        params.append(exam_type)
+    if only_open:
+        where.append("`状态` = 'open'")
+    cond = " AND ".join(where)
+
+    total_rows = _query(f"SELECT COUNT(*) AS total FROM `招考公告` WHERE {cond}", params)
+    rows = _query(
+        "SELECT `编号` AS id, `考试类型` AS exam_type, `标题` AS title, "
+        "`招录单位` AS org_name, `地区` AS region, `招录人数` AS headcount, "
+        "`报名截止` AS signup_end, `原文链接` AS detail_url, `状态` AS status "
+        f"FROM `招考公告` WHERE {cond} "
+        "ORDER BY (`发布日期` IS NULL), `发布日期` DESC, `编号` DESC LIMIT %s",
+        [*params, limit])
+    def _row_json(r: Mapping[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for k, v in r.items():
+            if v is None:
+                continue
+            if hasattr(v, "isoformat"):
+                try:
+                    v = v.isoformat(sep=" ")
+                except TypeError:        # date.isoformat() 不收 sep
+                    v = v.isoformat()
+            out[k] = v
+        return out
+
+    items = [_row_json(r) for r in rows]
+    _audit_call(ctx, "exam_notices", kw or exam_type or "all",
+                {"total": int(total_rows[0]["total"]) if total_rows else 0})
+    return {
+        "capability_version": "agent-entry-v2",
+        "keyword": kw,
+        "exam_type": exam_type,
+        "notice_total": int(total_rows[0]["total"]) if total_rows else 0,
+        "items": items,
+    }
+
+
+def my_interviews(ctx: ToolContext, limit: int = 8) -> dict[str, Any]:
+    """本人模拟面试场次（学生端）：状态/总分/轮次，SQL 实查。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_interviews", "self")
+    limit = max(1, min(int(limit or 8), 20))
+    rows = _query(
+        "SELECT `编号` AS id, `岗位名称` AS job_title, `状态` AS status, "
+        "`总分` AS total, `当前轮次` AS cur_round, `最大轮次` AS max_round, "
+        "`创建时间` AS created_at, `完成时间` AS finished_at "
+        "FROM `面试会话` WHERE `租户编号` = %s AND `学生编号` = %s "
+        "ORDER BY `编号` DESC LIMIT %s",
+        (ctx.tenant_id, int(ctx.student_id or 0), limit))
+    def _row_json(r: Mapping[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for k, v in r.items():
+            if v is None:
+                continue
+            if hasattr(v, "isoformat"):
+                try:
+                    v = v.isoformat(sep=" ")
+                except TypeError:        # date.isoformat() 不收 sep
+                    v = v.isoformat()
+            out[k] = v
+        return out
+
+    items = [_row_json(r) for r in rows]
+    finished = [r for r in items if r.get("status") == "finished"
+                and r.get("total") is not None]
+    _audit_call(ctx, "my_interviews", "self", {"count": len(items)})
+    return {
+        "capability_version": "agent-entry-v2",
+        "count": len(items),
+        "finished_count": len(finished),
+        "best_total": max((float(r["total"]) for r in finished), default=None),
+        "items": items,
+    }
+
+
+def question_bank_lookup(ctx: ToolContext, query: str = "", family: str = "",
+                         qtype: str = "", limit: int = 5) -> dict[str, Any]:
+    """面试题库检索（师生通用）：命中题面/考点，每条带出处可回溯原文。
+
+    语料 = data/question_bank/*.json（与出题检索同一份硬校验池），
+    无命中返回空列表，不用模型记忆凑数。
+    """
+    ctx = _check_ctx(ctx)
+    limit = max(1, min(int(limit or 5), 10))
+    kw = str(query or "").strip()
+    qtype = str(qtype or "").strip()
+    if qtype and qtype not in qbank.QTYPES:
+        raise ValueError(f"题型只能是 {'/'.join(qbank.QTYPES)}")
+    fam = str(family or "").strip()
+    fam_code = qbank.normalize_industry(fam) if fam else ""
+    if fam and fam_code not in qbank.FAMILY_LABELS:
+        fam_code = ""     # 未知行业词不硬猜，退化为全文匹配
+
+    hits: list[dict[str, Any]] = []
+    for item in qbank.load_bank():
+        if fam_code and item.family != fam_code:
+            continue
+        if qtype and item.qtype != qtype:
+            continue
+        if kw and kw not in f"{item.question} {' '.join(item.keywords)}":
+            continue
+        hits.append(item.as_dict())
+        if len(hits) >= limit:
+            break
+    _audit_call(ctx, "question_bank_lookup", kw or fam or qtype or "all",
+                {"hits": len(hits)})
+    return {
+        "capability_version": "agent-entry-v2",
+        "query": kw,
+        "family": fam_code or fam,
+        "qtype": qtype,
+        "bank_total": len(qbank.load_bank()),
+        "hits": hits,
+    }

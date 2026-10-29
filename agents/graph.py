@@ -20,7 +20,7 @@ from langgraph.graph import END, StateGraph
 from agents import llm as llm_client
 from agents import intents as intents_cfg
 from agents import teacher_agent
-from agents import tools
+from agents import tools, auto_plan
 from agents.critic import (
     MAX_RETRY,
     CRITIC_VERSION,
@@ -33,7 +33,7 @@ from agents.tools import ToolContext
 from app.audit import audit_event
 from engine import rag as rag_engine
 
-GRAPH_VERSION = "graph-v4"
+GRAPH_VERSION = "graph-v5"
 
 # AGENT_LLM_DRAFT=0 可关闭「大模型润色」，退回机械直引（演示/对比用）
 def _llm_draft_enabled() -> bool:
@@ -85,6 +85,7 @@ class AgentState(TypedDict, total=False):
     plan: dict[str, Any]
     tool_result: dict[str, Any]
     tool_name: str
+    planner: str      # "graph"=确定性路由 / "auto"=模型自主选工具（AGENT_MODE=auto）
     last_tool: str | None
     draft_fn: Callable[..., str]
     draft: str
@@ -135,6 +136,15 @@ def plan_node(state: AgentState) -> dict[str, Any]:
     # 外部事实：知识库优先于联网（有内部制度就先查内部，别去网上找）
     intent = _intent_text(state, query)
     last_tool = str(state.get("last_tool") or "")
+
+    # 自主规划（可切换，AGENT_MODE=auto）：模型自己从工具清单里选。
+    # 只替换「选哪个工具」，执行与校验仍走下面的确定性节点；
+    # 模型不可用/选不出来/选了越权工具 → 返回 None，自动退回确定性路由。
+    if auto_plan.auto_mode_enabled():
+        picked = auto_plan.plan_with_llm(ctx, query, term, list(state.get("history") or []))
+        if picked:
+            return {"plan": {"tool": picked["tool"], "args": picked.get("args") or {}},
+                    "tool_name": picked["tool"], "planner": "auto"}
     followup = _looks_like_followup(query)
     # 追问时把上一轮问题拼进检索串：「那超标了怎么办」单独检索是查不到东西的
     search_query = query
@@ -142,6 +152,14 @@ def plan_node(state: AgentState) -> dict[str, Any]:
         prev = _last_user_text(state)
         if prev and prev not in query:
             search_query = f"{prev} {query}"
+
+    # 学生端「本人数据」意图要排在知识库**之前**：否则「我的成绩」「我的学分」
+    # 会被知识库词表里的「学分」这类制度词抢走，答出一堆管理办法而不是本人数据。
+    if ctx.actor_type == "student":
+        personal = _student_data_tool(intent)
+        if personal:
+            return {"plan": {"tool": personal, "args": _student_tool_args(personal, query)},
+                    "tool_name": personal}
 
     if any(k in intent for k in _KB_KEYS()):
         return {"plan": {"tool": "kb_search", "args": {"query": search_query}},
@@ -160,12 +178,86 @@ def plan_node(state: AgentState) -> dict[str, Any]:
                 "tool_name": "web_search"}
 
     if ctx.actor_type == "student":
-        tool_name = "my_recommendations" if any(k in intent for k in ("推荐", "岗位", "工作")) \
-            else "my_warning"
+        tool_name = _student_default_tool(intent)
         return {"plan": {"tool": tool_name}, "tool_name": tool_name}
 
     # 教师端：意图路由与参数抠取全部下沉到 teacher_agent 能力层
     return dict(teacher_agent.plan_teacher(ctx, intent, query, term))
+
+
+# 学生端「本人数据」意图表：命中即选工具，**未命中返回 None** 继续走后面的分支。
+# 只列明确指向本人数据的问法；「推荐 / 岗位」这类留给下面的默认分支，
+# 这样「实习管理办法」仍会正确落到知识库，而不是被塞进某个数据工具。
+_STUDENT_DATA_ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # agent-entry-v2：招考/面试/题库放最前，具体词优先于宽泛词
+    #（「招考公告」要在 my_notices 的「公告」之前被吃掉）
+    ("question_bank_lookup", ("面试题", "题库", "会问什么", "都会问", "常问",
+                              "面试问什么", "面试一般")),
+    ("my_interviews", ("面试记录", "面试历史", "面试成绩", "我面过",
+                       "模拟面试成绩", "面试了多少", "面过几场")),
+    ("exam_notices", ("招考", "公务员考试", "事业单位招聘", "国考", "省考", "报名截止")),
+    # 预测要排在成绩之前：问「预测一下我下学期的绩点」时，
+    # 「绩点」会先被成绩路由吃掉，答成历史成绩而不是预测。
+    ("my_forecast", ("预测", "下学期", "走势", "未来", "会怎样", "会不会挂")),
+    ("my_grades", ("成绩", "成绩单", "分数", "绩点", "均分", "考了多少")),
+    ("my_career_forecast", ("竞争力", "上岸", "胜算", "把握", "考公", "考研", "考编", "报考")),
+    ("my_notices", ("通知", "消息", "公告")),
+    ("competition_guide", ("竞赛", "比赛", "挑战杯")),
+    ("my_career_guide", ("规划", "怎么准备", "怎么规划", "发展方向")),
+    ("kg_major_skills", ("专业学什么", "能学到什么", "专业能学")),
+)
+
+
+def _student_data_tool(intent: str) -> str | None:
+    """学生端数据意图路由：命中返回工具名，未命中返回 None。
+
+    放在知识库分支之前调用，原因是知识库词表含「学分 / 实习 / 管理办法」等词，
+    学生问「我的成绩怎么样」时会被误判成查制度文档。
+    """
+    for name, keywords in _STUDENT_DATA_ROUTES:
+        if any(k in intent for k in keywords):
+            return name
+    return None
+
+
+def _student_tool_args(tool_name: str, query: str) -> dict[str, Any]:
+    """按工具从提问里抠参数；抠不到就留空——工具层对空参有明确语义（不猜）。"""
+    import re
+
+    args: dict[str, Any] = {}
+    if tool_name == "exam_notices":
+        # 先剥掉「招考」再匹配目标词：「招考公告」里含子串「考公」，不剥会误判成考公
+        text = query.replace("招考", "")
+        for word, code in (("考公", "civil"), ("公务员", "civil"), ("国考", "civil"),
+                           ("省考", "civil"), ("考编", "institution"),
+                           ("事业单位", "institution"), ("考研", "postgraduate"),
+                           ("研究生", "postgraduate")):
+            if word in text:
+                args["exam_type"] = code
+                break
+        quoted = re.search(r"[\"“']([^\"”']{1,30})[\"”']", query)
+        if quoted:
+            args["keyword"] = quoted.group(1)
+    elif tool_name == "question_bank_lookup":
+        quoted = re.search(r"[\"“']([^\"”']{1,30})[\"”']", query)
+        if quoted:
+            args["query"] = quoted.group(1)
+        else:
+            # 去掉「面试会问什么」这类虚词后，剩余连续汉字当检索词
+            cleaned = re.sub(r"面试|题库|一般|都会|会问|什么|哪些|有|的|吗|？|\?", "", query)
+            cleaned = cleaned.strip(" 　，。")
+            if len(cleaned) >= 2:
+                args["query"] = cleaned[:20]
+    return args
+
+
+def _student_default_tool(intent: str) -> str:
+    """学生端兜底路由（知识库 / 联网 / 工作流都没命中时）。"""
+    if any(k in intent for k in ("推荐", "岗位", "工作")):
+        return "my_recommendations"
+    if any(k in intent for k in ("技能", "需要学", "要学什么")):
+        return "kg_skill_jobs"
+    return "my_warning"
 
 
 def _extract_class_name(query: str) -> str | None:
@@ -239,6 +331,78 @@ def state_term(ctx: ToolContext) -> str:
 # ----------------------------------------------------------------
 # 2. 调工具
 # ----------------------------------------------------------------
+def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str, Any]:
+    """工具名 → 实际调用。身份一律只用 ctx，args 里只放业务参数（班级、学期、关键词）。
+
+    学生端工具（my_*）内部强制用 ctx.student_id 取本人数据，所以即便 args 里
+    被塞进别人的学号也无效——这是铁律 2（身份只来自后端登录态）的兜底。
+    未知工具名兜底到 class_overview，保持改造前的行为。
+    """
+    a = args
+    if name == "class_list":
+        return tools.class_list(ctx)
+    if name == "warning_thresholds":
+        return tools.get_warning_thresholds(ctx, str(a.get("class_name") or ""))
+    if name == "warning_list":
+        return tools.warning_list(ctx, a.get("class_name", ""), a.get("term", ""),
+                                  level=a.get("level"))
+    if name == "student_profile":
+        return tools.student_profile(ctx, a.get("student_no", ""), a.get("term", ""))
+    if name == "career_gap":
+        return tools.career_gap(ctx, a.get("class_name", ""), a.get("term", ""))
+    if name == "student_grades":
+        return tools.student_grades(ctx, a.get("student_no", ""))
+    if name == "student_forecast":
+        return tools.student_forecast(ctx, a.get("student_no", ""))
+    if name == "my_grades":
+        return tools.my_grades(ctx)
+    if name == "my_forecast":
+        return tools.my_forecast(ctx)
+    if name == "my_career_forecast":
+        return tools.my_career_forecast(ctx, a.get("goal", ""))
+    if name == "my_warning":
+        return tools.my_warning(ctx, a.get("term") or None)
+    if name == "my_recommendations":
+        return tools.my_recommendations(ctx, a.get("term") or None)
+    if name == "my_notices":
+        return tools.my_notices(ctx, limit=int(a.get("limit") or 20))
+    if name == "my_career_guide":
+        return tools.my_career_guide(ctx, a.get("term") or None)
+    if name == "competition_guide":
+        return tools.competition_guide(ctx, str(a.get("track") or "就业"),
+                                       str(a.get("direction") or ""))
+    if name == "search_jobs":
+        return tools.search_jobs(ctx, a.get("query") or "", limit=int(a.get("limit") or 20))
+    if name == "job_facets":
+        return tools.job_facets(ctx)
+    if name == "kg_major_skills":
+        return tools.kg_major_skills(ctx, a.get("major", ""))
+    if name == "kg_skill_jobs":
+        return tools.kg_skill_jobs(ctx, a.get("skill", ""), limit=int(a.get("limit") or 10))
+    if name == "kg_path":
+        return tools.kg_path(ctx, int(a.get("job_id") or 0), str(a.get("major") or ""))
+    if name == "exam_notices":
+        return tools.exam_notices(ctx, keyword=str(a.get("keyword") or ""),
+                                  exam_type=str(a.get("exam_type") or ""),
+                                  only_open=bool(a.get("only_open")),
+                                  limit=int(a.get("limit") or 6))
+    if name == "my_interviews":
+        return tools.my_interviews(ctx, limit=int(a.get("limit") or 8))
+    if name == "question_bank_lookup":
+        return tools.question_bank_lookup(ctx, query=str(a.get("query") or ""),
+                                          family=str(a.get("family") or ""),
+                                          qtype=str(a.get("qtype") or ""),
+                                          limit=int(a.get("limit") or 5))
+    if name == "kb_search":
+        # 多跳：单跳不足以回答时改写检索词再补一跳（AGENT_KB_MULTIHOP=0 可退回单跳）
+        return tools.kb_search_deep(ctx, a.get("query") or "", top_k=4)
+    if name == "web_search":
+        return tools.web_search(ctx, a.get("query") or "", top_k=5)
+    if name == "run_workflow":
+        return tools.run_workflow(ctx, a.get("name") or "")
+    return tools.class_overview(ctx, a.get("class_name", ""), a.get("term", ""))
+
+
 def tool_node(state: AgentState) -> dict[str, Any]:
     """调工具层的对应工具；越权按「无权限」处理，不抛给上层。"""
     ctx: ToolContext = state["ctx"]
@@ -249,29 +413,7 @@ def tool_node(state: AgentState) -> dict[str, Any]:
         # 纯对话：不碰任何数据
         return {"tool_result": {"mode": "chitchat"}, "tool_name": "chitchat"}
     try:
-        if name == "class_list":
-            result = tools.class_list(ctx)
-        elif name == "warning_thresholds":
-            result = tools.get_warning_thresholds(ctx, str(args.get("class_name") or ""))
-        elif name == "warning_list":
-            result = tools.warning_list(ctx, args.get("class_name", ""), args.get("term", ""),
-                                        level=args.get("level"))
-        elif name == "student_profile":
-            result = tools.student_profile(ctx, args.get("student_no", ""), args.get("term", ""))
-        elif name == "career_gap":
-            result = tools.career_gap(ctx, args.get("class_name", ""), args.get("term", ""))
-        elif name == "my_warning":
-            result = tools.my_warning(ctx, args.get("term") or None)
-        elif name == "my_recommendations":
-            result = tools.my_recommendations(ctx, args.get("term") or None)
-        elif name == "kb_search":
-            result = tools.kb_search(ctx, args.get("query") or "", top_k=4)
-        elif name == "web_search":
-            result = tools.web_search(ctx, args.get("query") or "", top_k=5)
-        elif name == "run_workflow":
-            result = tools.run_workflow(ctx, args.get("name") or "")
-        else:
-            result = tools.class_overview(ctx, args.get("class_name", ""), args.get("term", ""))
+        result = _dispatch(ctx, name, args)
     except PermissionError as exc:
         return {"tool_result": {"error": str(exc)}, "tool_name": name}
     except ValueError as exc:
@@ -358,6 +500,72 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
             f"本人预警：风险分 {result.get('risk_score')}，等级 {result.get('level')}；"
             f"归因：{'；'.join(result.get('reasons') or []) or '无'}。"
         )
+    # ---- 统一入口能力层模板稿（agent-entry）：原样直引，不归纳不估算 ----
+    if "summary" in result and "years" in result:
+        s = result.get("summary") or {}
+        parts.append(
+            f"{(result.get('student') or {}).get('name') or '该生'} 共 "
+            f"{s.get('term_count')} 个学期 {s.get('record_count')} 条成绩记录，"
+            f"加权均分 {s.get('weighted_avg')}，挂科 {s.get('failed_count')} 门。"
+        )
+        for year in (result.get("years") or [])[-2:]:
+            for t in (year.get("terms") or [])[-2:]:
+                parts.append(
+                    f"{t.get('term')}：均分 {t.get('avg_score')}，挂科 {t.get('failed_count')} 门。"
+                )
+    if "gpa_forecast" in result:
+        if not result.get("available"):
+            parts.append(str(result.get("reason") or "历史学期不足，无法做确定性预测。"))
+        else:
+            gpa = result.get("gpa_forecast") or {}
+            fail = result.get("fail_forecast") or {}
+            lvl = result.get("level_forecast") or {}
+            parts.append(
+                f"下学期（{result.get('next_term')}）均分预测 {gpa.get('predicted')}，"
+                f"95% 区间 {gpa.get('low')}~{gpa.get('high')}，趋势 {gpa.get('trend')}；"
+                f"挂科门次预测 {fail.get('predicted')}；"
+                f"预警走向 {lvl.get('level') or lvl.get('level_text') or '见数据'}。"
+                f"（{gpa.get('confidence')}）"
+            )
+    if "composite" in result:
+        comp = result.get("composite") or {}
+        parts.append(
+            f"报考分析（{result.get('goal_label') or result.get('goal')}）："
+            f"综合分 {comp.get('score')}，档位 {comp.get('tier_label') or comp.get('tier')}。"
+            f"这是规则分，不是录取概率。"
+        )
+        for d in (result.get("dimensions") or [])[:4]:
+            parts.append(f"维度 {d.get('key')}：{d.get('score')}（{d.get('level_text') or d.get('level')}）。")
+    if "needs_intent" in result and result.get("needs_intent"):
+        parts.append(str(result.get("reason") or "请先选定方向。"))
+    if "notice_total" in result:
+        parts.append(f"招考公告共命中 {result.get('notice_total')} 条。")
+        for it in (result.get("items") or [])[:3]:
+            link = f"，原文：{it.get('detail_url')}" if it.get("detail_url") else ""
+            parts.append(
+                f"{it.get('title')}（{it.get('org_name') or '单位未标注'}，"
+                f"截止 {it.get('signup_end') or '未标注'}）{link}。"
+            )
+        if not result.get("items"):
+            parts.append("没有命中任何公告——库里实抓的就这些，不拿往年凑数。")
+    if "bank_total" in result:
+        parts.append(f"题库共 {result.get('bank_total')} 题，命中 {len(result.get('hits') or [])} 条。")
+        for h in (result.get("hits") or [])[:3]:
+            parts.append(
+                f"《{h.get('question')}》（{h.get('family')}/{h.get('qtype')}），"
+                f"出处：{h.get('source_name') or h.get('source_url') or '模板题'}。"
+            )
+    if "finished_count" in result and "best_total" in result:
+        parts.append(
+            f"模拟面试共 {result.get('count')} 场，完成 {result.get('finished_count')} 场"
+            + (f"，最高总分 {result.get('best_total')}。" if result.get("best_total") is not None else "。")
+        )
+        for it in (result.get("items") or [])[:3]:
+            parts.append(
+                f"{it.get('job_title') or '未标注岗位'}：{it.get('status')}，"
+                f"进度 {it.get('cur_round')}/{it.get('max_round')}"
+                + (f"，总分 {it.get('total')}" if it.get("total") is not None else "") + "。"
+            )
     if not parts:
         parts.append("已获取结构化结果，详见对应列表。")
     draft = "\n".join(parts)
@@ -464,7 +672,8 @@ def _workflow_draft(result: Mapping[str, Any]) -> str:
         items = [str(i.get("name")) for i in (result.get("available") or [])]
         return ("可以直接跑这些工作流：" + "、".join(items)
                 + "。说「跑一遍<名字>」就行。") if items else "当前没有可用的工作流。"
-    if status in ("empty", "not_found", "invalid"):
+    # pending 不是失败：流程已提交，只是等教师审批（人工审核环节）
+    if status in ("empty", "not_found", "invalid", "pending"):
         return str(result.get("summary") or "这个工作流现在跑不了。")
 
     lines = [f"已按工作流「{result.get('name')}」执行："]
@@ -636,14 +845,16 @@ def draft_node(state: AgentState,
     elif (result or {}).get("mode") == "chitchat":
         is_teacher = (state.get("ctx") or ToolContext("", 0)).actor_type == "teacher"
         fallback_text = (
-            "你好，我是启航智能助手。我可以帮您看班级整体情况与预警名单、查单个学生的四维画像，"
-            "分析班级能力与岗位要求的差距，也能查各班的预警阈值配置；"
-            "还能从企业知识库里查制度流程（会给出文档与页码），"
+            "你好，我是启航智能助手。我可以帮您看班级整体情况与预警名单、查单个学生的四维画像、"
+            "成绩单与学业预测，分析班级能力与岗位要求的差距，也能查各班的预警阈值配置；"
+            "还能检索招考公告、面试题库（都带出处可回溯），从企业知识库里查制度流程（给出文档与页码），"
             "按已定义的工作流一键跑多步流程。比如直接问「AI2201 这学期预警情况怎么样」就行。"
             if is_teacher else
-            "你好，我是启航智能助手。我可以帮你看本人的学业预警状态、推荐匹配的岗位，"
-            "也能从企业知识库里查制度流程（会给出文档与页码），"
-            "按已定义的工作流一键跑多步流程。比如直接问「我最近有没有预警」就行。"
+            "你好，我是启航智能助手。我可以帮你看本人的预警、成绩单、学业预测和报考分析（考公/考编/考研），"
+            "推荐匹配的岗位、搜岗位库，查你模拟面试的记录和场次总分，"
+            "检索面试真题题库和招考公告（都带出处），"
+            "从企业知识库里查制度流程，也能按已定义的工作流一键跑多步流程。"
+            "比如直接问「我最近有没有预警」就行。"
         )
         draft = _llm_chitchat(state, on_token) or fallback_text
         mode = "chitchat"
@@ -861,6 +1072,7 @@ def run_chat(
             "draft_mode": str(state.get("draft_mode") or ""),
             "passed": bool((state.get("verdict") or {}).get("passed")),
             "degraded": degraded,
+            "planner": str(state.get("planner") or "graph"),
             "graph_version": GRAPH_VERSION,
             "critic_version": CRITIC_VERSION,
         },
@@ -991,6 +1203,7 @@ def run_chat_stream(
                 "passed": bool((state.get("verdict") or {}).get("passed")),
                 "degraded": degraded,
                 "stream": True,
+                "planner": str(state.get("planner") or "graph"),
                 "graph_version": GRAPH_VERSION,
                 "critic_version": CRITIC_VERSION,
             },
