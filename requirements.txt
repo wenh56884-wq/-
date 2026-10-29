@@ -17,6 +17,8 @@ langchain-openai==1.6.0
 # ===== Data / Analytics =====
 pandas==3.0.5
 numpy==2.5.2
+# 国考《招考简章》是旧版 .xls（BIFF），用 xlrd 只读解析
+xlrd==2.0.2
 scikit-learn==1.9.0
 duckdb==1.5.5
 pypdf==6.21.2
