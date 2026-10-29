@@ -336,6 +336,68 @@ def test_question_bank_lookup_hits_and_filters():
 
 
 # ----------------------------------------------------------------
+# 5.1 agent-entry-v3：国考职位表（逐职位明细）
+# ----------------------------------------------------------------
+def test_v3_exam_positions_registered_everywhere():
+    assert "exam_positions" in auto_plan.EXECUTABLE
+    assert "exam_positions" in {t.name for t in auto_plan._TEACHER_TOOLS}
+    assert "exam_positions" in {t.name for t in auto_plan._STUDENT_TOOLS}
+    assert "exam_positions" in agent_tools.TEACHER_TOOLS
+    assert "exam_positions" in agent_tools.STUDENT_TOOLS
+
+
+def test_v3_dispatch_and_routing(monkeypatch):
+    seen: dict[str, tuple] = {}
+
+    def fake(*args, **kwargs):
+        seen["exam_positions"] = (args, kwargs)
+        return {"tool": "exam_positions"}
+
+    monkeypatch.setattr(agent_tools, "exam_positions", fake, raising=True)
+    agent_graph._dispatch(_student(), "exam_positions", {})
+    assert "exam_positions" in seen
+
+    tool, args = _plan_v2("国考职位表里重庆有哪些岗位")
+    assert tool == "exam_positions" and args.get("place") == "重庆"
+    # 只问公告仍归 exam_notices，不被职位表抢走
+    assert _plan_v2("国考公告有哪些")[0] == "exam_notices"
+    # 教师端确定性路由也能命中
+    plan = agent_graph.plan_node(
+        {"ctx": _teacher(), "query": "国考职位表里有哪些税务岗位", "history": []})
+    assert plan["tool_name"] == "exam_positions"
+
+
+@DB_OK
+def test_exam_positions_real_and_empty():
+    r = agent_tools.exam_positions(_student(), place="重庆", education="本科", limit=3)
+    assert r["year"] == 2027
+    assert r["position_total"] > 0 and r["total_headcount"] > 0
+    assert len(r["positions"]) == 3
+    assert all("重庆" in p["work_place"] for p in r["positions"])
+    assert all("本科" in p["education"] for p in r["positions"])
+    # 查无如实报：空列表 + note，不拿往年凑数
+    r2 = agent_tools.exam_positions(_student(), keyword="绝对不存在の职位XYZ")
+    assert r2["position_total"] == 0 and r2["positions"] == [] and r2["note"]
+    # 师生通用（公共数据）
+    assert agent_tools.exam_positions(_teacher(), limit=2)["year"] == 2027
+
+
+def test_draft_v3_positions():
+    result = {
+        "year": 2027, "position_total": 2, "total_headcount": 3,
+        "positions": [{"dept_name": "A部门", "bureau": "B司局",
+                       "position_name": "P职位", "headcount": 2,
+                       "education": "本科", "work_place": "重庆"}],
+    }
+    draft = agent_graph._template_draft(result)
+    assert "2" in draft and "A部门" in draft and "P职位" in draft
+    empty = agent_graph._template_draft(
+        {"year": 2027, "position_total": 0, "total_headcount": 0,
+         "positions": [], "note": "没有匹配职位"})
+    assert "没有匹配职位" in empty
+
+
+# ----------------------------------------------------------------
 # 6. 模板稿：新工具结果的原样直引（Critic 校验兜底也要可读）
 # ----------------------------------------------------------------
 def test_draft_v2_grades_and_forecast_and_career():
@@ -373,3 +435,156 @@ def test_draft_v2_exam_bank_interviews():
     assert "61.5" in agent_graph._template_draft(iv)
     d = agent_graph._template_draft({"needs_intent": True, "reason": "还没选方向。"})
     assert "还没选方向" in d
+
+
+# ----------------------------------------------------------------
+# 6. 词表冲突回归：新工具不能抢走既有路由，也不能被既有工具抢
+# ----------------------------------------------------------------
+def _teacher_fixtures() -> tuple[ToolContext, str, str]:
+    """取该教师第一个任教班级与该班第一个学生的学号（用来构造点名到人的问法）。"""
+    ctx = _teacher()
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT `班级` AS c FROM `教师任教班级` "
+                        "WHERE `租户编号`=%s AND `教师编号`=%s ORDER BY `班级`",
+                        (ctx.tenant_id, ctx.teacher_id))
+            rows = cur.fetchall()
+            class_name = str(rows[0]["c"]) if rows else ""
+            cur.execute("SELECT `学号` AS no FROM `学生` WHERE `租户编号`=%s AND `班级`=%s"
+                        " ORDER BY `学号` LIMIT 1", (ctx.tenant_id, class_name))
+            row = cur.fetchone() if class_name else None
+    finally:
+        conn.close()
+    return ctx, class_name, (str(row["no"]) if row else "")
+
+
+@DB_OK
+def test_class_rank_keywords_do_not_hijack_existing_routes():
+    """班级排名新增「排名 / 平均成绩」等词后，不能抢走预警、画像、成绩单这些既有路由。
+
+    真实踩过的坑：加了「平均成绩」后，「AI20230001 的平均成绩」被班级统计接走，
+    答成全班均分——问的是这个人，统计的却是全班。所以点名到人时班级统计要让位；
+    但真在问名次时又不能让位，因为个人名次只存在于班级排名里，成绩单没有名次字段。
+    """
+    ctx, class_name, student_no = _teacher_fixtures()
+    if not class_name or not student_no:
+        pytest.skip("缺少班级或学生数据，跳过路由冲突回归")
+
+    cases = [
+        # 既有路由：一条都不该被新词抢走
+        ("预警阈值是多少", "warning_thresholds"),
+        (f"{class_name} 的预警名单", "warning_list"),
+        ("这个学生的画像", "student_profile"),
+        (f"{class_name} 的能力差距", "career_gap"),
+        (f"{student_no} 的成绩单", "student_grades"),
+        ("会了 Python 能做什么", "kg_skill_jobs"),
+        # 新工具：班级级问法必须命中
+        (f"{class_name} 的班级排名", "class_grades_rank"),
+        (f"{class_name} 全班平均成绩", "class_grades_rank"),
+        # 点名到人：问个人成绩归成绩单，问名次仍归班级排名
+        (f"{student_no} 的平均成绩", "student_grades"),
+        (f"{student_no} 排第几", "class_grades_rank"),
+    ]
+    wrong = []
+    for question, want in cases:
+        got = _plan(ctx, question)
+        if got != want:
+            wrong.append((question, want, got))
+    assert not wrong, f"以下问法路由不符预期（问法 / 期望 / 实际）: {wrong}"
+
+
+# ----------------------------------------------------------------
+# 7. 联网搜索：没密钥时如实说，不能让模型润色成「知识库里没有」
+# ----------------------------------------------------------------
+def test_web_search_without_key_says_so(monkeypatch):
+    """没配搜索密钥时，回答必须直说「没有配置联网搜索」。
+
+    修过的坑：联网和知识库共用 RAG 提示词，那条提示词要求「原文没说就答
+    「知识库里没有相关规定」」，于是「没联网」被模型说成「知识库里没有」，
+    用户以为搜过了，其实是没网。空结果一律走模板，不让模型润色。
+    """
+    import engine.web_search as web_engine
+
+    monkeypatch.setattr(
+        web_engine, "search",
+        lambda *a, **k: {"configured": False, "provider": None, "results": [],
+                         "error": "未配置联网搜索密钥", "engine_version": "web-v1"})
+    ctx = _teacher()
+    result = agent_graph.run_chat(ctx, "联网查一下最新的公开招聘信息")
+    assert result["tool_name"] == "web_search", "没路由到联网搜索"
+    assert "没有配置联网搜索" in result["answer"], (
+        f"没密钥时应明说原因，实际回答：{result['answer']}")
+
+
+def test_web_search_provider_picks_bocha(monkeypatch):
+    """只配博查密钥时 provider 要能选中它（国内可直连的那家）。
+
+    别家在境外，国内网络连不上；博查是后来补的适配层，容易漏进优先级判断。
+    """
+    import engine.web_search as web_engine
+
+    for name in ("SERPER_API_KEY", "BING_SEARCH_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("BOCHA_API_KEY", "ak-unit-test-only")
+    assert web_engine.provider() == "bocha"
+
+    monkeypatch.delenv("BOCHA_API_KEY", raising=False)
+    assert web_engine.provider() is None, "一个密钥都没有时应诚实降级"
+
+
+# ----------------------------------------------------------------
+# 7. 注册表守卫（反向）：能分发的工具必须有归属
+# ----------------------------------------------------------------
+# 这几类工具不进「数据工具注册表」：外部检索、工作流、闲聊、阈值配置，
+# 它们不对应某个板块的数据取数，归属由各自模块管。
+_NON_DATA_TOOLS = {"kb_search", "web_search", "run_workflow", "chitchat",
+                   "warning_thresholds"}
+
+
+def test_every_dispatchable_tool_is_registered():
+    """反向断言：graph._dispatch 能认的名字，必须在 TEACHER_TOOLS / STUDENT_TOOLS 里。
+
+    只测正向（注册了的都在三处）会漏人：class_grades_rank 当初分发、词表、
+    auto_plan 三处都接了，唯独 TEACHER_TOOLS 漏了，正向断言完全看不见它——
+    而 AGENTS.md §3 要求「工具注册表、分发、auto_plan 三处必须同步」。
+    """
+    import re
+    from pathlib import Path
+
+    source = Path(agent_graph.__file__).read_text(encoding="utf-8")
+    dispatched = set(re.findall(r'name == "([a-z_]+)"', source))
+    registered = set(agent_tools.TEACHER_TOOLS) | set(agent_tools.STUDENT_TOOLS)
+    missing = sorted(dispatched - registered - _NON_DATA_TOOLS)
+    assert not missing, f"这些工具能分发但没登记进注册表：{missing}"
+
+
+def test_class_rank_registered_everywhere():
+    """class_grades_rank 与 exam_positions 一样，三处同步缺一不可。"""
+    assert "class_grades_rank" in agent_tools.TEACHER_TOOLS
+    assert "class_grades_rank" in {t.name for t in auto_plan._TEACHER_TOOLS}
+    assert "class_grades_rank" in auto_plan.EXECUTABLE
+    assert "class_grades_rank" not in agent_tools.STUDENT_TOOLS, "排名是教师口径，不给学生端"
+
+
+def test_draft_class_rank_reads_engine_values_only():
+    """排名结果不能落进「班级概览」的形状分支：那里会输出 None 个班 / 平均绩点 None。"""
+    result = {
+        "engine_version": "grades-rank-v1", "term": "2024-2025-1",
+        "class_name": "AI2301", "headcount": 41, "scope": "assigned",
+        "classes": [{"class_name": "AI2301", "student_cnt": 41, "graded_cnt": 40,
+                     "weighted_avg": 78.4, "avg_score": 77.9,
+                     "max_weighted_avg": 92.1, "min_weighted_avg": 58.3}],
+        "class_rank_in_major": [{"major": "人工智能", "class_name": "AI2301",
+                                 "student_cnt": 41, "graded_cnt": 40,
+                                 "weighted_avg": 78.4, "rank": 2, "rank_total": 3}],
+        "students": [{"student_no": "AI2023001", "name": "张三",
+                      "class_rank": 3, "class_rank_total": 40,
+                      "major_rank": 7, "major_rank_total": 120,
+                      "weighted_avg": 85.2}],
+    }
+    draft = agent_graph._template_draft(result)
+    assert "None" not in draft, f"模板稿里出现了 None：{draft}"
+    for value in ("78.4", "77.9", "85.2", "第 2 / 3", "班内第 3/40", "同专业第 7/120"):
+        assert value in draft, f"模板稿缺引擎值 {value}：{draft}"
+    assert "本租户共" not in draft, "排名结果被当成班级概览了"

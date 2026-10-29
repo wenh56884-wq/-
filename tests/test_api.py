@@ -499,5 +499,36 @@ def test_class_warning_thresholds_roundtrip(client, db):
         conn.commit()
 
 
+# ----------------------------------------------------------------
+# 6.9 自主大脑 / 长期记忆接口
+# ----------------------------------------------------------------
+@requires_mysql
+def test_chat_brain_and_memory_endpoints(client, db):
+    conn, klass, stu = db
+    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    brain = client.get("/chat/brain", headers=headers)
+    assert brain.status_code == 200, brain.text
+    assert brain.json()["brain_version"] == "brain-v1"
+    assert brain.json()["memory"] == "memory-v1"
+
+    memories = client.get("/chat/memories", headers=headers)
+    assert memories.status_code == 200, memories.text
+    assert isinstance(memories.json()["items"], list)
+
+    caps = client.get("/chat/capabilities", headers=headers)
+    assert caps.status_code == 200, caps.text
+    items = {item["key"]: item for item in caps.json()["items"]}
+    assert items["brain"]["ready"] is True
+    assert "规划" in items["brain"]["detail"] and "观察" in items["brain"]["detail"]
+    assert items["memory_vector"]["ready"] is True
+    assert "4096" in items["memory_vector"]["detail"]
+    assert "web" in items
+
+    # 不存在的记忆（或别人的记忆）一律 404，不暴露是否存在
+    assert client.delete("/chat/memories/999999999", headers=headers).status_code == 404
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))

@@ -19,16 +19,17 @@ from engine import rag, web_search, workflow  # noqa: E402
 
 CTX = ToolContext(actor_type="student", tenant_id=1, student_id=1)
 
-POLICY = """员工报销制度
+# 语料与项目主题一致：学业 / 职业规划类制度，而不是企业报销制度
+POLICY = """学业预警与帮扶管理办法
 
-一、差旅报销
-住宿标准：一线城市每晚不超过 500 元，其他城市每晚不超过 350 元，超标部分自理。
+一、预警等级
+累计挂科 6 门及以上为红色预警，3 至 5 门为橙色预警，1 至 2 门为黄色预警。
 
-二、报销时限
-报销单须在费用发生后 30 天内提交，每月 25 日为当月截止日。"""
+二、帮扶措施
+红色预警学生须在 15 日内与学业导师面谈，橙色预警由班主任在 30 日内约谈。"""
 
 
-def _rows(text: str = POLICY, doc_id: int = 1, title: str = "员工报销制度"):
+def _rows(text: str = POLICY, doc_id: int = 1, title: str = "学业预警与帮扶管理办法"):
     chunks = rag.chunk_pages([(None, text)])
     return [{"doc_id": doc_id, "title": title, "chunk_no": c.chunk_no,
              "page": c.page, "text": c.text} for c in chunks]
@@ -65,50 +66,52 @@ def test_search_returns_empty_for_irrelevant_query():
 
 
 def test_search_hits_carry_page_and_score():
-    hits = rag.search("住宿标准", _rows())
+    hits = rag.search("预警等级", _rows())
     assert hits and hits[0]["score"] > 0
-    assert "住宿标准" in hits[0]["text"]
+    assert "预警等级" in hits[0]["text"]
 
 
 def test_verify_citations_requires_reference():
-    hits = rag.search("住宿标准", _rows())
-    ok, problems = rag.verify_citations("住宿上限是 500 元。", hits)
+    hits = rag.search("预警等级", _rows())
+    ok, problems = rag.verify_citations("红色预警要求累计挂科 6 门。", hits)
     assert not ok and "没有" in problems[0]
 
 
 def test_verify_citations_rejects_invented_number():
     """引用编号是真的、数字是编的——这类答案最容易骗过人工抽查。"""
-    hits = rag.search("住宿标准", _rows())
-    ok, problems = rag.verify_citations("一线城市住宿上限为 800 元[1]。", hits)
-    assert not ok and any("800" in p for p in problems)
+    hits = rag.search("预警等级", _rows())
+    ok, problems = rag.verify_citations("红色预警要求累计挂科 8 门[1]。", hits)
+    assert not ok and any("8" in p for p in problems)
 
 
 def test_verify_citations_accepts_verbatim_quote_and_number():
-    hits = rag.search("住宿标准", _rows())
-    text = "一线城市住宿上限为 500 元[1]，原文：「其他城市每晚不超过 350 元」。"
+    hits = rag.search("预警等级", _rows())
+    text = "红色预警要求累计挂科 6 门[1]，原文：「3 至 5 门为橙色预警」。"
     ok, problems = rag.verify_citations(text, hits)
     assert ok, problems
 
 
 def test_verify_citations_rejects_fake_quote():
-    hits = rag.search("住宿标准", _rows())
-    ok, _ = rag.verify_citations("制度写的是「住宿全免」[1]。", hits)
+    hits = rag.search("预警等级", _rows())
+    ok, _ = rag.verify_citations("办法写的是「挂科一律劝退」[1]。", hits)
     assert not ok
 
 
 def test_citations_map_to_numbers():
-    hits = rag.search("住宿标准", _rows())
+    hits = rag.search("预警等级", _rows())
     cites = rag.as_citations(hits)
     assert [c["no"] for c in cites] == list(range(1, len(cites) + 1))
-    assert all(c["title"] == "员工报销制度" for c in cites)
+    assert all(c["title"] == "学业预警与帮扶管理办法" for c in cites)
 
 
 # ----------------------------------------------------------------
 # 联网搜索：没有密钥就说没有
 # ----------------------------------------------------------------
 def test_web_search_unconfigured_is_honest(monkeypatch):
-    monkeypatch.delenv("SERPER_API_KEY", raising=False)
-    monkeypatch.delenv("BING_SEARCH_KEY", raising=False)
+    # 三家都要清干净：.env 里配了哪家，漏清哪家这条就会「明明没网却说有网」。
+    # 博查（BOCHA_API_KEY）是后加的 provider，当初只清了 serper / bing 两家。
+    for key in ("SERPER_API_KEY", "BING_SEARCH_KEY", "BOCHA_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
     assert web_search.configured() is False
     res = web_search.search("重庆 秋招 政策")
     assert res["configured"] is False
@@ -234,8 +237,8 @@ def _plan(query: str, last_tool: str | None = None) -> str:
 
 
 def test_plan_routes_kb_question_to_rag():
-    assert _plan("报销的住宿标准是多少") == "kb_search"
-    assert _plan("公司制度里请假怎么审批") == "kb_search"
+    assert _plan("学业预警管理办法里红色预警怎么定") == "kb_search"
+    assert _plan("实习制度里要实习多少周") == "kb_search"
 
 
 def test_plan_routes_workflow_phrase():
@@ -249,15 +252,16 @@ def test_plan_routes_web_only_on_explicit_ask():
 
 
 def test_plan_reuses_last_tool_for_followup():
-    plan = agent_graph.plan_node({"ctx": CTX, "query": "那超标了怎么办",
-                                  "last_tool": "kb_search",
-                                  "history": [{"role": "user", "text": "报销住宿标准是多少"}]})
+    plan = agent_graph.plan_node(
+        {"ctx": CTX, "query": "那重修呢", "last_tool": "kb_search",
+         "history": [{"role": "user", "text": "学业预警管理办法里红色预警怎么定"}]})
     assert plan["tool_name"] == "kb_search"
-    assert "报销住宿标准是多少" in plan["plan"]["args"]["query"], "追问要带上一轮问题，否则检索不到"
+    assert "学业预警管理办法里红色预警怎么定" in plan["plan"]["args"]["query"], \
+        "追问要带上一轮问题，否则检索不到"
 
 
 def test_plan_does_not_reuse_tool_for_long_question():
-    assert _plan("公司今年整体的岗位需求情况是怎么安排的", last_tool="kb_search") != "kb_search"
+    assert _plan("这一届学生整体的发展情况是怎么安排的", last_tool="kb_search") != "kb_search"
 
 
 def test_chitchat_does_not_touch_data():
