@@ -1,5 +1,5 @@
 # scripts/gen_verify_report.py
-# 职责：一键生成 docs\VERIFY.md —— 环境水印 + 12 项端到端结果 + 20 人级数值一致性 + 已知问题
+# 职责：一键生成 etl\docs\VERIFY.md —— 环境水印 + 12 项端到端结果 + 20 人级数值一致性 + 已知问题
 # 依赖：标准库 urllib / json / datetime；pymysql / duckdb / app.config
 # 说明：**数据全部实测**（真实 HTTP 调用 + 真实库查询）；服务未启动会自动拉起 venv 的 uvicorn。
 
@@ -342,7 +342,7 @@ def consistency_checks(students: list[tuple[str, int]], klass: str,
 
 
 def main() -> int:
-    """生成 docs\\VERIFY.md；存在 FAIL 时返回 1。"""
+    """生成 etl\\docs\\VERIFY.md；存在 FAIL 时返回 1。"""
     emit("# 启航系统 · 验收报告（VERIFY.md）")
     emit()
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -401,12 +401,12 @@ def main() -> int:
     emit()
     emit("## 6. 下一步")
     emit()
-    emit("- 交付文档已齐：`docs\\VERIFY.md`（本报告）、`docs\\答辩PPT大纲.md`（10 页，全用真实字段名）、")
-    emit("  `docs\\演示脚本.md`（5 分钟台词 + 三类兜底 + 演示前自检清单）。")
+    emit("- 交付文档已齐：`etl\\docs\\VERIFY.md`（本报告）、`etl\\docs\\答辩PPT大纲.md`（10 页，全用真实字段名）、")
+    emit("  `etl\\docs\\演示脚本.md`（5 分钟台词 + 三类兜底 + 演示前自检清单）。")
     emit("- 二期（11/18 之后）：PySpark 迁移 `engine\\profile.py`（逐字段比对，一致率须 100%）、")
     emit("  推荐加协同过滤（`final = 0.7*A + 0.3*B`，冷启动跳过）、多院校租户横向扩展。")
 
-    target = _ROOT / "docs" / "VERIFY.md"
+    target = _ROOT / "etl" / "docs" / "VERIFY.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("\n".join(_out) + "\n", encoding="utf-8")
     print(f"\n已生成：{target}")

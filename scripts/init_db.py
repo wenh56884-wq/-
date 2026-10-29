@@ -29,8 +29,26 @@ _MYSQL_SQL_FILES = (
     _ROOT / "db" / "interview_tables.sql",
     _ROOT / "db" / "question_bank.sql",
     _ROOT / "db" / "rag_tables.sql",
+    _ROOT / "db" / "workflow_approval.sql",
 )
 _DUCKDB_SQL = _ROOT / "db" / "duckdb_schema.sql"
+
+# 列级迁移：CREATE TABLE IF NOT EXISTS 建不了「给已有表加列」，
+# 而 MySQL 没有 ADD COLUMN IF NOT EXISTS——所以先查 information_schema 再决定，
+# 重复执行 init_db 不会报错也不会重复加列。
+_COLUMN_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    # 表名, 列名, 列定义
+    ("工作流定义", "是否需要审批", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("工作流运行", "步骤快照",
+     "JSON NULL COMMENT '提交待审时的步骤快照；审批通过按它执行'"),
+)
+
+# ENUM 扩容：工作流运行.状态 增加 pending（待审批）/ rejected（已驳回）
+_ENUM_MIGRATIONS: tuple[tuple[str, str, str, str], ...] = (
+    # 表名, 列名, 需要包含的取值, 完整列定义
+    ("工作流运行", "状态", "pending",
+     "ENUM('running','pending','success','failed','rejected') NOT NULL DEFAULT 'running'"),
+)
 
 
 def _split_statements(sql_text: str) -> list[str]:
@@ -82,6 +100,40 @@ def init_mysql(settings) -> None:
                 elif stripped.upper().startswith("USE "):
                     print(f"  [OK] USE {settings.mysql_db}")
         print("MySQL 初始化完成。")
+    finally:
+        conn.close()
+
+
+def ensure_mysql_columns(settings) -> None:
+    """补齐后续版本新增的列与 ENUM 取值（幂等，可重复执行）。"""
+    conn = pymysql.connect(
+        host=settings.mysql_host,
+        port=settings.mysql_port,
+        user=settings.mysql_user,
+        password=settings.mysql_password,
+        database=settings.mysql_db,
+        charset="utf8mb4",
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+    try:
+        with conn.cursor() as cur:
+            for table, column, ddl in _COLUMN_MIGRATIONS:
+                cur.execute("SELECT COUNT(*) AS n FROM information_schema.COLUMNS"
+                            " WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s"
+                            " AND COLUMN_NAME=%s", (table, column))
+                if int(cur.fetchone()["n"]) == 0:
+                    cur.execute(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {ddl}")
+                    print(f"  [ALTER] {table}.{column} 已新增")
+
+            for table, column, token, ddl in _ENUM_MIGRATIONS:
+                cur.execute("SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS"
+                            " WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s"
+                            " AND COLUMN_NAME=%s", (table, column))
+                row = cur.fetchone()
+                if row and token not in str(row["t"]):
+                    cur.execute(f"ALTER TABLE `{table}` MODIFY COLUMN `{column}` {ddl}")
+                    print(f"  [ALTER] {table}.{column} 已扩充 {token}")
     finally:
         conn.close()
 
@@ -141,6 +193,7 @@ def main() -> None:
     """入口：先初始化 MySQL，再初始化 DuckDB。"""
     settings = get_settings()
     init_mysql(settings)
+    ensure_mysql_columns(settings)
     init_duckdb(settings)
     print()
     print("全部建表完成。")

@@ -1,5 +1,5 @@
 # scripts/gen_kpi_report.py
-# 职责：生成 docs\KPI.md —— 计划书第七章考核指标中“现有数据可算”的部分
+# 职责：生成 etl\docs\KPI.md —— 计划书第七章考核指标中“现有数据可算”的部分
 # 依赖：pymysql / duckdb / app.config / engine.warning / engine.metrics
 # 说明：全部实测（真实库查询 + 真实预警引擎计算）；缺数据源的指标明确标 N/A，不编数
 
@@ -396,13 +396,13 @@ def render_report(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """入口：采集指标、写 docs/KPI.md、打印摘要。"""
+    """入口：采集指标、写 etl/docs/KPI.md、打印摘要。"""
     parser = argparse.ArgumentParser(description="生成计划书考核指标报告")
     parser.add_argument("--term", default=DEFAULT_TERM)
     parser.add_argument("--tenant-id", type=int, default=DEFAULT_TENANT)
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT,
                         help="审计日志取样条数（默认最近 5000 条）")
-    parser.add_argument("--out", default=str(_ROOT / "docs" / "KPI.md"))
+    parser.add_argument("--out", default=str(_ROOT / "etl" / "docs" / "KPI.md"))
     args = parser.parse_args(argv)
 
     settings = get_settings()

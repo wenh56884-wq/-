@@ -22,7 +22,7 @@ if str(_ROOT) not in sys.path:
 from app.config import get_settings  # noqa: E402
 from engine.profile import batch_build, compute_rank_pct  # noqa: E402
 
-# 一卡通活跃天数上限（docs\指标口径字典.md 第 1 节：min(1, active_days / 120)）
+# 一卡通活跃天数上限（etl\docs\指标口径字典.md 第 1 节：min(1, active_days / 120)）
 CONSUME_DAY_CAP = 120.0
 
 # 7 类新特征对应的 raw 行键
