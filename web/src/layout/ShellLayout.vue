@@ -99,6 +99,25 @@
       </header>
 
       <main class="page-main">
+        <!-- 本页 AI 助手条：每个板块都有专属问法，点击即让智能体带着问题作答 -->
+        <div v-if="aiChips.length" class="ai-strip">
+          <span class="ai-strip-label">
+            <span class="ai-strip-dot">AI</span>智能助手 · 本页可以直接问
+          </span>
+          <button
+            v-for="c in aiChips"
+            :key="c.q"
+            class="ai-chip"
+            type="button"
+            :title="'让 AI 回答：' + c.q"
+            @click="askAI(c.q)"
+          >
+            {{ c.q }}
+          </button>
+          <button class="ai-more" type="button" @click="askAI()">
+            更多问题<template v-if="aiChips.length">…</template>
+          </button>
+        </div>
         <router-view v-slot="{ Component }">
           <transition name="page-fade" mode="out-in">
             <component :is="Component" />
@@ -120,7 +139,11 @@
       <span class="fab-badge">AI</span>
     </button>
 
-    <ChatDrawer v-model="chatOpen" />
+    <ChatDrawer
+      v-model="chatOpen"
+      :seed-question="chatSeed"
+      @seed-consumed="chatSeed = ''"
+    />
   </div>
 </template>
 
@@ -191,6 +214,68 @@ const menus = computed(() => MENUS[role] || MENUS.student)
 const collapsed = ref(false)
 const drawer = ref(false)
 const chatOpen = ref(false)
+const chatSeed = ref('')
+
+// 每个板块的专属 AI 问法（与后端智能体真实能力一一对应，不是装饰）。
+// askAI() 不带参数 = 只开抽屉，由用户自由提问。
+const PAGE_AI = {
+  'teacher-overview': [
+    { q: 'AI2301 这学期整体情况怎么样', note: '班级概貌：人数、绩点、挂科率、意向分布' },
+    { q: 'AI2301 班的预警名单有哪些人', note: '预警名单，可追问红色/橙色等级' }
+  ],
+  'teacher-students': [
+    { q: '查一个学生的四维画像', note: '输入姓名即可看单个学生的画像与标签' },
+    { q: 'AI2301 的预警阈值是多少', note: '当前班级的预警判定标准' }
+  ],
+  'teacher-grades': [
+    { q: 'AI2301 上学期红色预警有哪些人', note: '按学期 + 等级过滤的预警名单' }
+  ],
+  'teacher-jobs': [
+    { q: 'AI2301 和岗位要求的差距在哪', note: '班级能力 vs 目标岗位的缺口分析' }
+  ],
+  'teacher-exams': [
+    { q: '联网查一下最新的公开招聘信息', note: '联网搜索，带原文链接' }
+  ],
+  'teacher-approvals': [
+    { q: '帮我跑一遍班级周报', note: '工作流：多步流程一键执行，结果可送审' }
+  ],
+  'teacher-kg': [
+    { q: '公司制度里报销的住宿标准是多少', note: '知识库检索，给文档名和页码' }
+  ],
+  'student-home': [
+    { q: '我这学期的学业预警情况怎么样', note: '你的预警状态与原因' },
+    { q: '有哪些岗位适合我？为什么？', note: '基于你的画像推荐岗位' }
+  ],
+  'student-grades': [
+    { q: '我这学期有什么挂科风险', note: '按你的真实成绩实算' }
+  ],
+  'student-jobs': [
+    { q: '有哪些岗位适合我？为什么？', note: '岗位推荐 + 推荐理由' }
+  ],
+  'student-interview': [
+    { q: '帮我跑一遍求职体检', note: '工作流：简历→差距→演练一站式体检' }
+  ],
+  'student-exams': [
+    { q: '联网查一下最新的公开招聘信息', note: '联网搜索招考公告，带原文链接' }
+  ],
+  'student-kg': [
+    { q: '公司制度里报销的住宿标准是多少', note: '知识库检索，给文档名和页码' }
+  ],
+  'student-forecast': [
+    { q: '我这学期有什么挂科风险', note: '学业预警：按你的真实成绩实算' },
+    { q: '根据我的成绩，我适合考公还是考研', note: '结合你的指标给方向建议' }
+  ],
+  'student-career': [
+    { q: '考公、考编、考研分别要准备多少学时', note: '投入维度怎么算，一句话讲清' }
+  ]
+}
+
+const aiChips = computed(() => PAGE_AI[route.name] || [])
+
+function askAI(question) {
+  chatSeed.value = String(question || '').trim()
+  chatOpen.value = true
+}
 const isMobile = ref(false)
 let media = null
 
@@ -741,6 +826,75 @@ onBeforeUnmount(() => {
 
 .page-main {
   padding: 0;
+}
+
+/* ---------- 本页 AI 助手条：每个板块的专属问法入口 ---------- */
+.ai-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 24px;
+  margin-bottom: 4px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.07), rgba(14, 165, 233, 0.05) 60%, transparent);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.14);
+}
+
+.ai-strip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4f46e5;
+  white-space: nowrap;
+}
+
+.ai-strip-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6366f1, #0ea5e9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.ai-chip {
+  border: 1px solid rgba(99, 102, 241, 0.32);
+  background: rgba(255, 255, 255, 0.72);
+  color: #3730a3;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ai-chip:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.ai-more {
+  border: none;
+  background: none;
+  color: #6366f1;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.ai-more:hover {
+  text-decoration: underline;
 }
 
 .dot {

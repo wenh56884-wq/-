@@ -135,7 +135,9 @@ import router from '../router'
 import moyuImg from '../assets/deepseek-mo-yu.webp'
 
 const props = defineProps({
-  modelValue: { type: Boolean, default: false }
+  modelValue: { type: Boolean, default: false },
+  // 父级带着具体问题打开抽屉（页面 AI 问题条 / 空状态点击）：打开即自动发问
+  seedQuestion: { type: String, default: '' }
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -170,6 +172,24 @@ watch(
 watch(visible, (opened) => {
   emit('update:modelValue', opened)
 })
+
+// 种子问题：抽屉打开时若带了具体问题，等动画稳定后自动发出（只发一次）
+watch(
+  [visible, () => props.seedQuestion],
+  ([opened, seed]) => {
+    if (!opened || !seed || sending.value) return
+    const q = String(seed).trim()
+    if (!q) return
+    nextTick(() => {
+      setTimeout(() => {
+        if (!sending.value && visible.value) {
+          emit('seed-consumed')
+          send(q)
+        }
+      }, 250)
+    })
+  }
+)
 
 // 抽屉宽度：桌面 420px（不挤主内容），窄屏占满
 const drawerSize = computed(() => (window.innerWidth < 768 ? '100%' : '420px'))
