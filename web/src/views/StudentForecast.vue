@@ -182,7 +182,7 @@ onMounted(load)
 .fc-sub {
   margin-top: 6px;
   color: #6b7280;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .fc-tags {
@@ -196,7 +196,7 @@ onMounted(load)
   margin: 12px 0 0;
   padding-left: 18px;
   color: #4b5563;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .fc-note {
@@ -204,7 +204,7 @@ onMounted(load)
   padding-top: 12px;
   border-top: 1px dashed #e5e7eb;
   color: #6b7280;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .fc-note-title {

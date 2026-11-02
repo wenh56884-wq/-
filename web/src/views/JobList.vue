@@ -332,7 +332,7 @@ onMounted(() => {
 }
 .freshness-note {
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: 13.5px;
   margin-left: 6px;
 }
 /* 筛选区：白色圆角卡 + 软阴影，与统计卡同一套观感 */
@@ -369,13 +369,13 @@ onMounted(() => {
 }
 
 .filter-total {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-secondary);
 }
 
 .filter-total b {
   color: #18181b;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .stat-card {
@@ -413,7 +413,7 @@ onMounted(() => {
 .stat-card .stat-top::after {
   content: '↗';
   margin-left: auto;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   color: #b9b1ea;
   opacity: 0.45;
@@ -448,7 +448,7 @@ onMounted(() => {
 }
 
 .qh-arrow {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   color: #b9b1ea;
   opacity: 0.45;
@@ -459,7 +459,7 @@ onMounted(() => {
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--bento-mute);
 }
@@ -483,7 +483,7 @@ onMounted(() => {
 }
 
 .top-tag {
-  font-size: 12px;
+  font-size: 13.5px;
   padding: 6px 12px;
   border-radius: 999px;
   background: #f4f4f5;
@@ -491,7 +491,7 @@ onMounted(() => {
 }
 
 .empty-note {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 .job-item {
@@ -549,7 +549,7 @@ onMounted(() => {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-secondary);
 }
 .job-company {
@@ -564,7 +564,7 @@ onMounted(() => {
 }
 .job-desc {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.6;
   color: var(--el-text-color-secondary);
   display: -webkit-box;
@@ -606,7 +606,7 @@ onMounted(() => {
 }
 
 .jd-sec-name {
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.05em;
   color: #18181b;
@@ -614,7 +614,7 @@ onMounted(() => {
 
 .jd-sec-count {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12.5px;
   font-style: normal;
   color: #a1a1aa;
 }
@@ -642,7 +642,7 @@ onMounted(() => {
   border-radius: 6px;
   background: rgba(37, 99, 235, 0.08);
   color: #2563eb;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -655,7 +655,7 @@ onMounted(() => {
 
 .jd-p {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.75;
   color: #3f3f46;
   word-break: break-word;
@@ -666,7 +666,7 @@ onMounted(() => {
 }
 
 .jd-p.jd-en {
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.6;
   color: #a1a1aa;
 }

@@ -174,7 +174,7 @@
 /* 文本层级 */
 .bento-eyebrow {
   margin: 0 0 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--bento-mute);
@@ -182,7 +182,7 @@
 
 .bento-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 650;
   line-height: 1.3;
   color: var(--bento-text);
@@ -190,8 +190,8 @@
 
 .bento-sub {
   margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.65;
   color: var(--bento-sub);
   max-width: 68ch;
 }
@@ -207,7 +207,7 @@
 
 .bento-stat small {
   margin-left: 4px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--bento-mute);
 }

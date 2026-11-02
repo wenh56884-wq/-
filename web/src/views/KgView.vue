@@ -224,24 +224,24 @@ onMounted(async () => {
   text-align: center;
 }
 .stat-num { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-label { font-size: 12px; color: var(--bento-mute); }
-.muted { color: var(--bento-mute); font-size: 12px; }
+.stat-label { font-size: 13.5px; color: var(--bento-mute); }
+.muted { color: var(--bento-mute); font-size: 13.5px; }
 .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sel { width: 280px; }
 .viz-wrap { display: flex; flex-direction: column; align-items: center; }
 .viz { width: 100%; max-width: 720px; color: var(--el-text-color-primary); }
-.viz-legend { display: flex; gap: 16px; font-size: 12px; color: var(--el-text-color-secondary); }
+.viz-legend { display: flex; gap: 16px; font-size: 13.5px; color: var(--el-text-color-secondary); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 .chain-list { max-height: 320px; overflow: auto; }
-.chain-item { margin: 6px 0; font-size: 13px; }
-.via { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
+.chain-item { margin: 6px 0; font-size: 14px; }
+.via { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 13.5px; }
 .head-row { display: flex; align-items: center; gap: 8px; }
 .explain-flow { display: flex; gap: 14px; flex-wrap: wrap; }
 .flow-node { border: 1px solid var(--el-border-color); border-radius: 8px; padding: 10px 14px; text-align: center; min-width: 150px; }
-.fn-course { font-size: 12px; color: var(--el-color-primary); max-width: 170px; }
-.fn-skill { font-size: 13px; font-weight: 700; color: var(--el-color-success); }
-.fn-job { font-size: 13px; font-weight: 700; color: var(--el-color-warning); }
-.fn-arrow { font-size: 11px; color: var(--el-text-color-secondary); margin: 2px 0; }
+.fn-course { font-size: 13.5px; color: var(--el-color-primary); max-width: 170px; }
+.fn-skill { font-size: 14px; font-weight: 700; color: var(--el-color-success); }
+.fn-job { font-size: 14px; font-weight: 700; color: var(--el-color-warning); }
+.fn-arrow { font-size: 12.5px; color: var(--el-text-color-secondary); margin: 2px 0; }
 .mt8 { margin-top: 8px; }
-.muted { color: var(--el-text-color-secondary); font-size: 12px; }
+.muted { color: var(--el-text-color-secondary); font-size: 13.5px; }
 </style>

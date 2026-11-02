@@ -342,7 +342,7 @@ onMounted(loadHistory)
 /* ---------- 阶段一：介绍 ---------- */
 .intro-desc {
   margin: 0 0 18px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.8;
   color: var(--bento-sub);
 }
@@ -362,7 +362,7 @@ onMounted(loadHistory)
   border-radius: 999px;
   background: var(--bento-accent-soft);
   color: var(--bento-accent);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -381,7 +381,7 @@ onMounted(loadHistory)
 }
 
 .intro-tip {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -397,7 +397,7 @@ onMounted(loadHistory)
   align-items: baseline;
   gap: 6px;
   color: var(--bento-mute);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .history-score b {
@@ -409,7 +409,7 @@ onMounted(loadHistory)
 
 .history-meta {
   flex: 1 1 220px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.9;
   color: var(--bento-mute);
 }
@@ -423,7 +423,7 @@ onMounted(loadHistory)
 }
 
 .quiz-count {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--bento-mute);
 }
 
@@ -492,7 +492,7 @@ onMounted(loadHistory)
   flex: 0 0 28px;
   border-radius: 8px;
   background: #f4f4f5;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--bento-sub);
   transition:
@@ -518,7 +518,7 @@ onMounted(loadHistory)
 }
 
 .quiz-answered {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--bento-mute);
 }
 
@@ -532,7 +532,7 @@ onMounted(loadHistory)
 }
 
 .result-total {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--bento-mute);
 }
 
@@ -561,7 +561,7 @@ onMounted(loadHistory)
 .ring-label {
   display: block;
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--bento-mute);
 }
 
@@ -580,12 +580,12 @@ onMounted(loadHistory)
 }
 
 .dim-row-name {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--bento-sub);
 }
 
 .dim-row-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--bento-text);
   text-align: right;
@@ -599,7 +599,7 @@ onMounted(loadHistory)
 }
 
 .result-engine {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 

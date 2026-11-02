@@ -29,6 +29,15 @@
   --el-color-primary-dark-2: #4a4ac0;
   --el-border-radius-base: 10px;
   --el-border-radius-small: 8px;
+
+  /* Element Plus 字号：默认 14/13/12 在小屏和投影下偏挤，整体抬一档到 15/14/13。
+     改这里即可全站生效（按钮/输入框/表格/标签都读这套变量），不必逐组件覆盖 */
+  --el-font-size-extra-large: 22px;
+  --el-font-size-large: 18px;
+  --el-font-size-medium: 16px;
+  --el-font-size-base: 15px;
+  --el-font-size-small: 14px;
+  --el-font-size-extra-small: 13px;
 }
 
 * {
@@ -43,7 +52,8 @@ body {
     var(--qh-bg);
   background-attachment: fixed;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.65;
   color: var(--qh-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -59,10 +69,10 @@ body {
 }
 
 .card-title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--qh-text-sub);
-  margin-bottom: 8px;
+  color: var(--qh-text);
+  margin-bottom: 10px;
 }
 
 /* 卡片（含 Element Plus 的 el-card）：白底 + 描边 + 12px 圆角；
@@ -212,12 +222,12 @@ p {
   white-space: nowrap;
   background: #fafafa;
   color: var(--qh-text-sub);
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 
 .el-drawer .drawer-panel .el-descriptions__content.el-descriptions__cell {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--qh-text-sub);
   word-break: break-word;
@@ -229,7 +239,7 @@ p {
   align-items: center;
   gap: 8px;
   margin: 12px 0 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--qh-text);
 }

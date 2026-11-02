@@ -378,7 +378,7 @@ onMounted(load)
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #86909c;
   background: #fff;
   border: 1px solid #f4f4f5;
@@ -436,7 +436,7 @@ onMounted(load)
 
 .tier-num small {
   margin-left: 4px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute, #a1a1aa);
 }
 
@@ -456,7 +456,7 @@ onMounted(load)
 
 .tier-note {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #a1a1aa;
 }
 
@@ -467,7 +467,7 @@ onMounted(load)
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px dashed #e4e4e7;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #71717a;
 }
 
@@ -483,7 +483,7 @@ onMounted(load)
 
 .win-sub {
   margin: 6px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   color: #52525b;
 }
 
@@ -496,7 +496,7 @@ onMounted(load)
 
 .win-why {
   margin: 10px 0 0;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.6;
   color: #71717a;
 }
@@ -508,7 +508,7 @@ onMounted(load)
 }
 
 .win-alt-title {
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #a1a1aa;
 }
@@ -518,7 +518,7 @@ onMounted(load)
   align-items: baseline;
   gap: 8px;
   margin-top: 6px;
-  font-size: 12.5px;
+  font-size: 14px;
   color: #52525b;
 }
 
@@ -560,7 +560,7 @@ onMounted(load)
 }
 
 .dim-weight {
-  font-size: 11.5px;
+  font-size: 13px;
   color: #a1a1aa;
 }
 
@@ -600,14 +600,14 @@ onMounted(load)
 
 .dim-evidence {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.65;
   color: #3f3f46;
 }
 
 .dim-source {
   margin: 3px 0 0;
-  font-size: 11.5px;
+  font-size: 13px;
   color: #a1a1aa;
 }
 
@@ -616,12 +616,12 @@ onMounted(load)
 .lev-arrow { margin: 0 6px; color: #d4d4d8; }
 .lev-goal { font-weight: 600; color: #18181b; }
 .lev-delta { color: #16a34a; font-variant-numeric: tabular-nums; }
-.lev-flat { color: #a1a1aa; font-size: 12px; }
+.lev-flat { color: #a1a1aa; font-size: 13.5px; }
 
 .dim-delta {
   display: inline-block;
   margin-right: 8px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #2563eb;
 }
 
@@ -667,27 +667,27 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #18181b;
 }
 
 .gate-req {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #71717a;
 }
 
 .gate-note {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: 13px;
   color: #a1a1aa;
   line-height: 1.5;
 }
 
 .gate-status {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #a1a1aa;
 }
@@ -721,7 +721,7 @@ onMounted(load)
   margin-top: 2px;
   border-radius: 8px;
   background: #f4f4f5;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #71717a;
 }
@@ -738,26 +738,26 @@ onMounted(load)
 }
 
 .phase-top b {
-  font-size: 13.5px;
+  font-size: 14px;
   color: #18181b;
 }
 
 .phase-top em {
   font-style: normal;
-  font-size: 11.5px;
+  font-size: 13px;
   color: #a1a1aa;
 }
 
 .phase-range {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: 13px;
   color: #a1a1aa;
   font-variant-numeric: tabular-nums;
 }
 
 .phase-task {
   margin-top: 4px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.6;
   color: #52525b;
 }
@@ -783,7 +783,7 @@ onMounted(load)
   height: 22px;
   padding: 0 8px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 22px;
   color: #fff;
@@ -801,14 +801,14 @@ onMounted(load)
 }
 
 .advice-type {
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
   color: #a1a1aa;
 }
 
 .advice-act {
   margin-top: 2px;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.6;
   color: #18181b;
@@ -816,7 +816,7 @@ onMounted(load)
 
 .advice-basis {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.6;
   color: #71717a;
 }
@@ -840,7 +840,7 @@ onMounted(load)
   margin: 8px 0 0;
   padding-left: 18px;
   color: #52525b;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.75;
 }
 
@@ -857,7 +857,7 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #52525b;
 }
 
@@ -897,7 +897,7 @@ onMounted(load)
 }
 
 .dc-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: #1f2329;
 }

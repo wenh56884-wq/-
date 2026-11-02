@@ -73,20 +73,38 @@
         </div>
       </template>
 
+      <!-- 新生引导：只要后端判定 needs_intent（大一且未选方向），每次进首页都会走到这里 -->
       <template v-if="guide.needs_intent">
-        <el-alert type="warning" :closable="false" show-icon
-          title="大一新生先选定方向：考公 / 考研 / 考编 / 就业。选定后系统生成四年规划。" />
-        <div class="intent-row">
-          <el-radio-group v-model="selectedIntent">
-            <el-radio-button v-for="opt in guide.options || []" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </el-radio-button>
-          </el-radio-group>
-          <el-button type="primary" :loading="intentSaving" :disabled="!selectedIntent" @click="saveIntent">
-            保存目标并生成规划
-          </el-button>
+        <div class="onboard">
+          <div class="onboard-head">
+            <span class="onboard-badge">新生引导 · 第一步</span>
+            <h3 class="onboard-title">先选定毕业方向，系统才会给你四年规划</h3>
+            <p class="onboard-sub">
+              你现在是{{ guide.grade || '大一' }}，还没选方向。选定后，下面的四年规划、
+              岗位推荐和竞赛清单都会按这个方向来算。
+            </p>
+          </div>
+
+          <div class="onboard-pick">
+            <button v-for="opt in guide.options || []" :key="opt.value" type="button"
+              class="pick-card" :class="{ 'is-on': selectedIntent === opt.value }"
+              :aria-pressed="selectedIntent === opt.value"
+              @click="selectedIntent = opt.value">
+              <span class="pick-name">{{ opt.label }}</span>
+              <span class="pick-desc">{{ opt.desc }}</span>
+            </button>
+          </div>
+
+          <div class="onboard-foot">
+            <el-button type="primary" size="large" :loading="intentSaving"
+              :disabled="!selectedIntent" @click="saveIntent">
+              保存方向并生成规划
+            </el-button>
+            <span class="onboard-hint">
+              {{ selectedIntentDesc || '选一个方向，这里会显示它的说明' }}
+            </span>
+          </div>
         </div>
-        <div class="intent-desc">{{ selectedIntentDesc }}</div>
       </template>
 
       <template v-else>
@@ -303,7 +321,7 @@
             </div>
           </div>
 
-          <div class="sec-title">四维打分</div>
+          <div class="sec-title">{{ dimTitle }}</div>
           <div class="dim-list">
             <div v-for="(value, key) in active.dims || {}" :key="key" class="dim-row">
               <span class="dim-name">{{ DIM_TEXT[key] || key }}</span>
@@ -556,8 +574,18 @@ const DIM_TEXT = {
   major_match: '专业匹配',
   gpa_gate: '成绩门槛',
   skill_cover: '技能覆盖',
-  interest_fit: '兴趣方向'
+  interest_fit: '兴趣方向',
+  // 做过软技能测评时后端会在 dims 里多给这两维；没做过则完全回落四维
+  soft_skills: '职业素养',
+  potential: '发展潜力'
 }
+
+// 维度数不固定：有测评数据是六维，否则四维，标题跟着实际维度走
+const DIM_CN = ['零', '一', '二', '三', '四', '五', '六', '七']
+const dimTitle = computed(() => {
+  const n = Object.keys(active.value?.dims || {}).length || 4
+  return `${DIM_CN[n] || n} 维打分`
+})
 
 // ---- 岗位详情抽屉 ----
 const detailOpen = ref(false)
@@ -736,7 +764,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 14px;
   margin-bottom: 0;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #86909c;
   background: #fff;
   border: 1px solid #f4f4f5;
@@ -780,7 +808,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: var(--bento-accent-soft);
   color: var(--bento-accent);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -794,7 +822,7 @@ onBeforeUnmount(() => {
 
 .ph-desc {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--bento-mute);
 }
@@ -829,7 +857,7 @@ onBeforeUnmount(() => {
 }
 
 .ph-stat-label {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -843,7 +871,7 @@ onBeforeUnmount(() => {
 
 .ph-stat-value small {
   margin-left: 2px;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--bento-mute);
 }
@@ -878,7 +906,7 @@ onBeforeUnmount(() => {
 }
 
 .qh-arrow {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   color: #b9b1ea;
   opacity: 0;
@@ -942,7 +970,7 @@ onBeforeUnmount(() => {
 
 .quick-desc {
   grid-area: desc;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -988,7 +1016,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: 14px;
   color: #4e5969;
   margin-bottom: 10px;
 }
@@ -1002,9 +1030,109 @@ onBeforeUnmount(() => {
 }
 
 .intent-desc {
-  font-size: 12px;
+  font-size: 13.5px;
   color: #86909c;
   margin-top: 8px;
+}
+
+/* 新生引导：大一且未选方向时展示，取代原来那句纯文字提示 */
+.onboard {
+  padding: 2px 0;
+}
+
+.onboard-head {
+  margin-bottom: 14px;
+}
+
+.onboard-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--qh-primary-soft, #f0eeff);
+  color: var(--qh-primary, #5b5bd6);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.onboard-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--qh-text, #171a2b);
+}
+
+.onboard-sub {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--qh-text-sub, #5b6178);
+}
+
+.onboard-pick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--qh-border, #eceef7);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--qh-ease, ease),
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.pick-card:hover {
+  border-color: #c9cbf5;
+  transform: translateY(-1px);
+}
+
+.pick-card.is-on {
+  border-color: var(--qh-primary, #5b5bd6);
+  background: var(--qh-primary-soft, #f0eeff);
+  box-shadow: 0 6px 16px rgba(91, 91, 214, 0.14);
+}
+
+.pick-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--qh-text, #171a2b);
+}
+
+.pick-desc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--qh-text-sub, #5b6178);
+}
+
+.onboard-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.onboard-hint {
+  font-size: 13.5px;
+  color: var(--qh-text-mute, #9297ab);
+}
+
+@media (max-width: 560px) {
+  .onboard-pick {
+    grid-template-columns: 1fr;
+  }
 }
 
 .guide-steps {
@@ -1029,13 +1157,13 @@ onBeforeUnmount(() => {
 }
 
 .week-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--bento-text);
 }
 
 .week-sub {
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--bento-mute);
 }
 
@@ -1044,7 +1172,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 8px;
   padding: 4px 0;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--bento-sub);
   cursor: pointer;
@@ -1080,7 +1208,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: #ffffff;
   color: var(--bento-sub);
-  font-size: 12.5px;
+  font-size: 14px;
   text-decoration: none;
   transition:
     transform 200ms var(--bento-ease),
@@ -1119,7 +1247,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: var(--qh-red);
   color: #fff;
-  font-size: 12px;
+  font-size: 13.5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1130,7 +1258,7 @@ onBeforeUnmount(() => {
 }
 
 .step-goal {
-  font-size: 12px;
+  font-size: 13.5px;
   color: #4e5969;
   margin: 6px 0;
 }
@@ -1138,14 +1266,14 @@ onBeforeUnmount(() => {
 .step-actions {
   margin: 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #4e5969;
   line-height: 1.8;
 }
 
 .muted {
   color: #86909c;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .reason-title {
@@ -1170,7 +1298,7 @@ onBeforeUnmount(() => {
 
 .engine-line {
   margin-top: 10px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #86909c;
 }
 
@@ -1236,11 +1364,11 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: var(--qh-red);
   color: #fff;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .cell-score {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--qh-red);
   font-variant-numeric: tabular-nums;
@@ -1256,7 +1384,7 @@ onBeforeUnmount(() => {
 }
 
 .cell-meta {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--qh-text-sub);
   white-space: nowrap;
   overflow: hidden;
@@ -1264,7 +1392,7 @@ onBeforeUnmount(() => {
 }
 
 .cell-salary {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--qh-orange);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1278,7 +1406,7 @@ onBeforeUnmount(() => {
 }
 
 .mini-tag {
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 18px;
   padding: 0 6px;
   border-radius: 8px;
@@ -1308,17 +1436,17 @@ onBeforeUnmount(() => {
 }
 
 .cell-peer {
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--el-color-success);
   margin-top: 2px;
 }
-.reason-block { font-size: 13px; line-height: 1.7; }
+.reason-block { font-size: 14px; line-height: 1.7; }
 .reason-row { display: flex; gap: 8px; margin: 4px 0; }
 .reason-row .rk {
-  flex: none; width: 64px; color: var(--el-text-color-secondary); font-size: 12px;
+  flex: none; width: 64px; color: var(--el-text-color-secondary); font-size: 13.5px;
 }
 .cell-advice {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--qh-text-sub);
   line-height: 1.5;
   display: -webkit-box;
@@ -1338,7 +1466,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: #ffffff;
   color: var(--qh-text-sub, #52525b);
-  font-size: 12px;
+  font-size: 13.5px;
   font-family: inherit;
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease;
@@ -1374,7 +1502,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: var(--qh-red, #dc2626);
   color: #ffffff;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 16px;
   text-align: center;
 }
@@ -1412,7 +1540,7 @@ onBeforeUnmount(() => {
 }
 
 .detail-sub {
-  font-size: 12px;
+  font-size: 13.5px;
   color: #a1a1aa;
 }
 
@@ -1463,7 +1591,7 @@ onBeforeUnmount(() => {
 }
 
 .kpi-label {
-  font-size: 12px;
+  font-size: 13.5px;
   color: #a1a1aa;
 }
 
@@ -1483,8 +1611,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 16px 0 8px;
-  font-size: 13px;
+  /* 岗位卡内最多 7 个区块，拉开距离并加分隔线，避免挤成一团看不出分组 */
+  margin: 22px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--qh-border, #e4e4e7);
+  font-size: 15px;
   font-weight: 600;
   color: #18181b;
 }
@@ -1497,14 +1628,14 @@ onBeforeUnmount(() => {
   background: #ffffff;
   border: 1px solid var(--qh-border, #e4e4e7);
   border-radius: 8px;
-  padding: 10px;
+  padding: 14px;
 }
 
 .dim-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .dim-row + .dim-row {
@@ -1542,7 +1673,7 @@ onBeforeUnmount(() => {
 .ul-gap {
   margin: 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.9;
   color: #52525b;
 }
@@ -1554,13 +1685,13 @@ onBeforeUnmount(() => {
 .ol-action {
   margin: 0;
   padding-left: 20px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 2;
   color: #18181b;
 }
 
 .comp-loading {
-  font-size: 12px;
+  font-size: 13.5px;
   color: #a1a1aa;
 }
 
@@ -1590,7 +1721,7 @@ onBeforeUnmount(() => {
   background: #eff6ff;
   border: 1px solid #dbeafe;
   color: #1d4ed8;
-  font-size: 11px;
+  font-size: 12.5px;
   line-height: 18px;
 }
 
@@ -1601,7 +1732,7 @@ onBeforeUnmount(() => {
 }
 
 .comp-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #18181b;
   overflow: hidden;
@@ -1611,26 +1742,26 @@ onBeforeUnmount(() => {
 
 .comp-org {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #a1a1aa;
 }
 
 .comp-why {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #52525b;
 }
 
 .comp-reward {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12.5px;
   color: #a1a1aa;
 }
 
 .comp-link {
   display: inline-block;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: #2563eb;
   text-decoration: none;
 }
@@ -1648,13 +1779,13 @@ onBeforeUnmount(() => {
 }
 
 .notice-date {
-  font-size: 11px;
+  font-size: 12.5px;
   color: #a1a1aa;
 }
 
 .notice-title {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: #18181b;
 }

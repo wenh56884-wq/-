@@ -591,7 +591,7 @@ onMounted(() => {
 }
 .freshness-note {
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: 13.5px;
   margin-left: 6px;
 }
 .filter-bar {
@@ -627,13 +627,13 @@ onMounted(() => {
 }
 
 .filter-total {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-secondary);
 }
 
 .filter-total b {
   color: #18181b;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .stat-card {
@@ -691,7 +691,7 @@ onMounted(() => {
 }
 
 .qh-arrow {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   color: #b9b1ea;
   opacity: 0;
@@ -707,7 +707,7 @@ onMounted(() => {
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--bento-mute);
 }
@@ -750,7 +750,7 @@ onMounted(() => {
   gap: 16px;
   flex-wrap: wrap;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-secondary);
 }
 .deadline {
@@ -762,7 +762,7 @@ onMounted(() => {
   gap: 18px;
   flex-wrap: wrap;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-regular);
 }
 .req b {
@@ -819,12 +819,12 @@ onMounted(() => {
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 20px;
 }
 .req-text {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.75;
   color: var(--el-text-color-regular);
   word-break: break-word;
@@ -835,7 +835,7 @@ onMounted(() => {
   border-radius: 10px;
   border: 1px dashed var(--el-border-color);
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.6;
 }
 .raw-text {
@@ -845,7 +845,7 @@ onMounted(() => {
   padding: 12px;
   background: var(--el-fill-color-lighter);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--el-text-color-regular);
 }
@@ -891,7 +891,7 @@ onMounted(() => {
 }
 .gk-entry-sub {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-secondary);
 }
 .gk-toolbar {
@@ -903,7 +903,7 @@ onMounted(() => {
 }
 .gk-summary {
   margin-bottom: 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--el-text-color-regular);
 }
 .gk-summary b {
@@ -911,7 +911,7 @@ onMounted(() => {
   font-size: 16px;
 }
 .gk-summary-note {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--el-text-color-secondary);
 }
 .gk-table :deep(.el-table__row) {
@@ -924,7 +924,7 @@ onMounted(() => {
 }
 .gk-source {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.6;
   color: var(--el-text-color-secondary);
 }
@@ -941,7 +941,7 @@ onMounted(() => {
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--el-fill-color-lighter);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--el-text-color-regular);
 }

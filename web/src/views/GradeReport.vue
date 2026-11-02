@@ -438,7 +438,7 @@ onBeforeUnmount(() => {
 
 .err {
   color: var(--qh-red);
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
 .summary-card {
@@ -463,7 +463,7 @@ onBeforeUnmount(() => {
 
 .summary-name small {
   margin-left: 10px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--bento-mute);
 }
@@ -485,7 +485,7 @@ onBeforeUnmount(() => {
 }
 
 .summary-stats span {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -513,14 +513,14 @@ onBeforeUnmount(() => {
 .note-list {
   margin: 4px 0 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.85;
   color: var(--bento-sub);
 }
 
 .note-meta {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -540,7 +540,7 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
   border-radius: 14px;
   background: #fafafa;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--bento-sub);
 }
 
@@ -574,7 +574,7 @@ onBeforeUnmount(() => {
 }
 
 .term-head span {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -609,7 +609,7 @@ onBeforeUnmount(() => {
 }
 
 .class-stats span {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--bento-mute);
 }
 
@@ -622,7 +622,7 @@ onBeforeUnmount(() => {
 
 .rank-note {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.7;
   color: var(--bento-mute);
 }
