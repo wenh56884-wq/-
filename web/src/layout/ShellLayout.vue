@@ -201,7 +201,9 @@ const ICONS = {
   // 报考分析：靶心 + 箭，对应「按指标评估能打到哪」
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   // 职业测评：剪贴板（板夹 + 纸 + 勾）
-  clipboard: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 14l2 2 4-4'
+  clipboard: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 14l2 2 4-4',
+  // 联网搜索：放大镜 + 地球经纬，对应「跳出本地库去查外部网页」
+  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35M11 3a8 8 0 0 1 0 16M3 11h16M11 3c2.5 2 2.5 14 0 16M11 3c-2.5 2-2.5 14 0 16'
 }
 
 const MOBILE_QUERY = '(max-width: 1023px)'
@@ -216,15 +218,18 @@ const role = currentRole()
 const MENUS = {
   teacher: [
     { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
+    { path: '/teacher/assistant', label: 'AI 助手', hint: '联网搜索 + 深度思考', icon: 'chat' },
     { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' },
     { path: '/teacher/grades', label: '成绩单', hint: '按学年看全部成绩', icon: 'doc' },
     { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
     { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
     { path: '/teacher/approvals', label: '工作流审批', hint: '人工审核执行申请', icon: 'doc' },
-    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
+    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
+    { path: '/teacher/search', label: '联网搜索', hint: '网页结果带来源链接', icon: 'search' }
   ],
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
+    { path: '/student/assistant', label: 'AI 助手', hint: '联网搜索 + 深度思考', icon: 'chat' },
     { path: '/student/grades', label: '成绩单', hint: '每学年课程成绩', icon: 'doc' },
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
     { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
@@ -232,7 +237,8 @@ const MENUS = {
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
     { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
     { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' },
-    { path: '/student/assessment', label: '职业测评', hint: '软技能五维画像', icon: 'clipboard' }
+    { path: '/student/assessment', label: '职业测评', hint: '软技能五维画像', icon: 'clipboard' },
+    { path: '/student/search', label: '联网搜索', hint: '网页结果带来源链接', icon: 'search' }
   ]
 }
 

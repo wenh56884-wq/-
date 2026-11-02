@@ -5,6 +5,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // 首屏只取登录页那一小块。ShellLayout 是登录后立刻要用的骨架，仍单独成块。
 const ShellLayout = () => import('../layout/ShellLayout.vue')
 const Assessment = () => import('../views/Assessment.vue')
+const Assistant = () => import('../views/Assistant.vue')
 const CareerForecast = () => import('../views/CareerForecast.vue')
 const ExamNotices = () => import('../views/ExamNotices.vue')
 const GradeReport = () => import('../views/GradeReport.vue')
@@ -17,6 +18,7 @@ const StudentForecast = () => import('../views/StudentForecast.vue')
 const StudentHome = () => import('../views/StudentHome.vue')
 const TeacherDashboard = () => import('../views/TeacherDashboard.vue')
 const TeacherStudents = () => import('../views/TeacherStudents.vue')
+const WebSearch = () => import('../views/WebSearch.vue')
 const WorkflowApprovals = () => import('../views/WorkflowApprovals.vue')
 
 // meta.title 与侧栏菜单 label 保持一致：浏览器标签、历史记录、窗口标题同源，
@@ -43,6 +45,10 @@ const routes = [
         meta: { title: '工作流审批' } },
       { path: 'kg', name: 'teacher-kg', component: KgView,
         meta: { title: '知识图谱' } },
+      { path: 'search', name: 'teacher-search', component: WebSearch,
+        meta: { title: '联网搜索' } },
+      { path: 'assistant', name: 'teacher-assistant', component: Assistant,
+        meta: { title: 'AI 助手' } },
       // 侧栏内的无效地址：保留侧栏，只把内容区换成 404，不至于整屏白掉
       { path: ':pathMatch(.*)*', name: 'teacher-not-found', component: NotFound,
         meta: { title: '页面不存在' } }
@@ -69,16 +75,21 @@ const routes = [
         meta: { title: '学业预测' } },
       { path: 'assessment', name: 'student-assessment', component: Assessment,
         meta: { title: '职业测评' } },
+      { path: 'search', name: 'student-search', component: WebSearch,
+        meta: { title: '联网搜索' } },
+      { path: 'assistant', name: 'student-assistant', component: Assistant,
+        meta: { title: 'AI 助手' } },
       { path: 'career', name: 'student-career', component: CareerForecast,
         meta: { title: '报考分析' } },
       { path: ':pathMatch(.*)*', name: 'student-not-found', component: NotFound,
         meta: { title: '页面不存在' } }
     ]
   },
-  // 智能助手已改为右下角悬浮抽屉，这里保留旧地址做重定向，避免历史链接白屏
+  // 智能助手已升级为独立页面，旧的 /assistant 地址重定向到新页，避免历史链接白屏
   {
     path: '/assistant',
-    redirect: () => (localStorage.getItem('qh_role') === 'teacher' ? '/teacher' : '/student')
+    redirect: () => (localStorage.getItem('qh_role') === 'teacher'
+      ? '/teacher/assistant' : '/student/assistant')
   },
   // 顶层兜底：必须放在最后，否则会抢先匹配掉上面的正常路由
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound,
