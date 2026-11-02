@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // 要把 12 个页面和 ECharts 全下载完才出现内容。改成访问时才拉对应 chunk，
 // 首屏只取登录页那一小块。ShellLayout 是登录后立刻要用的骨架，仍单独成块。
 const ShellLayout = () => import('../layout/ShellLayout.vue')
+const Assessment = () => import('../views/Assessment.vue')
 const CareerForecast = () => import('../views/CareerForecast.vue')
 const ExamNotices = () => import('../views/ExamNotices.vue')
 const GradeReport = () => import('../views/GradeReport.vue')
@@ -66,6 +67,8 @@ const routes = [
         meta: { title: '知识图谱' } },
       { path: 'forecast', name: 'student-forecast', component: StudentForecast,
         meta: { title: '学业预测' } },
+      { path: 'assessment', name: 'student-assessment', component: Assessment,
+        meta: { title: '职业测评' } },
       { path: 'career', name: 'student-career', component: CareerForecast,
         meta: { title: '报考分析' } },
       { path: ':pathMatch(.*)*', name: 'student-not-found', component: NotFound,

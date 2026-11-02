@@ -199,7 +199,9 @@ const ICONS = {
   // 预测：折线上扬 + 箭头
   trend: 'M3 17l6-6 4 4 7-7M17 8h4M17 8v4',
   // 报考分析：靶心 + 箭，对应「按指标评估能打到哪」
-  target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'
+  target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  // 职业测评：剪贴板（板夹 + 纸 + 勾）
+  clipboard: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 14l2 2 4-4'
 }
 
 const MOBILE_QUERY = '(max-width: 1023px)'
@@ -229,7 +231,8 @@ const MENUS = {
     { path: '/student/career', label: '报考分析', hint: '按你的指标算竞争力', icon: 'target' },
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
     { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
-    { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' }
+    { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' },
+    { path: '/student/assessment', label: '职业测评', hint: '软技能五维画像', icon: 'clipboard' }
   ]
 }
 
