@@ -18,7 +18,7 @@ const StudentForecast = () => import('../views/StudentForecast.vue')
 const StudentHome = () => import('../views/StudentHome.vue')
 const TeacherDashboard = () => import('../views/TeacherDashboard.vue')
 const TeacherStudents = () => import('../views/TeacherStudents.vue')
-const WebSearch = () => import('../views/WebSearch.vue')
+// 联网搜索已并入 AI 助手页（/assistant 内「联网搜索」模式渲染 WebSearch 组件）
 const WorkflowApprovals = () => import('../views/WorkflowApprovals.vue')
 
 // meta.title 与侧栏菜单 label 保持一致：浏览器标签、历史记录、窗口标题同源，
@@ -45,8 +45,6 @@ const routes = [
         meta: { title: '工作流审批' } },
       { path: 'kg', name: 'teacher-kg', component: KgView,
         meta: { title: '知识图谱' } },
-      { path: 'search', name: 'teacher-search', component: WebSearch,
-        meta: { title: '联网搜索' } },
       { path: 'assistant', name: 'teacher-assistant', component: Assistant,
         meta: { title: 'AI 助手' } },
       // 侧栏内的无效地址：保留侧栏，只把内容区换成 404，不至于整屏白掉
@@ -75,8 +73,6 @@ const routes = [
         meta: { title: '学业预测' } },
       { path: 'assessment', name: 'student-assessment', component: Assessment,
         meta: { title: '职业测评' } },
-      { path: 'search', name: 'student-search', component: WebSearch,
-        meta: { title: '联网搜索' } },
       { path: 'assistant', name: 'student-assistant', component: Assistant,
         meta: { title: 'AI 助手' } },
       { path: 'career', name: 'student-career', component: CareerForecast,

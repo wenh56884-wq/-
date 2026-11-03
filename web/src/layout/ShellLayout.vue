@@ -224,8 +224,7 @@ const MENUS = {
     { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
     { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
     { path: '/teacher/approvals', label: '工作流审批', hint: '人工审核执行申请', icon: 'doc' },
-    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
-    { path: '/teacher/search', label: '联网搜索', hint: '网页结果带来源链接', icon: 'search' }
+    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
   ],
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
@@ -237,8 +236,7 @@ const MENUS = {
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
     { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
     { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' },
-    { path: '/student/assessment', label: '职业测评', hint: '软技能五维画像', icon: 'clipboard' },
-    { path: '/student/search', label: '联网搜索', hint: '网页结果带来源链接', icon: 'search' }
+    { path: '/student/assessment', label: '职业测评', hint: '软技能五维画像', icon: 'clipboard' }
   ]
 }
 
@@ -410,7 +408,7 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
-  border-bottom: 1px solid #eceef7;
+  border-bottom: 1px solid #d2d2d7;
   transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
@@ -444,16 +442,15 @@ onBeforeUnmount(() => {
   height: 32px;
   flex: 0 0 32px;
   border-radius: 10px;
-  background:
-    radial-gradient(120% 120% at 25% 10%, rgba(255, 255, 255, 0.45), transparent 45%),
-    linear-gradient(135deg, #6366f1 0%, #5b5bd6 55%, #7c3aed 100%);
+  /* Apple 风格：品牌标记用纯黑，不用渐变 */
+  background: #1d1d1f;
   color: #fff;
   font-size: 15px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 14px rgba(99, 102, 241, 0.28);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .brand-text {
@@ -467,13 +464,13 @@ onBeforeUnmount(() => {
   font-size: 14.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
-  color: #171a2b;
+  color: #1d1d1f;
   white-space: nowrap;
 }
 
 .brand-sub {
   font-size: 11px;
-  color: #9297ab;
+  color: #86868b;
   white-space: nowrap;
 }
 
@@ -501,7 +498,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   font-size: 13.5px;
   font-weight: 500;
-  color: #5b6178;
+  color: #6e6e73;
   text-decoration: none;
   white-space: nowrap;
   transition: background-color 150ms ease, color 150ms ease;
@@ -509,12 +506,12 @@ onBeforeUnmount(() => {
 
 .nav-pill:hover {
   background: #f4f4fb;
-  color: #4a4ac0;
+  color: #0058b0;
 }
 
 .nav-pill.is-active {
   background: #efedff;
-  color: #4f46e5;
+  color: #0071e3;
   font-weight: 600;
 }
 
@@ -547,10 +544,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 5px 11px;
-  border: 1px solid #eceef7;
+  border: 1px solid #d2d2d7;
   border-radius: 999px;
   background: #fff;
-  color: #5b6178;
+  color: #6e6e73;
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -558,14 +555,14 @@ onBeforeUnmount(() => {
 }
 
 .status-btn:hover {
-  background: #f1efff;
-  color: #4a4ac0;
+  background: #e8f2fd;
+  color: #0071e3;
 }
 
 .clock {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
-  color: #9297ab;
+  color: #86868b;
   white-space: nowrap;
 }
 
@@ -574,12 +571,12 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 3px 10px 3px 3px;
-  border: 1px solid #eceef7;
+  border: 1px solid #d2d2d7;
   border-radius: 999px;
   background: #fff;
   font-family: inherit;
   font-size: 12.5px;
-  color: #171a2b;
+  color: #1d1d1f;
   cursor: pointer;
   transition: background-color 150ms ease, border-color 150ms ease;
 }
@@ -594,8 +591,9 @@ onBeforeUnmount(() => {
   height: 26px;
   flex: 0 0 26px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #eef0ff, #f3e8ff);
-  color: #4f46e5;
+  /* 淡蓝底 + Apple 蓝字，替代原来的紫渐变 */
+  background: #e8f2fd;
+  color: #0071e3;
   font-size: 11.5px;
   font-weight: 600;
   display: inline-flex;
@@ -620,25 +618,25 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #171a2b;
+  color: #1d1d1f;
 }
 
 .user-pop-role {
   margin: 0 0 8px;
   font-size: 12px;
-  color: #9297ab;
+  color: #86868b;
 }
 
 .logout-btn {
   border: 0;
   border-radius: 8px;
   padding: 6px 10px;
-  background: #f4f3ff;
-  color: #5b5bd6;
+  background: #e8f2fd;
+  color: #0071e3;
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 300ms var(--qh-ease, ease), color 300ms var(--qh-ease, ease);
 }
 
 .logout-btn:hover {
@@ -649,7 +647,7 @@ onBeforeUnmount(() => {
 .icon-btn {
   width: 34px;
   height: 34px;
-  border: 1px solid #eceef7;
+  border: 1px solid #d2d2d7;
   border-radius: 10px;
   background: #fff;
   cursor: pointer;
@@ -669,7 +667,7 @@ onBeforeUnmount(() => {
   display: block;
   width: 16px;
   height: 1.5px;
-  background: #5b6178;
+  background: #6e6e73;
   content: '';
   position: relative;
 }
@@ -689,7 +687,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   font-size: 12px;
-  color: #5b6178;
+  color: #6e6e73;
 }
 
 .hp-row {
@@ -700,11 +698,11 @@ onBeforeUnmount(() => {
 
 .hp-row span {
   width: 60px;
-  color: #9297ab;
+  color: #86868b;
 }
 
 .hp-row b {
-  color: #171a2b;
+  color: #1d1d1f;
   font-weight: 500;
   margin-left: auto;
 }
@@ -715,10 +713,10 @@ onBeforeUnmount(() => {
 }
 
 .ghost-btn {
-  border: 1px solid #eceef7;
+  border: 1px solid #d2d2d7;
   border-radius: 999px;
   background: #fff;
-  color: #5b6178;
+  color: #6e6e73;
   font-size: 12px;
   font-family: inherit;
   padding: 5px 12px;
@@ -727,8 +725,8 @@ onBeforeUnmount(() => {
 }
 
 .ghost-btn:hover:not(:disabled) {
-  background: #f1efff;
-  color: #4a4ac0;
+  background: #e8f2fd;
+  color: #0071e3;
 }
 
 .ghost-btn:disabled {
@@ -736,10 +734,10 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 
-/* ---------- 本页 AI 助手条：全宽浅紫渐变底，内容与页面同宽 ---------- */
+/* ---------- 本页 AI 助手条：全宽纯色底（Apple 风格不用渐变），内容与页面同宽 ---------- */
 .ai-strip {
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.09), rgba(124, 58, 237, 0.05) 55%, rgba(255, 255, 255, 0));
-  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+  background: #f5f5f7;
+  border-bottom: 1px solid var(--bento-border, #d2d2d7);
 }
 
 .ai-strip-inner {
@@ -762,7 +760,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   font-size: 12.5px;
   font-weight: 650;
-  color: #4f46e5;
+  color: #0071e3;
   white-space: nowrap;
 }
 
@@ -773,7 +771,7 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   border-radius: 6px;
-  background: linear-gradient(135deg, #6366f1, #0ea5e9);
+  background: #0071e3;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -781,31 +779,30 @@ onBeforeUnmount(() => {
 }
 
 .ai-chip {
-  border: 1px solid rgba(99, 102, 241, 0.24);
-  background: rgba(255, 255, 255, 0.86);
-  color: #4338ca;
+  border: 1px solid rgba(0, 113, 227, 0.24);
+  background: rgba(255, 255, 255, 0.9);
+  color: #0071e3;
   border-radius: 999px;
   padding: 5px 12px;
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 300ms var(--qh-ease, ease);
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .ai-chip:hover {
-  background: #5b5bd6;
-  border-color: #5b5bd6;
+  background: #0071e3;
+  border-color: #0071e3;
   color: #fff;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(91, 91, 214, 0.24);
+  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.24);
 }
 
 .ai-more {
   border: none;
   background: none;
-  color: #6366f1;
+  color: #0071e3;
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
@@ -837,14 +834,14 @@ onBeforeUnmount(() => {
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: #171a2b;
+  color: #1d1d1f;
   white-space: nowrap;
 }
 
 .page-sub {
   margin: 0;
   font-size: 12px;
-  color: #9297ab;
+  color: #86868b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -888,7 +885,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: #fff;
-  border-right: 1px solid #eceef7;
+  border-right: 1px solid #d2d2d7;
   box-shadow: 0 12px 40px rgba(24, 24, 27, 0.16);
   transform: translateX(-100%);
   transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -905,7 +902,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  border-bottom: 1px solid #eceef7;
+  border-bottom: 1px solid #d2d2d7;
 }
 
 .drawer-nav {
@@ -921,19 +918,19 @@ onBeforeUnmount(() => {
   padding: 9px 11px;
   margin: 2px 0;
   border-radius: 10px;
-  color: #5b6178;
+  color: #6e6e73;
   text-decoration: none;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
 .drawer-item:hover {
   background: #f4f4fb;
-  color: #4a4ac0;
+  color: #0058b0;
 }
 
 .drawer-item.is-active {
   background: #efedff;
-  color: #4f46e5;
+  color: #0071e3;
   font-weight: 600;
 }
 
@@ -950,7 +947,7 @@ onBeforeUnmount(() => {
 
 .drawer-hint {
   font-size: 11px;
-  color: #9297ab;
+  color: #86868b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -962,7 +959,7 @@ onBeforeUnmount(() => {
 
 .drawer-foot {
   flex: 0 0 auto;
-  border-top: 1px solid #eceef7;
+  border-top: 1px solid #d2d2d7;
   padding: 10px;
 }
 
@@ -972,7 +969,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 9px 10px;
   background: #fff;
-  border: 1px solid #eceef7;
+  border: 1px solid #d2d2d7;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(33, 40, 90, 0.04);
 }
@@ -984,7 +981,7 @@ onBeforeUnmount(() => {
 
 .user-role {
   font-size: 11px;
-  color: #9297ab;
+  color: #86868b;
 }
 
 /* ---------- 悬浮 AI 助手入口（右下角小人） ---------- */
@@ -1029,12 +1026,13 @@ onBeforeUnmount(() => {
   right: 2px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  /* 角标用 Apple 红：红色在这里承载「有新消息」的语义，不是装饰 */
+  background: #ff3b30;
   color: #fff;
   font-size: 11px;
   font-weight: 500;
   border: 1px solid #fff;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 6px rgba(255, 59, 48, 0.3);
 }
 
 /* 抽屉本体：抹掉默认内边距，交给 ChatDrawer 自己排布 */

@@ -1,5 +1,23 @@
 <template>
-  <div class="page bento-page asst-page">
+  <div class="page bento-page asst-page" :class="{ 'is-chat': mode === 'chat' }">
+    <!-- 顶部模式切换：对话（AI 多智能体） / 联网搜索（直接检索外部网页） -->
+    <div class="asst-mode-tabs">
+      <button class="mode-tab" type="button" :class="{ 'is-on': mode === 'chat' }"
+        @click="switchMode('chat')">
+        <svg viewBox="0 0 24 24" class="mode-ico" aria-hidden="true">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+        对话
+      </button>
+      <button class="mode-tab" type="button" :class="{ 'is-on': mode === 'search' }"
+        @click="switchMode('search')">
+        <svg viewBox="0 0 24 24" class="mode-ico" aria-hidden="true">
+          <path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35M11 3a8 8 0 0 1 0 16M3 11h16M11 3c2.5 2 2.5 14 0 16M11 3c-2.5 2-2.5 14 0 16" />
+        </svg>
+        联网搜索
+      </button>
+    </div>
+    <template v-if="mode === 'chat'">
     <div class="asst-shell">
       <!-- ---------- 左栏：会话列表 ---------- -->
       <aside class="asst-sessions">
@@ -178,6 +196,10 @@
         </div>
       </aside>
     </div>
+    </template>
+    <template v-else>
+      <WebSearch embedded />
+    </template>
   </div>
 </template>
 
@@ -187,6 +209,7 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import http, { clearSession, currentRole } from '../api/http'
 import router from '../router'
 import moyuImg from '../assets/deepseek-mo-yu.webp'
+import WebSearch from './WebSearch.vue'
 
 const EXAMPLES = {
   teacher: [
@@ -207,6 +230,9 @@ const EXAMPLES = {
 
 const role = currentRole()
 const examples = computed(() => EXAMPLES[role] || EXAMPLES.student)
+
+// 两种模式：对话（AI 多智能体）/ 联网搜索（直接检索外部网页）
+const mode = ref('chat')
 
 const term = ref('2025-2026-2')
 const query = ref('')
@@ -272,6 +298,12 @@ function toggleWeb() {
 
 function toggleDeep() {
   deepThinking.value = !deepThinking.value
+}
+
+function switchMode(target) {
+  mode.value = target
+  // 切到搜索模式时收起右栏来源，避免两套面板叠在一起
+  if (target === 'search') searchOpen.value = false
 }
 
 async function scrollBottom() {
@@ -574,8 +606,57 @@ onMounted(loadSessions)
 <style scoped>
 /* 三栏铺满：100vh - 顶栏(64) - AI 问法条(~44) - 页面上下内边距(48) ≈ 156，留 4px 余量 */
 .asst-page {
-  height: calc(100vh - 160px);
   min-height: 540px;
+}
+
+/* 对话模式：铺满视口（顶栏 + AI 问法条 + 模式条 + 上下内边距） */
+.asst-page.is-chat {
+  height: calc(100vh - 200px);
+  min-height: 540px;
+}
+
+/* ---------- 顶部模式切换条 ---------- */
+.asst-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--bento-border-strong);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 14px;
+  color: var(--bento-sub);
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--bento-ease),
+    background-color 180ms var(--bento-ease),
+    color 180ms var(--bento-ease);
+}
+
+.mode-tab:hover {
+  border-color: var(--bento-accent);
+}
+
+.mode-tab.is-on {
+  border-color: var(--bento-accent);
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
+}
+
+.mode-ico {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .asst-shell {
@@ -845,7 +926,8 @@ onMounted(loadSessions)
 }
 
 .msg.user .avatar {
-  background: linear-gradient(135deg, #6d5bd0, #4f6ff0, #3b82f6);
+  /* Apple 蓝实底，替代原来的蓝紫渐变 */
+  background: #0071e3;
   color: #ffffff;
 }
 
@@ -853,7 +935,7 @@ onMounted(loadSessions)
   max-width: min(78%, 720px);
   padding: 11px 14px;
   border-radius: 14px;
-  background: #f7f8fd;
+  background: #f5f5f7;
   font-size: 14px;
   line-height: 1.85;
   color: var(--bento-text);
@@ -861,7 +943,7 @@ onMounted(loadSessions)
 }
 
 .msg.user .bubble {
-  background: linear-gradient(135deg, #6d5bd0, #4f6ff0, #3b82f6);
+  background: #0071e3;
   color: #ffffff;
 }
 
@@ -1130,12 +1212,12 @@ onMounted(loadSessions)
   padding: 7px 18px;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #6d5bd0, #4f6ff0);
+  background: #0071e3;
   font-size: 14px;
   font-weight: 600;
   color: #ffffff;
   cursor: pointer;
-  transition: opacity 180ms var(--bento-ease);
+  transition: opacity 300ms var(--bento-ease), background-color 300ms var(--bento-ease);
 }
 
 .send-btn:disabled {
@@ -1302,7 +1384,7 @@ onMounted(loadSessions)
     display: none;
   }
 
-  .asst-page {
+  .asst-page.is-chat {
     height: calc(100vh - 120px);
   }
 }

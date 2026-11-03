@@ -1,5 +1,5 @@
 <template>
-  <div class="page bento-page">
+  <div class="page bento-page" :class="{ embedded }">
     <div class="bento-grid">
       <el-alert class="trust-bar bento-span-4" :type="configured === false ? 'warning' : 'info'"
         :closable="false" show-icon :title="engineText" />
@@ -89,6 +89,9 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import http from '../api/http'
+
+// embedded=true 时由 AI 助手页嵌入，去掉自身 .bento-page 内边距（父级已提供），避免双重留白
+defineProps({ embedded: { type: Boolean, default: false } })
 
 // 演示时点一下就能出结果，省得现场手打关键词
 const QUICK_QUERIES = ['2026 国考报名条件', '软件工程师 校招 要求', '重庆 事业单位 招聘']
@@ -184,6 +187,11 @@ async function copyUrl() {
 </script>
 
 <style scoped>
+/* 嵌入模式：去掉自身 .page + .bento-page 内边距，由父级提供，避免双重留白 */
+.page.bento-page.embedded {
+  padding: 0;
+}
+
 .search-card {
   padding-bottom: 4px;
 }
