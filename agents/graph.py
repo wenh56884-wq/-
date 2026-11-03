@@ -353,6 +353,8 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
                                   limit=int(a.get("limit") or 6))
     if name == "my_interviews":
         return tools.my_interviews(ctx, limit=int(a.get("limit") or 8))
+    if name == "my_assessment":
+        return tools.my_assessment(ctx)
     if name == "question_bank_lookup":
         return tools.question_bank_lookup(ctx, query=str(a.get("query") or ""),
                                           family=str(a.get("family") or ""),
@@ -583,6 +585,22 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"进度 {it.get('cur_round')}/{it.get('max_round')}"
                 + (f"，总分 {it.get('total')}" if it.get("total") is not None else "") + "。"
             )
+    if result.get("has_assessment") is False and result.get("note"):
+        parts.append(str(result.get("note")))
+    elif "abilities" in result and "total_score" in result:
+        # 软技能测评画像：五维复合能力原样直引，不换算、不排序、不补 0
+        _a_labels = {
+            "professional_skills": "专业技能", "learning_ability": "学习能力",
+            "innovation_ability": "创新能力", "stress_resistance": "抗压能力",
+            "communication_ability": "沟通能力",
+        }
+        abilities = result.get("abilities") or {}
+        parts.append(
+            f"最近一次软技能测评（{result.get('create_time') or '时间未标注'}）："
+            f"总分 {result.get('total_score')}/{result.get('total_max')}。"
+        )
+        parts.append("五维复合能力：" + "、".join(
+            f"{_a_labels.get(k, k)} {v}" for k, v in abilities.items()) + "。")
     if not parts:
         parts.append("已获取结构化结果，详见对应列表。")
     draft = "\n".join(parts)

@@ -225,12 +225,16 @@ def build_rules(tenant_id: int, rows: Iterable[Mapping[str, Any]]) -> WarningRul
 # ===========================================================
 RECOMMEND_ENGINE_VERSION = "v1.0"
 
-# 四维权重（加权求和，总和 1.0）
+# 岗位推荐维度权重（加权求和，可用维度内重归一）。
+# 前四项为规则版 v1.0 原口径（总和恰为 1.0），无软技能测评时软技能两维不可用、
+# 被剔除后权重归一化正好回落 1.0 —— 保证「无测评数据」的分数与 v1.0 完全一致，不漂移。
 RECOMMEND_WEIGHTS: dict[str, float] = {
     "major_match": 0.35,   # 专业匹配度
     "gpa_gate": 0.25,      # 成绩门槛达成度
     "skill_cover": 0.30,   # 技能覆盖率
     "interest_fit": 0.10,  # 兴趣重合度
+    "soft_skills": 0.15,   # 职业素养（沟通 + 抗压，来自软技能测评）
+    "potential": 0.10,     # 发展潜力（学习 + 创新，来自软技能测评）
 }
 
 # 方向 → 对口专业（完全匹配）

@@ -26,6 +26,7 @@ from app.auth import (
     get_current_ctx,
 )
 from app.config import get_settings
+from app.routers import assessment as assessment_router
 from app.routers import career as career_router
 from app.routers import chat as chat_router
 from app.routers import exam as exam_router
@@ -38,6 +39,7 @@ from app.routers import kg as kg_router
 from app.routers import question_bank as qb_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
+from app.routers import web as web_router
 from app.routers import workflow as workflow_router
 from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
 
@@ -124,6 +126,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(assessment_router.router)
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
     app.include_router(career_router.router)
@@ -136,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(qb_router.router)
     app.include_router(kb_router.router)
     app.include_router(chat_router.router)
+    app.include_router(web_router.router)
     app.include_router(workflow_router.router)
 
     @app.middleware("http")

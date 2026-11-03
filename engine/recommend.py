@@ -132,6 +132,42 @@ def interest_fit_of(directions: Iterable[str], job_direction: str) -> tuple[floa
     return 0.0, f"未选修/浏览过 {job_direction} 方向"
 
 
+def _ability_dims(abilities: Mapping[str, Any] | None,
+                  keys: Sequence[str]) -> tuple[float, bool]:
+    """取复合能力分（0-100）的均值归一化到 0-1；无有效值返回 (0.0, False)。
+
+    约定：abilities 缺任一所求键，该软技能维度整体判「无数据」不参与打分，
+    不做「拿一项顶全部」的宽松补齐——测评没测到的能力不该冒充有分。
+    """
+    if not isinstance(abilities, Mapping):
+        return 0.0, False
+    vals: list[float] = []
+    for key in keys:
+        v = to_float(abilities.get(key))
+        if v is None:
+            return 0.0, False
+        vals.append(max(0.0, min(100.0, v)))
+    if not vals:
+        return 0.0, False
+    return round(sum(vals) / len(vals) / 100.0, _SCORE_NDIGITS), True
+
+
+def soft_skills_of(abilities: Mapping[str, Any] | None) -> tuple[float, str, bool]:
+    """职业素养 = 均值(沟通能力, 抗压能力) / 100；无数据不参与打分并给话术。"""
+    score, has = _ability_dims(abilities, ("communication_ability", "stress_resistance"))
+    if not has:
+        return 0.0, "无软技能测评数据，职业素养项不参与打分", False
+    return score, f"软技能测评职业素养 {round(score * 100, 1)} 分", True
+
+
+def potential_of(abilities: Mapping[str, Any] | None) -> tuple[float, str, bool]:
+    """发展潜力 = 均值(学习能力, 创新能力) / 100；无数据不参与打分并给话术。"""
+    score, has = _ability_dims(abilities, ("learning_ability", "innovation_ability"))
+    if not has:
+        return 0.0, "无软技能测评数据，发展潜力项不参与打分", False
+    return score, f"软技能测评发展潜力 {round(score * 100, 1)} 分", True
+
+
 def _action_items_of(gaps: Sequence[str], skill_gaps: Sequence[str],
                      gpa_gap: str, min_gpa: float, gpa: float | None,
                      cold_start: bool) -> list[str]:
@@ -173,6 +209,7 @@ def score_job(student: Mapping[str, Any], job: Mapping[str, Any]) -> dict[str, A
     """单岗位打分：四维加权和；缺失维度不参与打分，权重在可用项内重归。
 
     student 约定键：student_no / major / gpa / skills(list[str]) / directions(list[str])
+                   / abilities(可选 dict，来自软技能测评复合能力)
     job 约定键：id / title / company / city / salary_min / salary_max /
                education / exp_min / skill_tags(list[str]) / direction
     """
@@ -187,14 +224,24 @@ def score_job(student: Mapping[str, Any], job: Mapping[str, Any]) -> dict[str, A
     interest_score, interest_reason = interest_fit_of(
         list(student.get("directions") or []), direction)
 
+    # 软技能测评两维（可选）：有数据才进入打分，无数据完全回落四维
+    abilities = student.get("abilities") if isinstance(student.get("abilities"), Mapping) else None
+    soft_score, soft_reason, has_soft = soft_skills_of(abilities)
+    potential_score, potential_reason, has_potential = potential_of(abilities)
+
+    has_skill = bool(tags)
+    has_interest = bool(student.get("directions"))
     dims = {
         "major_match": major_score,
         "gpa_gate": gpa_score,
         "skill_cover": cover_score,
         "interest_fit": interest_score,
     }
-    has_skill = bool(tags)
-    has_interest = bool(student.get("directions"))
+    if has_soft:
+        dims["soft_skills"] = soft_score
+    if has_potential:
+        dims["potential"] = potential_score
+
     available = [k for k in dims
                  if k not in ("skill_cover", "interest_fit")
                  or (k == "skill_cover" and has_skill)
@@ -215,6 +262,11 @@ def score_job(student: Mapping[str, Any], job: Mapping[str, Any]) -> dict[str, A
         gap_items.append(gpa_gap)
     if has_interest:
         (hit_items if interest_score > 0 else gap_items).append(interest_reason)
+    # 软技能两维：有数据才给出正面证据话术，无数据不占用 hit/gap（不参与打分）
+    if has_soft:
+        (hit_items if soft_score >= 0.6 else gap_items).append(soft_reason)
+    if has_potential:
+        (hit_items if potential_score >= 0.6 else gap_items).append(potential_reason)
     hit_items = [h for h in hit_items if h]
     gap_items = [g for g in gap_items if g]
 
@@ -229,6 +281,8 @@ def score_job(student: Mapping[str, Any], job: Mapping[str, Any]) -> dict[str, A
         "min_gpa": round(gate, 2),
         "final_score": round(final, _SCORE_NDIGITS),
         "dims": {k: round(v, _SCORE_NDIGITS) for k, v in dims.items()},
+        "has_soft_skills": has_soft,
+        "has_potential": has_potential,
         "hit_items": hit_items,
         "gap_items": gap_items,
         "action_items": _action_items_of(gap_items, skill_gaps, gpa_gap, gate,
@@ -281,6 +335,85 @@ def _query(sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
         conn.close()
 
 
+def load_abilities(tenant_id: int, student_no: str) -> dict[str, Any] | None:
+    """读该生最新一次软技能测评的复合能力（无测评返回 None）。"""
+    rows = _query(
+        "SELECT `复合能力` FROM `测评结果` "
+        "WHERE `租户编号` = %s AND `学生编号` = ("
+        "  SELECT `编号` FROM `学生` WHERE `租户编号` = %s AND `学号` = %s LIMIT 1"
+        ") ORDER BY `创建时间` DESC LIMIT 1",
+        (tenant_id, tenant_id, student_no),
+    )
+    if not rows or not rows[0].get("复合能力"):
+        return None
+    raw = rows[0]["复合能力"]
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(raw, Mapping):
+        return None
+    return {str(k): to_float(v) for k, v in raw.items()}
+
+
+def load_latest_result(tenant_id: int, student_no: str) -> dict[str, Any] | None:
+    """读该生最新一次软技能测评的完整结果（总分 / 五维复合能力 / 细粒度维度得分）。
+
+    无测评返回 None——不拿 0 分冒充有结果、不猜「中性 50」；细粒度维度得分从已存
+    的 pct 还原为加权分（与提交时同口径，避免「刚提交」与「刷新后」数字不一致）。
+    """
+    rows = _query(
+        "SELECT `编号` AS result_id, `总分` AS total_score, `满分` AS total_max, "
+        "`维度得分` AS dimension_scores, `复合能力` AS abilities, `创建时间` AS create_time "
+        "FROM `测评结果` WHERE `租户编号` = %s AND `学生编号` = ("
+        "  SELECT `编号` FROM `学生` WHERE `租户编号` = %s AND `学号` = %s LIMIT 1"
+        ") ORDER BY `创建时间` DESC LIMIT 1",
+        (tenant_id, tenant_id, student_no),
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    if row.get("total_score") is None and not row.get("abilities"):
+        return None
+
+    abilities: dict[str, float] | None = None
+    if row.get("abilities"):
+        raw = row["abilities"]
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (ValueError, TypeError):
+                raw = None
+        if isinstance(raw, Mapping):
+            abilities = {str(k): to_float(v) for k, v in raw.items()}
+
+    # 维度得分存的是 {维度: {score, max, count, pct}}；还原成加权分 {维度: 分}
+    pcts: dict[str, float] = {}
+    raw_dims = row.get("dimension_scores")
+    if raw_dims:
+        if isinstance(raw_dims, str):
+            try:
+                raw_dims = json.loads(raw_dims)
+            except (ValueError, TypeError):
+                raw_dims = None
+        if isinstance(raw_dims, Mapping):
+            for dim, agg in raw_dims.items():
+                if isinstance(agg, Mapping) and agg.get("pct") is not None:
+                    pcts[str(dim)] = float(agg["pct"])
+    from engine import assessment as assess
+    dimension_scores = assess.weighted_dimension_scores(pcts)
+
+    return {
+        "result_id": int(row.get("result_id") or 0),
+        "total_score": to_float(row.get("total_score")),
+        "total_max": to_float(row.get("total_max")),
+        "dimension_scores": dimension_scores,
+        "abilities": abilities,
+        "create_time": str(row.get("create_time") or ""),
+    }
+
+
 def load_student(tenant_id: int, student_no: str, term: str) -> dict[str, Any]:
     """取推荐所需画像：专业 / 均分 / 技能（课名映射）/ 方向（DuckDB 的 course_pref）。"""
     rows = _query(
@@ -310,6 +443,9 @@ def load_student(tenant_id: int, student_no: str, term: str) -> dict[str, Any]:
         directions = sorted(str(k) for k in pref)
     except Exception:
         directions = []
+
+    abilities = load_abilities(tenant_id, student_no)
+
     return {
         "student_no": str(base.get("student_no") or student_no),
         "term": term,
@@ -317,6 +453,7 @@ def load_student(tenant_id: int, student_no: str, term: str) -> dict[str, Any]:
         "gpa": to_float(base.get("gpa")),
         "skills": [str(c["name"]) for c in courses],  # 课名即技能证据
         "directions": directions,
+        "abilities": abilities,  # 软技能测评五维复合能力（无则 None）
     }
 
 

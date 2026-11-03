@@ -588,3 +588,63 @@ def test_draft_class_rank_reads_engine_values_only():
     for value in ("78.4", "77.9", "85.2", "第 2 / 3", "班内第 3/40", "同专业第 7/120"):
         assert value in draft, f"模板稿缺引擎值 {value}：{draft}"
     assert "本租户共" not in draft, "排名结果被当成班级概览了"
+
+
+# ----------------------------------------------------------------
+# 6. 软技能测评（my_assessment）——本人画像工具，三处同步 + 路由
+# ----------------------------------------------------------------
+def test_my_assessment_registered_everywhere():
+    """my_assessment 三处同步：tools 注册表 / auto_plan / EXECUTABLE，且不进教师端。"""
+    assert "my_assessment" in agent_tools.STUDENT_TOOLS
+    assert "my_assessment" not in agent_tools.TEACHER_TOOLS
+    assert "my_assessment" in {t.name for t in auto_plan._STUDENT_TOOLS}
+    assert "my_assessment" not in {t.name for t in auto_plan._TEACHER_TOOLS}
+    assert "my_assessment" in auto_plan.EXECUTABLE
+
+
+def test_my_assessment_dispatch_reachable(monkeypatch):
+    """my_assessment 能被 tool_node 分发（名字写错会静默失效，必须测）。"""
+    seen: dict = {}
+
+    def fake(ctx):
+        seen["called"] = True
+        return {"tool": "my_assessment"}
+
+    monkeypatch.setattr(agent_tools, "my_assessment", fake, raising=True)
+    agent_graph._dispatch(_student(), "my_assessment", {})
+    assert seen.get("called") is True
+
+
+def test_my_assessment_routing():
+    """学生问测评/软技能/职业素养要命中 my_assessment，不被知识库/成绩抢走。"""
+    assert _plan(_student(), "我的测评结果怎样") == "my_assessment"
+    assert _plan(_student(), "我的软技能画像") == "my_assessment"
+    assert _plan(_student(), "我的职业素养怎么样") == "my_assessment"
+    # 「测评」不应被「成绩」路由抢走
+    assert _plan(_student(), "我的复合能力得分") == "my_assessment"
+
+
+def test_draft_my_assessment_reads_engine_values():
+    """测评结果模板稿原样直引五维能力，不出现 None、不换算、不补 0。"""
+    result = {
+        "has_assessment": True, "total_score": 242.0, "total_max": 610.0,
+        "create_time": "2026-11-02 12:00:00",
+        "abilities": {
+            "professional_skills": 70.0, "learning_ability": 47.7,
+            "innovation_ability": 34.5, "stress_resistance": 30.4,
+            "communication_ability": 30.4,
+        },
+    }
+    draft = agent_graph._template_draft(result)
+    assert "None" not in draft
+    assert "242.0" in draft and "610.0" in draft
+    assert "专业技能 70.0" in draft
+    assert "沟通能力 30.4" in draft
+
+
+def test_draft_my_assessment_no_result_shows_note():
+    """无测评时模板稿给 note，不冒充画像（不输出总分/能力）。"""
+    result = {"has_assessment": False, "note": "你还没有做过软技能测评"}
+    draft = agent_graph._template_draft(result)
+    assert "还没有做过软技能测评" in draft
+    assert "总分" not in draft

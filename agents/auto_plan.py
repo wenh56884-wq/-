@@ -76,6 +76,12 @@ def my_recommendations(term: str = "") -> str:
 
 
 @tool
+def my_assessment() -> str:
+    """查询**本人**的软技能测评结果：五维复合能力画像（专业技能/学习/创新/抗压/沟通）。
+    只能查自己。没有做过测评时如实说明，并指向「职业测评」页。"""
+
+
+@tool
 def kb_search(query: str = "") -> str:
     """在企业知识库里检索制度、流程、办事指南等文档内容（会给出文档名与页码）。
     用于回答「规定是怎样的 / 流程怎么走」这类问题。"""
@@ -204,7 +210,7 @@ _TEACHER_TOOLS = (class_list, class_overview, warning_list, warning_thresholds,
                   kb_search, web_search, run_workflow)
 _STUDENT_TOOLS = (my_warning, my_recommendations, my_grades, my_forecast,
                   my_career_forecast, my_notices, my_career_guide, competition_guide,
-                  search_jobs, job_facets, my_interviews,
+                  search_jobs, job_facets, my_interviews, my_assessment,
                   kg_major_skills, kg_skill_jobs, kg_path,
                   exam_notices, exam_positions, question_bank_lookup,
                   kb_search, web_search, run_workflow)

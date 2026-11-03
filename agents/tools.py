@@ -19,6 +19,7 @@ import pymysql
 
 from agents.career import context as career_context
 from app.config import Settings, get_settings
+from engine import assessment as assess
 from engine import career_guide, competition, hybrid, job_search, profile, recommend, warning
 from engine import forecast as forecast_engine      # 学业预测（绩点/挂科/等级走向）
 from engine import grades as grades_engine          # 成绩聚合（纯函数）
@@ -1271,6 +1272,46 @@ def my_career_guide(ctx: ToolContext, term: str | None = None) -> dict[str, Any]
     }
 
 
+def my_assessment(ctx: ToolContext) -> dict[str, Any]:
+    """本人软技能测评结果（五维复合能力画像）。只用 ctx.student_id，忽略任何外部传入。
+
+    无测评时返回 has_assessment=False + note（指向「职业测评」页），不拿 0 分冒充画像。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_assessment", "self")
+    me = _resolve_self(ctx, "my_assessment")
+
+    latest = recommend.load_latest_result(ctx.tenant_id, me["student_no"])
+    if latest is None:
+        _audit_call(ctx, "my_assessment", me["student_no"], {"has_assessment": False})
+        return {
+            "student_no": me["student_no"],
+            "name": str(me.get("name") or ""),
+            "has_assessment": False,
+            "note": "你还没有做过软技能测评，可前往「职业测评」页完成 122 道量表题后再来查看画像。",
+            "engine_version": assess.ASSESSMENT_ENGINE_VERSION,
+            "calc_version": profile.CALC_VERSION,
+            "tools_version": TOOLS_VERSION,
+        }
+
+    _audit_call(ctx, "my_assessment", me["student_no"],
+                {"has_assessment": True, "result_id": latest.get("result_id")})
+    return {
+        "student_no": me["student_no"],
+        "name": str(me.get("name") or ""),
+        "has_assessment": True,
+        "result_id": latest["result_id"],
+        "total_score": latest["total_score"],
+        "total_max": latest["total_max"],
+        "abilities": latest["abilities"],
+        "dimension_scores": latest["dimension_scores"],
+        "create_time": latest["create_time"],
+        "engine_version": assess.ASSESSMENT_ENGINE_VERSION,
+        "calc_version": profile.CALC_VERSION,
+        "tools_version": TOOLS_VERSION,
+    }
+
+
 def save_career_intent(ctx: ToolContext, intent: str) -> dict[str, Any]:
     """保存本人职业目标；只接受 考公/考研/考编/就业 四个值。"""
     ctx = _check_ctx(ctx)
@@ -1491,6 +1532,8 @@ STUDENT_TOOLS: tuple[str, ...] = (
     "career_guide", "save_career_intent",
     # 成绩 / 预测 / 报考分析（本人视角，学号只来自登录态）
     "my_grades", "my_forecast", "my_career_forecast",
+    # 软技能测评（本人最新一次画像）
+    "my_assessment",
     # 通知 / 竞赛 / 规划
     "my_notices", "mark_notices_read", "competition_guide", "my_career_guide",
     # 岗位 / 图谱
