@@ -24,8 +24,10 @@ from app.auth import (
     authenticate,
     create_access_token,
     get_current_ctx,
+    validate_security_config,
 )
 from app.config import get_settings
+from app.logging_config import get_logger
 from app.routers import assessment as assessment_router
 from app.routers import career as career_router
 from app.routers import chat as chat_router
@@ -36,6 +38,7 @@ from app.routers import interview as interview_router
 from app.routers import job as job_router
 from app.routers import kb as kb_router
 from app.routers import kg as kg_router
+from app.routers import pet as pet_router
 from app.routers import question_bank as qb_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
@@ -46,12 +49,9 @@ from app.schemas import ChatIn, ChatOut, HealthOut, LoginIn, LoginOut
 APP_TITLE = "启航 · 学业预警与职业发展助手 API"
 APP_VERSION = "1.0.0"
 
-# .env → os.environ：get_settings 走 pydantic，只把值填进自己的字段，
-# 不会写回 os.environ；而 engine.web_search 这类适配层是直接读 os.getenv 的
-# （联网搜索密钥就挂在环境变量上）。不显式加载一次，.env 里配好的联网密钥
-# 在服务进程里根本读不到——表现是「明明配了 key，智能体却说没有联网能力」。
+# .env 同时供 pydantic 与直接读 os.getenv 的适配层使用，必须先加载。
 load_dotenv()
-
+logger = get_logger("qihang.api")
 
 def _check_mysql() -> str:
     """真实连通检测：能连上并查到任意一行即 ok。"""
@@ -75,6 +75,7 @@ def _check_duckdb() -> str:
 
         return "ok" if DuckDBStore().health_check() else "down"
     except Exception:
+        logger.warning("DuckDB health check failed", exc_info=True)
         return "down"
 
 
@@ -96,10 +97,16 @@ def _run_chat(ctx: ToolContext, body: ChatIn) -> dict:
                     "tool_name": "", "citations": [], "suggested_followups": [],
                     "quota_exceeded": True}
     except Exception:
-        pass
+        logger.warning("chat_service unavailable; fallback to graph", exc_info=True)
     try:
         from agents.graph import run_chat  # 延迟导入：P7 接入后即生效
     except Exception:
+        logger.exception("agent graph import failed")
+        audit_event(
+            tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+            actor_id=ctx.student_id or ctx.teacher_id or 0,
+            action="api.chat.unavailable", target="", detail={"stage": "import"},
+        )
         return {"answer": "智能体编排尚未启用，暂无法回答该问题。"
                           "你可以先查看「预警列表」与「个人画像」中的结构化数据。",
                 "degraded": True, "session_id": None, "tool_name": "", "citations": []}
@@ -108,11 +115,38 @@ def _run_chat(ctx: ToolContext, body: ChatIn) -> dict:
                         history=[{"role": turn.role, "text": turn.text}
                                  for turn in (body.history or [])])
     except Exception:
+        logger.exception("chat pipeline failed")
+        audit_event(
+            tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+            actor_id=ctx.student_id or ctx.teacher_id or 0,
+            action="api.chat.failed", target="", detail={"stage": "pipeline"},
+        )
         return {"answer": "智能体处理失败，已降级为安全话术（不提供任何未经核对的数值）。",
                 "degraded": True, "session_id": None, "tool_name": "", "citations": []}
 
 
+_NON_AUDIT_PREFIXES = (
+    "/assets/",
+    "/media/",
+    "/favicon",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
+
+
+def _should_persist_db_audit(request: Request, status_code: int) -> bool:
+    """数据库只留失败请求和业务审计；成功访问写滚动文件日志。"""
+    path = request.url.path
+    if path.startswith(_NON_AUDIT_PREFIXES):
+        return False
+    if path == "/health":
+        return False
+    return status_code >= 400
+
+
 def create_app() -> FastAPI:
+    validate_security_config()
     """构造 FastAPI 应用（工厂函数，便于测试与托管）。"""
     app = FastAPI(title=APP_TITLE, version=APP_VERSION,
                   responses={401: {"model": None}, 403: {"model": None}})
@@ -141,36 +175,50 @@ def create_app() -> FastAPI:
     app.include_router(chat_router.router)
     app.include_router(web_router.router)
     app.include_router(workflow_router.router)
+    app.include_router(pet_router.router)
 
     @app.middleware("http")
     async def audit_middleware(request: Request, call_next):
-        """请求级审计：无论成功失败都写 audit_log（含耗时）。"""
+        """请求级追踪：全部访问写文件日志，失败请求另落数据库审计。"""
         started = time.perf_counter()
-        actor_type, actor_id = "anonymous", 0
+        request_id = uuid.uuid4().hex[:16]
+        request.state.request_id = request_id
+        tenant_id, actor_type, actor_id = 0, "anonymous", 0
         header = request.headers.get("authorization", "")
         if header.lower().startswith("bearer "):
             try:
                 from app.auth import decode_token
 
                 claims = decode_token(header.split(" ", 1)[1].strip())
+                tenant_id = int(claims.get("tenant_id") or 0)
                 actor_type = str(claims.get("role") or "anonymous")
                 actor_id = int(claims.get("student_id")
                                or claims.get("teacher_id") or 0)
             except Exception:  # token 无效：按匿名留痕，由依赖层决定 401
-                actor_type, actor_id = "invalid-token", 0
+                tenant_id, actor_type, actor_id = 0, "invalid-token", 0
         status_code = 500
         try:
             response = await call_next(request)
             status_code = response.status_code
+            response.headers["X-Request-ID"] = request_id
             return response
         finally:
-            audit_event(
-                actor_type=actor_type, actor_id=actor_id,
-                action=f"{request.method} {request.url.path}",
-                target=request.url.query or "",
-                detail={"status": status_code},
-                duration_ms=(time.perf_counter() - started) * 1000,
+            duration_ms = (time.perf_counter() - started) * 1000
+            log_method = logger.warning if status_code >= 400 else logger.info
+            log_method(
+                "request_id=%s tenant_id=%s actor_type=%s actor_id=%s "
+                "method=%s path=%s status=%s duration_ms=%.2f",
+                request_id, tenant_id, actor_type, actor_id,
+                request.method, request.url.path, status_code, duration_ms,
             )
+            if _should_persist_db_audit(request, status_code):
+                audit_event(
+                    tenant_id=tenant_id, actor_type=actor_type, actor_id=actor_id,
+                    action=f"{request.method} {request.url.path}",
+                    target=request.url.query or "",
+                    detail={"status": status_code, "request_id": request_id},
+                    duration_ms=duration_ms,
+                )
 
     @app.exception_handler(PermissionError)
     async def _permission_handler(request: Request, exc: PermissionError):
@@ -185,8 +233,18 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def _server_handler(request: Request, exc: Exception):
         # 统一 500：中文提示，不外泄任何堆栈或内部信息
+        logger.error(
+            "unhandled request exception request_id=%s method=%s path=%s",
+            getattr(request.state, "request_id", "-"),
+            request.method,
+            request.url.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            content={"detail": "服务内部错误，请联系运维查看日志"})
+                            content={"detail": "服务内部错误，请联系运维查看日志"},
+                            headers={"X-Request-ID": getattr(
+                                request.state, "request_id", "-"
+                            )})
 
     @app.get("/health", response_model=HealthOut, tags=["系统"])
     def health() -> HealthOut:
@@ -194,14 +252,21 @@ def create_app() -> FastAPI:
         try:
             db = _check_mysql()
         except Exception:
+            logger.warning("MySQL health check failed", exc_info=True)
             db = "down"
-        settings = get_settings()
         duckdb_state = _check_duckdb()
+        try:
+            from agents.llm import provider_order
+
+            llm_state = "configured" if provider_order() else "missing"
+        except Exception:
+            logger.warning("LLM provider detection failed", exc_info=True)
+            llm_state = "missing"
         return HealthOut(
             status="ok" if (db == "ok" and duckdb_state == "ok") else "degraded",
             db=db,
             duckdb=duckdb_state,
-            llm="configured" if settings.deepseek_api_key else "missing",
+            llm=llm_state,
         )
 
     @app.post("/auth/login", response_model=LoginOut, tags=["系统"])
@@ -216,7 +281,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="账号或口令错误")
         token, expires_in = create_access_token(identity)
-        audit_event(actor_type=role, actor_id=identity["actor_id"],
+        audit_event(tenant_id=identity["tenant_id"], actor_type=role,
+                    actor_id=identity["actor_id"],
                     action="auth.login", target=str(body.account), detail={"ok": True})
         return LoginOut(
             access_token=token, token_type="bearer", role=role,
@@ -237,14 +303,6 @@ def create_app() -> FastAPI:
         degraded = bool(result.get("degraded"))
         if not answer:
             answer, degraded = "未得到可用答复，已降级为安全话术。", True
-        audit_event(actor_type=ctx.actor_type,
-                    actor_id=ctx.student_id or ctx.teacher_id or 0,
-                    action="api.chat", target=trace_id,
-                    detail={"query": body.query[:120], "term": body.term,
-                            "session_id": result.get("session_id"),
-                            "tool": result.get("tool_name"),
-                            "citations": len(result.get("citations") or []),
-                            "degraded": degraded})
         return ChatOut(answer=answer, trace_id=trace_id, term=body.term,
                        degraded=degraded, session_id=result.get("session_id"),
                        tool=str(result.get("tool_name") or ""),
@@ -267,13 +325,21 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
+# 建 AI 宠物陪伴表（幂等）；MySQL 未就绪时跳过，宠物降级为内存模式
+try:
+    from app.routers.pet import init_db as _init_pet_db
+
+    _init_pet_db()
+except Exception:  # 建表异常不能拖垮接口服务
+    logger.exception("pet db init failed")
+
 # 后台定时同步：官方一发布新竞赛通知就自动入库，学生端随即看到未读推送
 try:
     from app.competition_sync import start_background_sync
 
     start_background_sync()
 except Exception:  # 同步模块异常不能拖垮接口服务
-    pass
+    logger.exception("competition sync startup failed")
 
 # 后台周更：招考公告（考公 / 考编 / 考研）每周抓一次并增量入库
 # 间隔由 RECRUIT_SYNC_HOURS 控制（默认 168 小时 = 一周；0 关闭）
@@ -282,7 +348,7 @@ try:
 
     start_recruit_sync()
 except Exception:
-    pass
+    logger.exception("recruit sync startup failed")
 
 
 if __name__ == "__main__":  # pragma: no cover
