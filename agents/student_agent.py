@@ -54,6 +54,12 @@ def personal_tool(intent: str) -> str | None:
     放在知识库分支之前调用，原因是知识库词表含「学分 / 实习 / 管理办法」等词，
     学生问「我的成绩怎么样」时会被误判成查制度文档。
     """
+    # 复合命中：「考公/国考词 + 职位/岗位词」问的是职位明细（逐条数据），
+    # 而不是报考分析路线聚合，先于 STUDENT_DATA_ROUTES 返回 exam_positions。
+    # 例：「今年考公能考哪些职位」含「考公」+「职位」。
+    if any(a in intent for a in ("国考", "考公", "公务员", "招录", "招考")) and any(
+            b in intent for b in ("职位", "岗位")):
+        return "exam_positions"
     for name, keywords in STUDENT_DATA_ROUTES:
         if any(k in intent for k in keywords):
             return name
@@ -97,10 +103,22 @@ def tool_args(tool_name: str, query: str) -> dict[str, Any]:
         if "党员" in text:
             args["political"] = "中共党员"
             text = text.replace("党员", "")
+        # 年度：「2026年 / 2027年度 / 2026 年度」显式入参；问「今年/明年」不注年度，
+        # 由工具按库内最新年度（MAX(年度)）取数，语义上年份仍来自数据而非模型记忆。
+        year_match = re.search(r"(20\d{2})\s*年", text)
+        if year_match:
+            args["year"] = int(year_match.group(1))
+        # 年度词剥离后不参与关键词；年度缺失「今年"语义由工具 layer 兜底最新年度
+        text = re.sub(r"20\d{2}\s*年|年度", "", text)
         if not quoted:
+            # 泛词剥离表：「今年考公能考哪些职位」这类概览问法清洗后必须归空，
+            # 否则残词（如「考公」「有」）被当成关键词 LIKE 查不到任何职位。
             cleaned = re.sub(
-                r"国考|招考|职位表|职位|岗位|有哪些|有什么|哪些|具体|信息|"
-                r"帮我|查一下|看看|一下|里|的|吗|呢|？|\?|，|。|(?:19|20)\d{2}年?",
+                r"国考|考公|公务员考试|公务员|招考|招录|职位表|职位|岗位|"
+                r"有哪些|有什么|哪些|具体|信息|"
+                r"今年|明年|去年|现在|目前|最近|"
+                r"能考|能报|想报|要报|可以报|可以考|可以|"
+                r"帮我|查一下|看看|查看|一下|我想|想看|想看|想|看|里|的|相关|有|吗|呢|？|\?|，|。|是",
                 "", text)
             cleaned = cleaned.strip(" 　")
             if cleaned.endswith("专业") and len(cleaned) > 2:

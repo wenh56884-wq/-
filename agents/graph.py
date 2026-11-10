@@ -557,12 +557,15 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
             f"{result.get('position_total')} 个，"
             f"招录 {result.get('total_headcount')} 人。"
         )
-        for p in (result.get("positions") or [])[:3]:
+        for idx, p in enumerate((result.get("positions") or [])[:8], start=1):
             parts.append(
-                f"{p.get('dept_name') or '部门未标注'}"
+                f"{idx}. {p.get('dept_name') or '部门未标注'}"
                 + (f"·{p.get('bureau')}" if p.get("bureau") else "")
-                + f"：{p.get('position_name')}，招 {p.get('headcount')} 人，"
+                + f"：{p.get('position_name')}"
+                + (f"（代码 {p.get('position_code')}）" if p.get("position_code") else "")
+                + f"，招 {p.get('headcount') or '未标注'} 人，"
                 f"学历 {p.get('education') or '未标注'}，"
+                f"学位 {p.get('degree') or '未标注'}，"
                 f"工作地点 {p.get('work_place') or '未标注'}。"
             )
         if not result.get("positions"):
@@ -770,7 +773,75 @@ def _llm_external_draft(state: AgentState, result: Mapping[str, Any],
                                      on_token=on_token)
 
 
-def _facts_blob(result: Mapping[str, Any], limit: int = 3000) -> str:
+_POSITION_DRAFT_SYSTEM = (
+    "你是「启航 · 生涯与岗位匹配系统」的智能助手，在回答国考职位咨询。\n"
+    "用户问的是「有哪些职位」这类**列明细**问题，你的回答必须让考生看到具体职位，\n"
+    "而不是只给汇总。\n"
+    "\n"
+    "## 硬规则（违反即作废）\n"
+    "1. 【工具事实】里逐条职位是唯一来源：每条必须照抄部门的字段值，"
+    "禁止拼凑、改名、虚构职位、虚构人数或虚构专业。\n"
+    "2. 先给结论：某某年度国考职位命中 N 个职位、招录 M 人；然后逐条列职位，\n"
+    "   条数以 positions 实际返回的数量为准（positions 被截断时说清「按招录人数"
+    "取列前几条」）；positions 为空就必须如实说明没有命中，不得编造。\n"
+    "3. 每条格式：序号. 部门·司局：职位名，招 X 人，学历 Y，学位 Z，专业（或未标注），"
+    "工作地点 W。全部字段照抄原文，缺失写「未标注」。\n"
+    "4. 所有数字必须原样照抄「允许引用的数值」列表，禁止换算/四舍五入/取整。\n"
+    "5. 不允许出现「约 / 大概 / 估计」这类模糊词；不允许列 positions 里没有的条目。\n"
+    "6. 逐条列明细可以超出 200 字——这条优先级高于一般篇幅约束。\n"
+    "7. 不要写「根据工具返回」；中文口语，不用 Markdown 标题，数字以外的符号照抄。"
+)
+
+
+def _llm_position_draft(state: AgentState, result: Mapping[str, Any],
+                        feedback: str,
+                        on_token: Callable[[str], None] | None = None) -> str | None:
+    """exam_positions 的专用表达层：逐条列职位明细（汇总句 + 明细清单）。"""
+    ctx: ToolContext = state["ctx"]
+    who = "教师" if ctx.actor_type == "teacher" else "学生"
+    lines = [
+        f"命中年度：{result.get('year') or '未知'}",
+        f"职位总数（命中）：{result.get('position_total')}，"
+        f"招录总人数（命中）：{result.get('total_headcount')}",
+    ]
+    if str(result.get("note") or ""):
+        lines.append(f"备注：{result['note']}")
+    positions = [dict(p) for p in (result.get("positions") or [])]
+    lines.append(f"逐条职位（照抄字段，共 {len(positions)} 条）：")
+    for i, p in enumerate(positions, start=1):
+        lines.append(
+            f"[{i}] 部门={p.get('dept_name') or '未标注'}｜司局={p.get('bureau') or '未标注'}"
+            f"｜职位={p.get('position_name') or '未标注'}"
+            f"｜职位代码={p.get('position_code') or '未标注'}"
+            f"｜招录={p.get('headcount') or '未标注'}人"
+            f"｜学历={p.get('education') or '未标注'}｜学位={p.get('degree') or '未标注'}"
+            f"｜政治面貌={p.get('political') or '未标注'}"
+            f"｜专业={p.get('major') or '未标注'}"
+            f"｜工作地点={p.get('work_place') or '未标注'}"
+        )
+    parts = [f"【身份】{who}", f"【提问】{state.get('query') or ''}"]
+    history = _history_text(state)
+    if history:
+        parts.append(f"【前面对话】\n{history}")
+    parts.append("【工具】exam_positions")
+    parts.append("【工具事实】\n" + "\n".join(lines))
+    allowed = _allowed_numbers(result, limit=8000)
+    if allowed:
+        parts.append("【允许引用的数值（必须原样照抄，禁止任何改写）】\n"
+                     + "、".join(allowed))
+    if feedback:
+        parts.append(f"【上一稿被退回的原因，务必逐条改正】\n{feedback}")
+    parts.append("请直接输出回复正文，不要加任何前缀或说明。")
+    return llm_client.generate_reply(
+        ctx.actor_type,
+        system_prompt=_POSITION_DRAFT_SYSTEM,
+        user_prompt="\n\n".join(parts),
+        tag="draft",
+        on_token=on_token,
+    )
+
+
+def _facts_blob(result: Mapping[str, Any], limit: int = 8000) -> str:
     """工具结果原文（给模型看的事实来源）。"""
     try:
         blob = json.dumps(result, ensure_ascii=False, default=str)
@@ -779,12 +850,13 @@ def _facts_blob(result: Mapping[str, Any], limit: int = 3000) -> str:
     return blob[:limit]
 
 
-def _allowed_numbers(result: Mapping[str, Any]) -> list[str]:
+def _allowed_numbers(result: Mapping[str, Any], limit: int = 8000) -> list[str]:
     """结果里出现过的数值原文清单：模型只能照抄这些写法。
 
     注意走的是 Critic 同一套抽数方法——模型抄这里的值，核对必然命中。
+    职位明细结果较大时 limit 调高，避免截断导致合法数字被判越界。
     """
-    blob = _facts_blob(result)
+    blob = _facts_blob(result, limit)
     return sorted({claim.raw for claim in extract_numbers(blob)}, key=lambda s: (-len(s), s))
 
 
@@ -929,6 +1001,16 @@ def draft_node(state: AgentState,
             draft = (_llm_external_draft(state, result, feedback, on_token)
                      or _external_draft(state, result))
         mode = "rag"
+    elif str(state.get("tool_name") or "") == "exam_positions":
+        # 职位明细是「列明细」型问题：通用草稿把 8 条职位压成 200 字，
+        # 用户得不到具体职位；这里走专用表达层（同样受 Critic 数值回流制衡）。
+        if str(state.get("attempts") or 0) >= 3 or not _llm_draft_enabled():
+            draft = _template_draft(result, feedback)
+            mode = "template"
+        else:
+            draft = (_llm_position_draft(state, result, feedback, on_token)
+                     or _template_draft(result, feedback))
+            mode = "positions" if draft else "template"
     elif attempts >= 3 or not _llm_draft_enabled():
         draft = _template_draft(result, feedback)
         mode = "template"
@@ -959,6 +1041,7 @@ def critic_node(state: AgentState) -> dict[str, Any]:
         verdict = checked.to_dict()
         feedback = "" if checked.passed else checked.feedback()
     audit_event(
+        tenant_id=ctx.tenant_id,
         actor_type=ctx.actor_type,
         actor_id=ctx.student_id or ctx.teacher_id or 0,
         action="critic.verify",
@@ -1102,6 +1185,7 @@ def run_chat(
                                        session_id=session_id)
         if brain_result is not None:
             audit_event(
+                tenant_id=ctx.tenant_id,
                 actor_type=ctx.actor_type,
                 actor_id=ctx.student_id or ctx.teacher_id or 0,
                 action="agent.chat",
@@ -1148,6 +1232,7 @@ def run_chat(
     answer = str(state.get("answer") or "")
     degraded = bool(state.get("degraded"))
     audit_event(
+        tenant_id=ctx.tenant_id,
         actor_type=ctx.actor_type,
         actor_id=ctx.student_id or ctx.teacher_id or 0,
         action="agent.chat",
@@ -1249,6 +1334,7 @@ def run_chat_stream(
             if brain_result is not None:
                 yield {"type": "replace", "text": brain_result["answer"], "attempt": 1}
                 audit_event(
+                    tenant_id=ctx.tenant_id,
                     actor_type=ctx.actor_type,
                     actor_id=ctx.student_id or ctx.teacher_id or 0,
                     action="agent.chat",
@@ -1351,6 +1437,7 @@ def run_chat_stream(
         answer = str(state.get("answer") or "")
         degraded = bool(state.get("degraded"))
         audit_event(
+            tenant_id=ctx.tenant_id,
             actor_type=ctx.actor_type,
             actor_id=ctx.student_id or ctx.teacher_id or 0,
             action="agent.chat",
@@ -1381,7 +1468,7 @@ def run_chat_stream(
             "suggested_followups": _suggested_followups(state),
         }
     except Exception as exc:  # 断库/工具异常等：给安全话术，不外泄堆栈
-        audit_event(actor_type=ctx.actor_type,
+        audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
                     actor_id=ctx.student_id or ctx.teacher_id or 0,
                     action="agent.chat.failed", target=trace_id,
                     detail={"query": str(query)[:120], "stream": True,
