@@ -213,6 +213,55 @@
               <el-empty v-else description="没有可再优化的可改变项" :image-size="56" />
             </el-collapse-item>
 
+            <el-collapse-item v-if="guokao" name="guokao">
+              <template #title>
+                <span class="dc-title">你能报的国考职位 · {{ guokao.year }} 年度官方职位表初筛</span>
+                <el-tag size="small" type="success" effect="plain" class="dc-tag">
+                  可报 {{ guokao.matched_positions }} 个
+                </el-tag>
+              </template>
+              <el-card shadow="never" class="gk-card">
+                <p class="bento-sub">
+                  按「学历 / 政治面貌<template v-if="guokao.political_status">：{{ guokao.political_status }}</template>
+                  / 专业<template v-if="guokao.major">：{{ guokao.major }}</template><template v-if="guokao.target_city">
+                  / 意向城市：{{ guokao.target_city }}</template>」对官方《招考简章》职位表做关键词初筛：
+                </p>
+                <div class="gk-stats">
+                  <el-tag type="success" effect="dark">可报职位 {{ guokao.matched_positions }} 个</el-tag>
+                  <el-tag effect="dark">计划招录 {{ guokao.matched_headcount }} 人</el-tag>
+                  <el-tag v-if="guokao.unrestricted_positions != null" type="warning" effect="plain">
+                    不限专业还有 {{ guokao.unrestricted_positions }} 个
+                  </el-tag>
+                  <el-tag type="info" effect="plain">全表 {{ guokao.total_positions }} 个职位</el-tag>
+                </div>
+                <el-table
+                  v-if="guokao.examples && guokao.examples.length"
+                  :data="guokao.examples"
+                  size="small"
+                  max-height="260"
+                >
+                  <el-table-column prop="dept" label="部门" min-width="150" show-overflow-tooltip />
+                  <el-table-column prop="position" label="职位" min-width="180" show-overflow-tooltip />
+                  <el-table-column prop="headcount" label="人数" width="60" />
+                  <el-table-column prop="work_place" label="地点" min-width="110" show-overflow-tooltip />
+                  <el-table-column prop="education" label="学历" width="110" show-overflow-tooltip />
+                  <el-table-column prop="political" label="政治面貌" width="100" show-overflow-tooltip />
+                </el-table>
+                <el-empty
+                  v-else
+                  description="按当前条件初筛没有命中职位——可在上方改学历/专业信息，或关注不限专业的岗位"
+                  :image-size="56"
+                />
+                <p class="gk-src">
+                  数据来源：
+                  <a v-if="guokao.source_url" :href="guokao.source_url" target="_blank" rel="noreferrer" class="src-link">
+                    {{ guokao.source_label || '国家公务员局专题' }}
+                  </a>
+                  <span v-else>{{ guokao.source_label || '国家公务员局' }}</span>
+                </p>
+              </el-card>
+            </el-collapse-item>
+
             <el-collapse-item name="notice">
               <template #title>
                 <span class="dc-title">真实招考公告 · {{ data.goal }} 对应的 {{ opp.total }} 条（官网抓取）</span>
@@ -312,6 +361,13 @@ const window = computed(() => timeline.value.window || null)
 const altWindows = computed(() => timeline.value.alternatives || [])
 const phases = computed(() => timeline.value.phases || [])
 const opp = computed(() => data.value.opportunities || {})
+// 考公路线专属：官方《招考简章》按学生条件初筛的可报职位摘要
+// （后端 agents/career/context.py::fetch_guokao_positions 产出，引擎不改动数字）
+const guokao = computed(() => {
+  if (data.value.goal !== '考公') return null
+  const g = opp.value.guokao_positions
+  return g && g.available !== false && g.matched_positions != null ? g : null
+})
 const savedIntent = computed(() => data.value.intent_source === 'saved')
 
 const tier = computed(() => {
@@ -379,9 +435,9 @@ onMounted(load)
   gap: 14px;
   flex-wrap: wrap;
   font-size: 13.5px;
-  color: #86909c;
+  color: #5f6672;
   background: #fff;
-  border: 1px solid #f4f4f5;
+  border: 1px solid #eef0f5;
   border-radius: 14px;
   padding: 8px 14px;
 }
@@ -392,14 +448,14 @@ onMounted(load)
 
 /* 结论卡 */
 .verdict {
-  border-left: 4px solid #a1a1aa;
+  border-left: 4px solid #9aa1ad;
 }
 
 .verdict.tier-a { border-left-color: #16a34a; }
-.verdict.tier-b { border-left-color: #2563eb; }
+.verdict.tier-b { border-left-color: #5b5bd6; }
 .verdict.tier-c { border-left-color: #d97706; }
 .verdict.tier-d { border-left-color: #dc2626; }
-.verdict.tier-u { border-left-color: #a1a1aa; }
+.verdict.tier-u { border-left-color: #9aa1ad; }
 
 .tier-line {
   display: flex;
@@ -418,11 +474,11 @@ onMounted(load)
   font-size: 26px;
   font-weight: 700;
   color: #fff;
-  background: #a1a1aa;
+  background: #9aa1ad;
 }
 
 .tier-a .tier-badge { background: #16a34a; }
-.tier-b .tier-badge { background: #2563eb; }
+.tier-b .tier-badge { background: #5b5bd6; }
 .tier-c .tier-badge { background: #d97706; }
 .tier-d .tier-badge { background: #dc2626; }
 
@@ -430,14 +486,14 @@ onMounted(load)
   font-size: 34px;
   font-weight: 700;
   line-height: 1;
-  color: var(--bento-text, #18181b);
+  color: var(--bento-text, #16181d);
   font-variant-numeric: tabular-nums;
 }
 
 .tier-num small {
   margin-left: 4px;
   font-size: 13.5px;
-  color: var(--bento-mute, #a1a1aa);
+  color: var(--bento-mute, #9aa1ad);
 }
 
 .tier-label {
@@ -457,7 +513,7 @@ onMounted(load)
 .tier-note {
   margin: 10px 0 0;
   font-size: 13.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .stu-line {
@@ -466,7 +522,7 @@ onMounted(load)
   gap: 12px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed #e4e4e7;
+  border-top: 1px dashed #e4e7ee;
   font-size: 13.5px;
   color: #71717a;
 }
@@ -477,14 +533,14 @@ onMounted(load)
   font-size: 30px;
   font-weight: 700;
   line-height: 1.1;
-  color: var(--bento-text, #18181b);
+  color: var(--bento-text, #16181d);
   font-variant-numeric: tabular-nums;
 }
 
 .win-sub {
   margin: 6px 0 0;
   font-size: 14px;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .win-tags {
@@ -504,13 +560,13 @@ onMounted(load)
 .win-alt {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px dashed #e4e4e7;
+  border-top: 1px dashed #e4e7ee;
 }
 
 .win-alt-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .win-alt-row {
@@ -519,7 +575,7 @@ onMounted(load)
   gap: 8px;
   margin-top: 6px;
   font-size: 14px;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .win-alt-row b {
@@ -536,7 +592,7 @@ onMounted(load)
 
 .win-alt-row em {
   font-style: normal;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 /* 四维 */
@@ -556,12 +612,12 @@ onMounted(load)
 .dim-name {
   font-size: 14px;
   font-weight: 650;
-  color: var(--bento-text, #18181b);
+  color: var(--bento-text, #16181d);
 }
 
 .dim-weight {
   font-size: 13px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .dim-score {
@@ -569,11 +625,11 @@ onMounted(load)
   font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .dim-score.lv-strong { color: #16a34a; }
-.dim-score.lv-fair { color: #2563eb; }
+.dim-score.lv-fair { color: #5b5bd6; }
 .dim-score.lv-weak { color: #d97706; }
 .dim-score.lv-poor { color: #dc2626; }
 
@@ -581,7 +637,7 @@ onMounted(load)
   height: 6px;
   margin-top: 8px;
   border-radius: 999px;
-  background: #f4f4f5;
+  background: #eef0f5;
   overflow: hidden;
 }
 
@@ -589,14 +645,15 @@ onMounted(load)
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: #a1a1aa;
+  background: #9aa1ad;
   transition: width 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-.bar-fill.lv-strong { background: linear-gradient(90deg, #16a34a, #4ade80); }
-.bar-fill.lv-fair { background: linear-gradient(90deg, #2563eb, #60a5fa); }
-.bar-fill.lv-weak { background: linear-gradient(90deg, #d97706, #fbbf24); }
-.bar-fill.lv-poor { background: linear-gradient(90deg, #dc2626, #f87171); }
+/* 等级色阶用 Apple 系统色纯色：绿/蓝/橙/红承载数据语义，避免渐变 */
+.bar-fill.lv-strong { background: #34c759; }
+.bar-fill.lv-fair { background: #5b5bd6; }
+.bar-fill.lv-weak { background: #ff9500; }
+.bar-fill.lv-poor { background: #ff3b30; }
 
 .dim-evidence {
   margin: 8px 0 0;
@@ -608,21 +665,21 @@ onMounted(load)
 .dim-source {
   margin: 3px 0 0;
   font-size: 13px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 /* 杠杆 */
 .lev-now { color: #71717a; }
 .lev-arrow { margin: 0 6px; color: #d4d4d8; }
-.lev-goal { font-weight: 600; color: #18181b; }
+.lev-goal { font-weight: 600; color: #16181d; }
 .lev-delta { color: #16a34a; font-variant-numeric: tabular-nums; }
-.lev-flat { color: #a1a1aa; font-size: 13.5px; }
+.lev-flat { color: #9aa1ad; font-size: 13.5px; }
 
 .dim-delta {
   display: inline-block;
   margin-right: 8px;
   font-size: 13.5px;
-  color: #2563eb;
+  color: #5b5bd6;
 }
 
 /* 门槛 */
@@ -638,7 +695,7 @@ onMounted(load)
   align-items: flex-start;
   gap: 10px;
   padding: 10px 0;
-  border-bottom: 1px dashed #f4f4f5;
+  border-bottom: 1px dashed #eef0f5;
 }
 
 .gate-row:last-child {
@@ -669,7 +726,7 @@ onMounted(load)
   gap: 6px;
   font-size: 14px;
   font-weight: 600;
-  color: #18181b;
+  color: #16181d;
 }
 
 .gate-req {
@@ -681,7 +738,7 @@ onMounted(load)
 .gate-note {
   margin-top: 2px;
   font-size: 13px;
-  color: #a1a1aa;
+  color: #9aa1ad;
   line-height: 1.5;
 }
 
@@ -689,7 +746,7 @@ onMounted(load)
   flex: 0 0 auto;
   font-size: 13.5px;
   font-weight: 600;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .st-pass .gate-status { color: #16a34a; }
@@ -704,7 +761,7 @@ onMounted(load)
   display: flex;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px dashed #f4f4f5;
+  border-bottom: 1px dashed #eef0f5;
 }
 
 .phase-row:last-child {
@@ -720,7 +777,7 @@ onMounted(load)
   flex: 0 0 22px;
   margin-top: 2px;
   border-radius: 8px;
-  background: #f4f4f5;
+  background: #eef0f5;
   font-size: 13.5px;
   font-weight: 600;
   color: #71717a;
@@ -739,19 +796,19 @@ onMounted(load)
 
 .phase-top b {
   font-size: 14px;
-  color: #18181b;
+  color: #16181d;
 }
 
 .phase-top em {
   font-style: normal;
   font-size: 13px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .phase-range {
   margin-top: 2px;
   font-size: 13px;
-  color: #a1a1aa;
+  color: #9aa1ad;
   font-variant-numeric: tabular-nums;
 }
 
@@ -759,7 +816,7 @@ onMounted(load)
   margin-top: 4px;
   font-size: 14px;
   line-height: 1.6;
-  color: #52525b;
+  color: #5f6672;
 }
 
 /* 建议 */
@@ -775,7 +832,7 @@ onMounted(load)
   gap: 12px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: #fafafa;
+  background: #f7f8fa;
 }
 
 .advice-p {
@@ -787,13 +844,13 @@ onMounted(load)
   font-weight: 700;
   line-height: 22px;
   color: #fff;
-  background: #a1a1aa;
+  background: #9aa1ad;
 }
 
 .advice-p.p1 { background: #dc2626; }
 .advice-p.p2 { background: #d97706; }
-.advice-p.p3 { background: #2563eb; }
-.advice-p.p4 { background: #a1a1aa; }
+.advice-p.p3 { background: #5b5bd6; }
+.advice-p.p4 { background: #9aa1ad; }
 
 .advice-main {
   flex: 1;
@@ -803,7 +860,7 @@ onMounted(load)
 .advice-type {
   font-size: 13px;
   font-weight: 600;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .advice-act {
@@ -811,7 +868,7 @@ onMounted(load)
   font-size: 14px;
   font-weight: 600;
   line-height: 1.6;
-  color: #18181b;
+  color: #16181d;
 }
 
 .advice-basis {
@@ -826,8 +883,22 @@ onMounted(load)
   margin-left: 6px;
 }
 
+/* 国考职位初筛卡片 */
+.gk-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.gk-src {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #646a73;
+}
+
 .src-link {
-  color: #2563eb;
+  color: #5b5bd6;
   text-decoration: none;
 }
 
@@ -839,7 +910,7 @@ onMounted(load)
 .caveat-list {
   margin: 8px 0 0;
   padding-left: 18px;
-  color: #52525b;
+  color: #5f6672;
   font-size: 14px;
   line-height: 1.75;
 }
@@ -850,7 +921,7 @@ onMounted(load)
   gap: 8px 18px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px dashed #e4e4e7;
+  border-top: 1px dashed #e4e7ee;
 }
 
 .src-item {
@@ -858,13 +929,13 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   font-size: 13.5px;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .src-dim {
   flex: 0 0 auto;
   font-weight: 600;
-  color: #18181b;
+  color: #16181d;
 }
 
 .src-name {

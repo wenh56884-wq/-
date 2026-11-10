@@ -681,6 +681,197 @@ def fetch_exam_opportunities(
 
 
 # ----------------------------------------------------------------
+# 真实课程机会（国考职位——国家公务员局《招考简章》逐职位明细，仅考公）
+# ----------------------------------------------------------------
+# 政治面貌 / 学历 的匹配都用「关键词初筛 + 确定性 SQL 片段」，不猜、不补全：
+#   - 政治面貌未采集 → 按保守口径只统计「不限/未标注」岗位（群众不能冒充党/团员）。
+#   - 学历初筛只把「以硕士/研究生/博士为最低学历」的岗位排除在本科考生之外。
+#   - 专业只按学生专业原文做子串匹配，「不限/未标注」单独统计，绝不拿相近专业凑数。
+_GUOKAO_EDU_OK = (
+    # 字面 % 在 pymysql「query % args」里须写成 %%，避免被当格式符
+    "(`学历` IS NULL OR TRIM(`学历`) = '' OR `学历` LIKE '%%本科%%'"
+    " OR `学历` LIKE '%%专科%%' OR `学历` LIKE '%%大专%%' OR `学历` LIKE '%%中专%%'"
+    " OR `学历` LIKE '%%高中%%'"
+    # 未提及任何更高学历的，也视为能接受本科（如“本科学历”这类纯要求）
+    " OR (`学历` NOT LIKE '%%硕士%%' AND `学历` NOT LIKE '%%研究生%%' AND `学历` NOT LIKE '%%博士%%'))"
+)
+# 岗位「不限政治面貌」的可接受形态
+_GUOKAO_POL_UNRESTRICTED = "(`政治面貌` IS NULL OR TRIM(`政治面貌`) = '' OR `政治面貌` IN ('不限','无','不要求'))"
+
+
+def _guoka_pol_ok_sql(political: Any) -> str:
+    """按学生政治面貌生成确定性的可报考 SQL 片段（纯文本→SQL，无 DB 副作用）。"""
+    p = str(political or "").strip()
+    if "党员" in p or "预备" in p:   # 中共党员 / 中共预备党员
+        return (
+            f"({_GUOKAO_POL_UNRESTRICTED}"
+            # 不干抢「仅限共青团员」「民主党派」的岗位
+            " OR NOT ((`政治面貌` LIKE '%%共青团员%%' AND `政治面貌` NOT LIKE '%%中共党员%%')"
+            " OR (`政治面貌` LIKE '%%民主党派%%' AND `政治面貌` NOT LIKE '%%中共党员%%')))"
+        )
+    if "共青团员" in p:              # 共青团员
+        return (
+            f"({_GUOKAO_POL_UNRESTRICTED}"
+            # 不抢「仅限中共党员」「民主党派」的岗位
+            " OR NOT ((`政治面貌` LIKE '%%中共党员%%' AND `政治面貌` NOT LIKE '%%共青团员%%')"
+            " OR `政治面貌` LIKE '%%民主党派%%'))"
+        )
+    # 群众 / 未采集 → 保守口径：只统计不限政治面貌的岗位
+    return _GUOKAO_POL_UNRESTRICTED
+
+
+def fetch_guokao_positions(
+    tenant_id: int,
+    facts: Mapping[str, Any],
+    *,
+    limit: int = 5,
+) -> dict[str, Any]:
+    """按学生学历/政治面貌/专业/城市对官方《招考简章》职位表做初筛聚合。
+
+    返回确定性摘要：匹配职位数 / 计划招录人数 / 不限专业数 / 总职位数 / 样例，
+    并明确标注「初筛、以官方职位详情为准」。数字全部来自 SQL COUNT/SUM，
+    引擎只负责把结果组织成上下文，**不自己改这些数**（铁律 1）。
+    """
+    major = str(facts.get("major") or "").strip()
+    degree = str(facts.get("degree") or "本科").strip()
+    political = facts.get("political_status")
+    city = str(facts.get("target_city") or "").strip()
+
+    conn = connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT MAX(`年度`) AS y FROM `国考职位` WHERE `租户编号` = %s",
+            (tenant_id,),
+        )
+        row = cur.fetchone() or {}
+        year = row.get("y")
+        if not year:
+            return {"available": False,
+                    "reason": "国考职位表为空（尚未年度同步），无法给可报职位参考。"}
+        year = int(year)
+
+        pol = _guoka_pol_ok_sql(political)
+
+        major_match = ""
+        major_params: list[Any] = []
+        if major:
+            major_match = "(`专业` IS NULL OR TRIM(`专业`)='' OR `专业` LIKE '%%不限%%' OR `专业` LIKE %s)"
+            major_params.append(f"%{major}%")
+        else:
+            # 学生未标注专业 → 只统计不设专业限制的岗位（保守，不冒充）
+            major_match = "(`专业` IS NULL OR TRIM(`专业`)='' OR `专业` LIKE '%%不限%%')"
+
+        city_param: Any = f"%{city}%" if city else None
+
+        def _aggregate(where_sql: str, params: list[Any]) -> tuple[int, int | None]:
+            cur.execute(
+                f"SELECT COUNT(*) AS n, COALESCE(SUM(`招考人数`),0) AS p "
+                f"FROM `国考职位` WHERE {where_sql}",
+                params,
+            )
+            r = cur.fetchone() or {}
+            return int(r["n"]), int(r["p"])
+
+        # 组装匹配条件：每个子句前显式留空格，防止「= 2027AND」这种粘连被 MySQL 当函数名。
+        where = (
+            "`租户编号` = %s AND `年度` = %s "
+            f"AND {_GUOKAO_EDU_OK} AND {pol} AND {major_match}"
+        )
+        matched_params: list[Any] = [tenant_id, year, *major_params]
+        if city:
+            where += " AND `工作地点` LIKE %s"
+            matched_params.append(city_param)
+        matched_n, matched_p = _aggregate(where, matched_params)
+
+        # 「不设专业限制」子集：单独统计，供学生判断这条专业路径能报多少无门槛岗位
+        unrestricted_where = (
+            "`租户编号` = %s AND `年度` = %s "
+            f"AND {_GUOKAO_EDU_OK} AND {pol} "
+            "AND (`专业` IS NULL OR TRIM(`专业`)='' OR `专业` LIKE '%%不限%%')"
+        )
+        unrestricted_params: list[Any] = [tenant_id, year]
+        if city:
+            unrestricted_where += " AND `工作地点` LIKE %s"
+            unrestricted_params.append(city_param)
+        unrestricted_n, unrestricted_p = _aggregate(
+            unrestricted_where, unrestricted_params)
+
+        total_n, total_p = _aggregate(
+            "`租户编号` = %s AND `年度` = %s", [tenant_id, year])
+
+        cur.execute(
+            "SELECT `公告链接` AS u FROM `国考职位` "
+            "WHERE `租户编号` = %s AND `年度` = %s LIMIT 1",
+            (tenant_id, year),
+        )
+        src = (cur.fetchone() or {}).get("u") or str(exam_positions_topic_url())
+
+        cur.execute(
+            "SELECT `编号` AS id, `部门名称` AS dept, `用人司局` AS bureau, "
+            "`招考职位` AS position, `职位代码` AS code, `招考人数` AS headcount, "
+            "`学历` AS edu, `政治面貌` AS pol, `工作地点` AS place, "
+            "`专业` AS major, `简章分类` AS cat "
+            "FROM `国考职位` WHERE " + where +
+            " ORDER BY `招考人数` DESC, `编号` ASC LIMIT %s",
+            [tenant_id, year, *major_params, *([city_param] if city else []), limit],
+        )
+        examples = []
+        for ex in (cur.fetchall() or []):
+            ec = str(ex.get("edu") or "").strip()
+            ep = str(ex.get("pol") or "").strip()
+            examples.append({
+                "id": ex.get("id"),
+                "dept": ex.get("dept"),
+                "bureau": ex.get("bureau"),
+                "position": ex.get("position"),
+                "code": ex.get("code"),
+                "headcount": ex.get("headcount"),
+                "work_place": ex.get("place"),
+                "education": ec or None,
+                "political": ep or None,
+                "major": str(ex.get("major") or "").strip() or None,
+                "category": ex.get("cat"),
+            })
+
+        return {
+            "available": True,
+            "year": year,
+            "degree": degree,
+            "major": major or None,
+            "political_status": political if political else None,
+            "target_city": city or None,
+            "matched_positions": matched_n,
+            "matched_headcount": matched_p,
+            "unrestricted_positions": unrestricted_n,
+            "unrestricted_headcount": unrestricted_p,
+            "total_positions": total_n,
+            "total_headcount": total_p,
+            "source_url": src,
+            "source_label": "国家公务员局·中央机关及其直属机构考试录用公务员专题",
+            "examples": examples,
+        }
+    except pymysql.MySQLError as exc:
+        # 表不存在/连接失败：如实返回 not available，不吞掉也不编造
+        return {"available": False, "reason": f"职位表查询失败：{str(exc)[:120]}"}
+    finally:
+        conn.close()
+
+
+def exam_positions_topic_url() -> str:
+    """官方国考专题 URL 兜底（无行取公告链接时用，取已登记年度里最新的）。"""
+    from etl import exam_positions
+
+    try:
+        if exam_positions.OFFICIAL_TOPIC:
+            latest = max(exam_positions.OFFICIAL_TOPIC)
+            return str(exam_positions.OFFICIAL_TOPIC.get(latest) or "")
+    except Exception:
+        return ""
+    return ""
+
+
+# ----------------------------------------------------------------
 # 通知（候选池；截止过滤一律交给引擎，这里绝不过滤）
 # ----------------------------------------------------------------
 def fetch_notices(tenant_id: int, limit: int = 60) -> list[dict[str, Any]]:

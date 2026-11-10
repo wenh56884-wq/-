@@ -836,6 +836,7 @@ def forecast(
     peer: Mapping[str, Any] | None = None,
     gates: Sequence[Mapping[str, Any]] = (),
     notices: Mapping[str, Any] | None = None,
+    guokao: Mapping[str, Any] | None = None,
     template: Mapping[str, Any] | None = None,
     today: date | None = None,
 ) -> dict[str, Any]:
@@ -847,6 +848,8 @@ def forecast(
       peer      同专业同年级 GPA 基准（total / rank / pct / median / max）
       gates     已判定的硬门槛（career_rules.check_hard_gates 的输出）
       notices   真实公告机会（列表 + 覆盖率统计）
+      guokao    国考职位匹配摘要（仅考公路径用：按学生学历/政治面貌/专业/城市
+                对官方《招考简章》职位表 COUNT/SUM 后的结果；引擎不自己算这些数）
       template  规则模板（取 phases 用于阶段切分）
     """
     base_day = today or date.today()
@@ -918,6 +921,13 @@ def forecast(
             "性质": "经验基线（公开备考经验，不是本平台统计）",
         },
     ]
+    if spec.goal == GOAL_KAOGONG and (guokao or {}).get("available"):
+        sources.append({
+            "维度": "可报职位",
+            "来源": (f"国家公务员局《招考简章》职位表 {guokao.get('year')} 年度，"
+                     f"按学历/政治面貌/专业/城市初筛"),
+            "性质": "真实数据（官方职位表逐条，引擎按条件聚合）",
+        })
 
     caveats: list[str] = [
         "本页不给「上岸概率」。平台没有历年录取率样本，任何百分比概率都是编的；"
@@ -940,6 +950,16 @@ def forecast(
             )
     if stats.get("scope_note"):
         caveats.append(str(stats["scope_note"]))
+
+    if spec.goal == GOAL_KAOGONG and (guokao or {}).get("available"):
+        note = (
+            f"国考职位匹配为「学历/政治面貌/专业/城市关键词初筛」口径："
+            f"匹配 {guokao.get('matched_positions')} 个职位、计划招 {guokao.get('matched_headcount')} 人，"
+            "属初筛合计数，最终报考资格以每个职位的官方详情为准。"
+        )
+        if not str(facts.get("political_status") or "").strip():
+            note += "政治面貌未采集，此处按保守口径只统计「不限/未标注」政治面貌的岗位。"
+        caveats.append(note)
 
     return {
         "engine": CAREER_FORECAST_VERSION,
@@ -994,6 +1014,9 @@ def forecast(
             "latest_published": stats.get("latest_published"),
             "items": list(notices.get("items") or [])[:10],
             "stats": stats,
+            # 考公路线专属：官方《招考简章》职位表按学生条件初筛后的可报职位。
+            # guokao 已是 context 层用 SQL COUNT/SUM 算好的确定性结果，引擎不再改动这些数字。
+            "guokao_positions": (guokao if spec.goal == GOAL_KAOGONG else None),
         },
         "sources": sources,
         "caveats": caveats,

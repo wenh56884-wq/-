@@ -628,12 +628,22 @@ def forecast_career(
     exam_type = cf.PATHS[resolved].exam_type
     notices = cx.fetch_exam_opportunities(tenant_id, exam_type)
 
+    # 考公路线专属：按学生学历/政治面貌/专业/城市初筛官方《招考简章》职位表。
+    # 失败不拖垮整页（职位表查询异常会返回 available=False，引擎当作缺失处理）。
+    guokao: dict[str, Any] | None = None
+    if resolved == cf.GOAL_KAOGONG:
+        guokao = cx.fetch_guokao_positions(tenant_id, facts)
+        # 失败信息原样透传给引擎的 caveats/sources，绝不编造匹配数
+        if guokao and guokao.get("available") is False:
+            guokao = None
+
     result = cf.forecast(
         facts,
         goal=resolved,
         peer=peer,
         gates=gates,
         notices=notices,
+        guokao=guokao,
         template=template,
     )
     result["intent_source"] = source
