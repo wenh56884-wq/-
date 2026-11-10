@@ -18,6 +18,8 @@ export function saveSession(role, token, extra = {}) {
       localStorage.setItem(`qh_${key}`, String(value))
     }
   })
+  // 广播登录事件：宠物等全局常驻组件监听后重拉登录态相关的数据
+  window.dispatchEvent(new CustomEvent('qh:session'))
 }
 
 export function clearSession() {
