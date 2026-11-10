@@ -1,6 +1,6 @@
 # 【启航】基于大数据与多智能体协同的生涯与岗位匹配系统
 
-> Windows 11 · Python 3.12 · MySQL 8.0.21 · DuckDB · LangGraph + DeepSeek
+> Windows 11 · Python 3.12 · MySQL 8.0.21 · DuckDB · LangGraph + 星火 / DeepSeek
 > 交付日期：2026-11-18
 
 ## 项目简介
@@ -29,16 +29,20 @@ Set-Location D:\qihang
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-copy .env.example .env              # 填 DEEPSEEK_API_KEY / MYSQL_PASSWORD / JWT_SECRET
+# 可选：只有运行 Spark 对拍测试时安装
+pip install -r requirements-spark.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+copy .env.example .env              # 填 SPARK_API_KEY / DEEPSEEK_API_KEY / MYSQL_PASSWORD / JWT_SECRET
 
 python scripts\init_db.py           # 建 MySQL + DuckDB 全部表（幂等，可重复执行）
 python scripts\seed_mock.py         # 灌四届学生约 1 万人（含 2026 级大一），确定性种子
 python scripts\load_jobs.py         # 清洗 5 份招聘数据灌入岗位库（职业差距/推荐依赖它）
 python scripts\seed_kb_academic.py  # 灌学业 / 职业规划类制度文档（知识库问答依赖它）
-python -m agents.llm                # 验证 DeepSeek 链路
+python -m agents.llm                # 验证实际启用的模型链路
 ```
 
 `seed_intent_demo.py` / `seed_notice.py` / `seed_competition.py` 等属于可选补充数据，按演示需要再跑。
+
+`JWT_SECRET` 必须是非占位符、至少 32 字符的随机值。缺失或过短时服务会拒绝启动，不再回退到默认密钥。
 
 ### 启动
 
@@ -68,7 +72,9 @@ scripts\start_qihang.bat 8000 lan             # 绑 0.0.0.0，手机/平板可�
 
 | 目的 | 命令 |
 |---|---|
-| 全量测试 | `.venv\Scripts\python.exe -m pytest tests -q` |
+| 日常全量测试（不含 Spark） | `.venv\Scripts\python.exe -m pytest tests -q -m "not spark"` |
+| 发布前全量测试（含 Spark） | `.venv\Scripts\python.exe -m pytest tests -q` |
+| 仅 Spark 对拍 | `pip install -r requirements-spark.txt` 后运行 `pytest tests\test_spark_features.py -q` |
 | 端到端冒烟（12 项） | `powershell -ExecutionPolicy Bypass -File scripts\smoke_test.ps1` |
 | 考核指标报告 | `python scripts\gen_kpi_report.py --out etl\docs\KPI.md` |
 | 交付核验报告 | `python scripts\gen_verify_report.py`（输出路径写死 `etl\docs\VERIFY.md`，目录不存在会自建） |
@@ -81,25 +87,26 @@ D:\qihang\
 ├── .env.example          # 环境变量模板（复制为 .env 后填写）
 ├── .gitignore            # 忽略 .venv / .env / data 产物 / logs / shots
 ├── AGENTS.md             # 项目宪法（六条铁律）
-├── requirements.txt      # 依赖锁版本
+├── requirements.txt      # 核心依赖锁版本
+├── requirements-spark.txt# 可选 Spark 对拍依赖（含 requirements.txt）
 ├── app\                  # FastAPI 网关：认证、路由、身份强制注入
 │   ├── main.py           # 入口 uvicorn app.main:app；/auth/login、/chat
 │   ├── auth.py           # JWT 编解码 + 口令校验（bcrypt / 演示 sha256 双兼容）
-│   ├── audit.py          # 调用审计
+│   ├── audit.py          # 失败请求与业务动作审计（均带 tenant_id）
+│   ├── logging_config.py # 控制台 + logs/qihang.log 滚动日志
 │   ├── schemas.py        # Pydantic 模型
 │   ├── config.py         # pydantic-settings 读取 .env
 │   ├── workflow_approval.py  # 工作流人工审批（挂起 / 通过 / 驳回）
 │   └── routers\          # teacher / student / career / chat / grades / job / kg /
 │                         # forecast / exam / interview / question_bank / kb / workflow
 ├── web\                  # Vue 3 + Vite + ECharts（构建后由 FastAPI 单服务托管）
-│   ├── src\views\        # 11 个页面：Login / TeacherDashboard / TeacherStudents /
-│   │                     # StudentHome / GradeReport / JobList / ExamNotices / KgView /
-│   │                     # CareerForecast / StudentForecast / InterviewRoom
+│   ├── src\views\        # 16 个页面：登录、教师端、学生端、岗位/招考、图谱、面试、
+│   │                     # 预测、测评、工作流审批、AI 助手等
 │   ├── src\layout\       # ShellLayout（侧栏 + 顶栏 + 助手抽屉）
 │   ├── src\api\http.js   # axios + JWT 拦截器
 │   └── dist\             # 构建产物（不入 git）
-├── agents\               # LangGraph 多智能体层（DeepSeek 驱动）
-│   ├── llm.py            # DeepSeek 客户端（OpenAI 兼容接口）
+├── agents\               # LangGraph 多智能体层（星火优先、DeepSeek 兜底）
+│   ├── llm.py            # 多提供方客户端（OpenAI 兼容接口）
 │   ├── graph.py          # plan → tool → draft → critic 状态机
 │   ├── tools.py          # 工具层（入参只接受后端注入的身份）
 │   ├── teacher_agent.py  # 教师端意图路由与参数抠取（不产生数值）
@@ -127,9 +134,10 @@ D:\qihang\
 ├── rules\                # 考公 / 考编 / 考研 / 就业模板 + 方向关键词 + 意图词表
 ├── db\                   # MySQL / DuckDB / 职业规划 / 工作流审批建表脚本
 ├── etl\                  # 数据接入：脱敏（mask）/ 清洗（clean_jobs）/ 抓取 / 校情参照
-│   └── docs\             # 文档（原根目录 docs\，2026-10-28 被移入，位置待确认）
+│   └── docs\             # 数据来源、口径、验收、演示与答辩文档
+├── docs\                 # 产品协同、前端改版与跨角色交接文档
 ├── scripts\              # init_db / seed_* / load_jobs / smoke_test / gen_*_report / start_qihang
-├── tests\                # pytest（500+ 用例）
+├── tests\                # pytest（690+ 用例；Spark 用例需可选依赖）
 ├── data\                 # analytics.duckdb 与生成数据（不入库）
 └── logs\                 # critic 与运行日志（不入库）
 ```
@@ -140,6 +148,16 @@ D:\qihang\
 2. 身份（student_id / teacher_id）**只能由后端从 JWT 注入**，绝不从对话或请求体里取；
 3. `agents\critic.py` 逐条回查输出中的数字，与引擎结果不一致即驳回，最多 2 次，超限降级为模板；
 4. 小步提交：每阶段跑通 + `git commit`，人工审 `git diff` 后再进下一阶段。
+
+## 数据与运行约定
+
+- **岗位主目录**：推荐、智能体检索与 `/job/*` 统一使用 MySQL `岗位` 表。
+- **招聘抓取暂存**：`招聘岗位` 表只作为外部招聘源暂存，面试岗位选择仍可单独使用，
+  但不再作为前台第二套岗位目录。
+- **数据库审计**：成功访问写 `logs/qihang.log`；失败请求和业务动作写 `审计日志`，
+  每条记录都带 `tenant_id`。
+- **请求追踪**：响应包含 `X-Request-ID`，可与文件日志和失败审计记录对应。
+- **日志轮转**：`logs/qihang.log` 单文件 10 MB，保留 5 份；日志目录不入 Git。
 
 ## 分阶段
 
@@ -162,7 +180,8 @@ D:\qihang\
 
 ## 验收指标
 
-> 状态依据最近一次实测（2026-10-28）：`pytest tests` 527 passed，
+> 状态依据最近一次实测（2026-11-03）：日常快速门禁 702 passed、10 deselected；
+> Spark 对拍 10 passed。合并口径为 712 passed。
 > `scripts\smoke_test.ps1` PASS 12 / FAIL 0。
 
 | 编号 | 指标 | 验收标准 | 状态 | 依据 |
@@ -176,9 +195,134 @@ D:\qihang\
 | V7 | 防幻觉 | critic 回查数值不一致即驳回，超 2 次降级为模板 | ☑ | `tests\test_critic.py` |
 | V8 | 冒烟测试 | 12 项冒烟用例全部通过，VERIFY.md 出报告 | ☑ | 2026-10-28 实测 PASS 12 / FAIL 0 |
 | V9 | 演示可用 | Vue 前端（构建后单服务托管）走通登录→教师看板→学生端全流程 | ☑ | 冒烟 #11/#12；登录→`/student` 实测 |
-| V10 | 文档完备 | 目录说明、答辩大纲、演示脚本齐备 | ◐ | 内容齐，但实际位于 `etl\docs\`，待迁回根 `docs\` |
+| V10 | 文档完备 | 目录说明、数据来源、口径、验收、演示、答辩与协同文档齐备 | ☑ | `docs\` 管协同，`etl\docs\` 管数据/验收 |
 
 ## 更新记录
+
+### 2026-11-09
+- **宠物话术与打扰修复**：① `app\routers\pet.py` 新增确定性
+  `normalize_reply()`——LLM 输出的半角 `?!,;:` 转全角、连续波浪号收敛为单个
+  `～`、压多余空白，chat 与 proactive 两处输出统一过一遍（铁律 1：后处理不经
+  模型）；② system/proactive prompt 加「全角标点、禁波浪号 emoji、开头句式
+  必须变化、必须回应用户刚说的内容」规则；③ 前端 `usePet.js` 加交互门控
+  `markInteract()`——用户从未交互不主动说话、闲置超 10 分钟静默，页面刚打开
+  不再突然冒话；④ 气泡 `white-space: normal` 允许换行，长句不再溢出。
+- **修复 `pet_store.load_personality` KeyError**：SELECT 漏选 `鼓励池JSON`
+  列导致读库必崩，补上该列。
+- **国考职位数据源打通（调研）**：国考专题下载页
+  `bm.scs.gov.cn/pp/gkweb/.../gkdownloads.html` 为 JS 渲染，真实清单来自
+  `gkdownloads.js` 里的 API `GET dl.scs.gov.cn/api/res/{hb01Id}/1110`
+  （2027 年度 `hb01Id=8a81f6eca0221f1401a0242759fc0000`）；返回 4 个文件的
+  `resourceName/resResourceId/resourceComment`，下载地址
+  `dl.scs.gov.cn/download/{id}`，验证码仅前端校验、服务端可直接下载。
+  已实测拉到《招考简章 2027》zip（1.76MB）并解出 xls：5 sheet /
+  约 1.94 万职位 / 27 列（部门代码/名称、用人司局、招考职位、专业、学历、
+  学位、政治面貌、基层年限、工作地点等）。源数据归档 `data\gk2027\raw\`
+  （不入库）。**已入库**：走既有管线
+  `scripts\sync_guokao.py --year 2027 --file data\gk2027\raw\guokao2027.zip`
+  （dry-run 核对后实跑，成功 19426 / 失败 0），`/exam/positions/facets`
+  返回 2027 年度 19426 职位 / 35691 招录人数，4 类分部与官方 sheet 一致，
+  关键词「税务」命中 11288 条——前端「招考信息·国考职位」与智能体
+  `exam_positions` 工具即时可见。
+- **国考职位自动同步（年度守护线程）**：新增 `app\guokao_sync.py`，与
+  `recruit_sync` 同模式但独立开关——`GUOKAO_SYNC_HOURS`（默认 168 = 一周，
+  0 关闭），`main.py` 启动时拉起 `guokao-sync` 线程；只同步
+  `etl.exam_positions.DOWNLOAD_URLS` 里显式登记的年度（不猜 URL），
+  下载→解析→`upsert_positions` 增量入库→写 `抓取运行日志`，失败只告警不抛异常。
+  `scripts\sync_guokao.py` 的 `log_run` 增加 `trigger` 参数并配 `--trigger`，
+  日志可区分 manual / schedule / api。`.env.example` 补 `GUOKAO_SYNC_HOURS`。
+  实测：重启服务后线程自动跑出 `触发方式=schedule / 抓取 19426 / 更新 19426 /
+  是否成功=1` 的运行日志。
+- **修一处测试隔离事故**：`TestClient(create_app())` 会在 pytest 进程内触发启动
+  块拉起真守护线程，该线程恰在 monkeypatch 生效期间跑了一轮，把打桩职位以默认
+  租户 1 写进真库（多出 2 行、并让 facets 断言 19426 误报）。修法：
+  `guokao_sync.start_background_sync()` 在测试进程内直接返回 False（已加用例
+  锁定）；同时 `tests\test_exam_positions.py` 的总量断言改为与库内实数对账，
+  不再写死 19426，避免官方补录后误报。新增 `tests\test_guokao_sync.py`
+  （10 项：间隔开关、失败告警、真库入库/幂等、pytest 门禁）。
+- **报考分析页新增「你能报的国考职位」卡片**：`CareerForecast.vue` 在
+  「真实招考公告」折叠项上方新增 `guokao` 折叠项（仅考公且后端
+  `opportunities.guokao_positions` 有效时渲染，考研/考编自动隐藏）。
+  el-card 内用 el-tag 展示 可报职位数 / 计划招录人数 / 不限专业数 /
+  全表规模，el-table 列出按学生学历/政治面貌/专业/意向城市初筛的职位样例
+  （部门/职位/人数/地点/学历/政治面貌），底部挂官方专题链接
+  （`source_url` / `source_label`）。「关键词初筛、以官方职位详情为准」的
+  口径说明由后端 caveats 承担，前端不重复编数字。
+  验证：`npm run build` ✓；Edge 实测 AI20230001（智能科学与技术，重庆）
+  命中 2 个职位并完整渲染，切到考研卡片消失；期间发现并确认运行中的
+  uvicorn 加载的是并行会话修复前的 `context.py`（`%%` 转义 bug 导致 422），
+  重启后正常。
+- **同步线程启动防抖**：`app\guokao_sync.py` 与 `app\recruit_sync.py` 的守护
+  线程不再「启动即全量跑一轮」——先查 `抓取运行日志` 最近一次成功时间，
+  距上次成功不足一个间隔（默认一周）就跳过本轮（日志记
+  `... sync skipped: ... fresh`）。动机：开发期频繁重启服务，会对官方站点
+  反复拉 2MB 全量、对招聘站逐条进详情页。国考按单一目标判断；招考按
+  civil/institution/postgraduate/job 四个目标独立判断，某源持续失败时到点
+  仍会整轮重跑，不会被成功源「捂住」。查询失败一律按「该跑」兜底，
+  宁可多跑一次不漏跑。测试：`tests\test_recruit_sync.py`（新建 8 项）、
+  `tests\test_guokao_sync.py` 补 4 项（含 DictCursor/tuple 游标双形态回归
+  ——首轮实测抓到 `row[0]` 在 DictCursor 下抛 TypeError 导致防抖失效的
+  bug，已修）。另修测试隔离：`test_guokao_sync` 的日志清理改用专用触发
+  方式 `test` 打标（日志表无租户列），不再误删真实 schedule 运行历史
+  （被误删的 5 条已按查库原始输出回插）。全量回归 792 passed。
+- **修宠物遮挡登录入口**：2D 宠物固定左下角后，`.enter-btn`（登录页
+  「开始使用」CTA，实测位于视口 (68,787)）被 `pet-img` 完全盖住，点击
+  全被宠物吃掉，登录页无法进入。修法：`App.vue` 陪伴层在 `/login` 路由
+  不渲染（`v-if="showPet"`）——未登录时 personality/state/memories 三个
+  接口本来就 401，陪伴层在登录页既挡路又无意义。实测：登录页宠物消失、
+  CTA 可点、登录后宠物照常在岗；`npm run build` ✓。此改动动了宠物提交
+  （f562437）的「跨路由常驻」假设，如需登录页也保留宠物，需另行挪开
+  CTA 或给宠物让位。
+- **宠物形象最终定稿：2D 立绘静态化（取代 2026-11-05 的 3D 方案）**：
+  Claude 定夺采用 `PetSprite` 2D 立绘（fisharchive.cc 鲸鱼，CC BY-NC-SA 4.0），
+  **删除** `PetAvatar`（Three.js 漫游鲸鱼）与 three 依赖——此前的「3D 数字暖生 /
+  RobotExpressive.glb / 漫步、跟随、可拖动」口径全部作废。定稿行为：宠物固定
+  驻留视口左下角，不移动/不拖动/不漫游；待机侧视、说话正视换图，心情驱动
+  呼吸，点击蹦跳回应；控制条在右下角；登录页不渲染（见上条）。主动说话为
+  确定性调度（默认间隔 480s，专注模式永不主动）。验收（CodeBuddy，1440×900）：
+  登录页无宠物且 CTA 可点；登录后宠物 (20,671) 左下、控制条 (1096,828) 右下、
+  零重叠；点身体冒泡、对话真实 LLM 回复（/pet/chat 200）、专注开关双向切换、
+  主动说话心跳正常（/pet/proactive 周期 200，间隔内正确沉默）。截图
+  `logs/screenshots/pet-turnbubble-1440.png`、`pet-chat-reply-1440.png`。
+
+### 2026-11-05
+- **宠物模块验证通过**：`engine/pet.py`、`engine/pet_store.py`、`app/routers/pet.py`
+  （路由挂载于 `app/main.py`，启动时幂等建表）与前端 `App.vue` 全局
+  `PetAvatar`/`PetBubble`/`PetConsole` 全链路跑通：pet 相关 pytest 56 passed，
+  前端构建通过，重启服务后 `/pet` 5 个接口端到端实测正常（chat 走真实 LLM、
+  degraded=false）。
+- **宠物形象定稿 3D 数字暖生**：`PetAvatar` 改用本地 `RobotExpressive.glb`
+  （three.js 官方带动画角色，Idle/Dance/Sitting 随心情切换）；修复模型缩放
+  单位换算错误（像素误作世界单位，机器人只渲染十几个像素不可见），登录 →
+  跑腿面板 → 指令直达端到端复验通过。
+- **长期记忆管理与向量去重**：新增 `PUT/DELETE /pet/memories/{id}`（只允许
+  编辑/删除本人记忆）；`宠物长期记忆` 表加 `向量` 列（幂等迁移），入库时用
+  `agent_memory.embed` 离线向量 + 余弦相似度去重（阈值同主智能体 0.92，另有
+  实词字符交集前置防误撞，语义反转不会被合并）；设置弹窗里每条记忆可「改/删」。
+  pet 相关 pytest 62 passed。
+- **宠物 UI 冒烟脚本**：`scripts/verify_pet.py`（18 项接口自检，照
+  verify_career.py 范式）与 `web/scripts/pet-ui-check.cjs`（9 项交互自检：
+  登录 → 跑腿面板 → 指令直达 → 气泡），均为 0/1 退出码，可进演示前自检。
+  控制条/气泡/跑腿面板视觉同步美化（毛玻璃聚焦态、弹性气泡入场、统一紫系）。
+- **清理临时文件**：删除根目录与 `web` 下全部 `tmp*` / `_tmp*` 临时脚本、
+  截图、日志、模型预览目录及 `.playwright-cli` 抓取产物，并从 git 暂存区同步移除。
+
+### 2026-11-03
+- **安全收口**：`JWT_SECRET` 缺失、为占位符或不足 32 字符时服务拒绝启动；
+  `POST /kg/rebuild`、`POST /qb/reload` 改为仅教师可调用。
+- **审计租户隔离**：`审计日志` 新增 `租户编号` 和
+  `(租户编号, 动作, 创建时间)` 索引；`/chat/metrics` 按当前租户统计。
+  已有数据库升级时先运行一次 `python scripts\init_db.py`。
+- **审计性能与可观测性**：成功访问不再写数据库审计，改写入轮转文件日志；
+  静态资源与健康检查成功响应不污染审计表；失败请求和业务动作继续落库。
+  500、后台同步失败与审计写库失败现在会记录异常堆栈和 `X-Request-ID` 对应信息。
+- **依赖统一**：直接依赖补 `networkx`、`python-multipart`；移除未使用的
+  `streamlit`、`langgraph-checkpoint-sqlite`；Spark 依赖拆到
+  `requirements-spark.txt`。
+- **岗位数据源统一**：`/job/*`、学生岗位搜索和智能体岗位检索统一读取 `岗位` 主目录；
+  `招聘岗位` 仅保留为外部抓取暂存/面试选岗池。
+- **验证基线**：快速门禁 `702 passed, 10 deselected`（75.28s）；Spark 对拍
+  `10 passed`（357.25s），合并口径 712 passed。
 
 ### 2026-10-29
 - **教师端成绩单加「全班总体平均成绩 / 个人平均成绩 / 同专业班级排名 / 同专业个人排名」**：原先教师只能逐个学生查成绩单，看不到班级整体水平。新增 `engine\grades.py::build_rank`（纯函数，不连库）与接口 `GET /grades/class-rank`，前端 `GradeReport.vue` 教师端加三块：全班总体均分、同专业班级排名、班级个人均分与排名（点行即看该生成绩单）。口径按需求确认为**学分加权平均分**、**只统计教师任教范围内的班**、**按学期可切换**（默认最近学期）。
@@ -201,7 +345,7 @@ D:\qihang\
 ### 2026-10-28
 - 新增三个智能体能力（**默认行为不变，均可开关**）：
   1. **审批工作流（人工审核）**：`工作流定义` 加 `是否需要审批`，新增 `工作流审批` 表，`工作流运行.状态` 扩充 `pending` / `rejected`。教师把流程设为需审批后，师生触发**只挂起不执行**，教师通过才真正跑，驳回则一步都不跑；审批通过时用**提交者**身份执行（学生提交的流程只会取到本人数据，不会变成审批人视角）。新增 `app\workflow_approval.py`、`app\routers\workflow.py` 的 `/approvals/pending` 与 `/runs/{id}/decide`（学生调用返回 403、重复审批返回 409），教师端新增「工作流审批」页，智能体触发需审批流程时返回 pending 话术而非谎报已执行。
-  2. **多跳检索**：`agents\tools.py` 新增 `kb_search_deep`——模型判定第一跳不足以回答时改写检索词再补一跳（最多 2 跳），命中合并去重，引用编号与 `verify_citations` 口径不变；`AGENT_KB_MULTIHOP=0` 可退回单跳。补跳时**扩大召回**（`top_k` 翻倍至多 10），否则会把第一跳那几块再捞一遍、去重后等于白跳；返回新增 `new_hits` 字段标明多跳实际带回几块新原文，避免「跳了但没带回东西」被误当成收益。注：当前演示知识库仅 5 个分块，第一跳已捞完相关块，实测 `new_hits=0` 属正常；多跳的收益要在大语料上才体现。
+  2. **多跳检索**：`agents\tools.py` 新增 `kb_search_deep`——模型判定第一跳不足以回答时改写检索词再补一跳（最多 2 跳），命中合并去重，引用编号与 `verify_citations` 口径不变；`AGENT_KB_MULTIHOP=0` 可退回单跳。补跳时**扩大召回**（`top_k` 翻倍至多 10），否则会把第一跳那几块再捞一遍、去重后等于白跳；返回新增 `new_hits` 字段标明多跳实际带回几块新原文，避免「跳了但没带回东西」被误当成收益。当前演示知识库已扩展到 32 份文档 / 43 个分块，多跳仍可按同一协议继续扩展语料。
   3. **自主规划（可切换）**：新增 `agents\auto_plan.py`，`AGENT_MODE=auto` 时由模型用 LangChain tool calling 自主选工具；**只替换「规划」这一步**，工具执行 / Critic 校验 / 降级模板全部照旧，学生端只暴露本人工具集（不给 `student_profile`、`warning_list`），模型不可用或选中越权工具则自动退回确定性路由。默认 `AGENT_MODE=graph` 不变。
 - README 大修：快速开始补完整初始化链路（`init_db` → `seed_mock` → `load_jobs` → 构建前端 → `start_qihang.bat`，含 `lan` 局域网模式）、演示账号表与查学号方式、常用命令表（测试 / 冒烟 / KPI 报告 / 任教范围）；目录结构按实际模块重写（`engine\` 22 个模块、`app\routers\` 13 个路由、`web\src\views\` 11 个页面、`rules\` 6 份规则词表）；验收指标 V1–V10 按 2026-10-28 实测勾选并补「依据」列（冒烟 PASS 12 / FAIL 0，pytest 527 passed），V10 标注文档位置待迁回。
 - 修复大一账号登录不进去：根因是文档写的 `AI2026001`（7 位）与库中真实学号 `AI20260001`（8 位）不一致，认证要求「口令=学号」且账号必须精确存在，输错即 401。快速开始补账号表并注明 8 位格式，`seed_freshman.py` 标注废弃；登录页演示账号改为可点击填充，并补「学生（大一）AI20260001」；同步更正 `etl\docs\演示脚本.md`、`etl\docs\VERIFY.md` 的过期账号与班级规模描述。
