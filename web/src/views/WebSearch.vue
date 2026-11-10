@@ -301,7 +301,7 @@ async function copyUrl() {
 
 .ws-item:hover {
   transform: translateY(-1px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   background: #fbfbff;
 }
 

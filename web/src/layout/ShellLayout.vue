@@ -1,34 +1,68 @@
 <template>
   <div class="shell">
-    <!-- ============ 顶栏导航（参考讯飞星辰 MaaS：冷白 + 紫蓝、顶栏 + 全宽内容） ============ -->
-    <header class="topnav" :class="{ 'is-scrolled': scrolled }">
-      <div class="topnav-inner">
-        <router-link class="brand" to="/" aria-label="启航首页">
-          <span class="brand-mark">启</span>
-          <span class="brand-text">
-            <span class="brand-title">启航</span>
-            <span class="brand-sub">生涯与岗位匹配</span>
-          </span>
+    <!-- ============ 左侧竖排侧边栏：品牌 + 主导航 + 本页 AI 问法 ============ -->
+    <aside v-if="!isMobile" class="sidebar" aria-label="主导航">
+      <router-link class="brand" to="/" aria-label="启航首页">
+        <span class="brand-mark">启</span>
+        <span class="brand-text">
+          <span class="brand-title">启航</span>
+          <span class="brand-sub">生涯与岗位匹配</span>
+        </span>
+      </router-link>
+
+      <nav class="side-nav">
+        <router-link
+          v-for="item in menus"
+          :key="item.path"
+          :to="item.path"
+          class="side-item"
+          :class="{ 'is-active': isActive(item.path) }"
+          :title="item.hint"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path :d="ICONS[item.icon]" />
+          </svg>
+          <span class="side-label">{{ item.label }}</span>
         </router-link>
+      </nav>
 
-        <!-- 桌面端：横向导航 pill；1024px 以下收起，改由汉堡打开抽屉 -->
-        <nav v-if="!isMobile" class="nav" aria-label="主导航">
-          <router-link
-            v-for="item in menus"
-            :key="item.path"
-            :to="item.path"
-            class="nav-pill"
-            :class="{ 'is-active': isActive(item.path) }"
-            :title="item.hint"
-          >
-            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path :d="ICONS[item.icon]" />
-            </svg>
-            <span class="nav-label">{{ item.label }}</span>
+      <!-- 本页 AI 问法：跟着导航往下排，窄屏随侧栏一起收进抽屉 -->
+      <div v-if="aiChips.length" class="side-ai">
+        <p class="ai-rail-label">
+          <span class="ai-rail-dot">AI</span>
+          <span class="ai-rail-label-text">本页可以直接问</span>
+        </p>
+        <button
+          v-for="c in aiChips"
+          :key="c.q"
+          class="ai-rail-item"
+          type="button"
+          :title="'让 AI 回答：' + c.q"
+          @click="askAI(c.q)"
+        >
+          {{ c.q }}
+        </button>
+        <button class="ai-rail-more" type="button" @click="askAI()">更多问题…</button>
+      </div>
+    </aside>
+
+    <!-- ============ 右侧主区：顶栏只留状态与账号，内容在其下 ============ -->
+    <div class="shell-main">
+      <header class="topbar" :class="{ 'is-scrolled': scrolled }">
+        <div class="topbar-inner">
+          <router-link v-if="isMobile" class="brand brand-compact" to="/" aria-label="启航首页">
+            <span class="brand-mark">启</span>
+            <span class="brand-title">启航</span>
           </router-link>
-        </nav>
 
-        <div class="nav-right">
+          <!-- 页面标题：原先在正文顶部，挪进顶栏后正文直接从内容开始。
+               顶栏是 sticky 的，滚动时标题一直可见，反而比原来更好定位。 -->
+          <div v-else class="topbar-title">
+            <h1 class="topbar-title-main">{{ currentLabel }}</h1>
+            <p class="topbar-title-sub">{{ currentHint }}</p>
+          </div>
+
+          <div class="nav-right">
           <!-- 运维细节收进状态点：正常时只显示一个绿点，出问题才展开看详情 -->
           <el-popover placement="bottom-end" :width="250" trigger="click">
             <template #reference>
@@ -74,41 +108,23 @@
           >
             <span class="hamburger" />
           </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <!-- 本页 AI 助手条：每个板块都有专属问法，点击即让智能体带着问题作答 -->
-    <div v-if="aiChips.length" class="ai-strip">
-      <div class="ai-strip-inner">
-        <span class="ai-strip-label">
-          <span class="ai-strip-dot">AI</span>本页可以直接问
-        </span>
-        <button
-          v-for="c in aiChips"
-          :key="c.q"
-          class="ai-chip"
-          type="button"
-          :title="'让 AI 回答：' + c.q"
-          @click="askAI(c.q)"
-        >
-          {{ c.q }}
-        </button>
-        <button class="ai-more" type="button" @click="askAI()">更多问题…</button>
-      </div>
+      <main class="page-main">
+        <!-- 桌面端标题已上移到顶栏；移动端顶栏塞不下，仍放在正文顶部 -->
+        <div v-if="isMobile" class="page-head">
+          <h1 class="page-title">{{ currentLabel }}</h1>
+          <p class="page-sub">{{ currentHint }}</p>
+        </div>
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
     </div>
-
-    <main class="page-main">
-      <div class="page-head">
-        <h1 class="page-title">{{ currentLabel }}</h1>
-        <p class="page-sub">{{ currentHint }}</p>
-      </div>
-      <router-view v-slot="{ Component }">
-        <transition name="page-fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </main>
 
     <!-- 移动端导航抽屉：不保留常驻侧栏 -->
     <template v-if="isMobile">
@@ -139,6 +155,23 @@
             </span>
           </router-link>
         </nav>
+
+        <!-- 桌面端侧栏里的 AI 问法，移到抽屉里，别让窄屏丢掉这个入口 -->
+        <div v-if="aiChips.length" class="drawer-ai">
+          <p class="drawer-ai-label">
+            <span class="ai-rail-dot">AI</span>本页可以直接问
+          </p>
+          <button
+            v-for="c in aiChips"
+            :key="c.q"
+            class="ai-rail-item"
+            type="button"
+            @click="askAI(c.q); drawer = false"
+          >
+            {{ c.q }}
+          </button>
+        </div>
+
         <div class="drawer-foot">
           <div class="user-card">
             <span class="user-avatar">{{ role === 'teacher' ? '教' : '学' }}</span>
@@ -152,19 +185,8 @@
       </aside>
     </template>
 
-    <!-- 悬浮助手：右下角「摸鱼」形象按钮 → 右侧抽屉 -->
-    <button
-      class="assistant-fab"
-      type="button"
-      aria-label="打开智能助手"
-      title="不想摸鱼了？来问我"
-      :class="{ 'is-open': chatOpen }"
-      @click="chatOpen = true"
-    >
-      <img class="fab-img" :src="moyuImg" alt="智能助手" />
-      <span class="fab-badge">AI</span>
-    </button>
-
+    <!-- 右下角的入口已经交给全局宠物（鲸鱼娘）：点它即拉起这里的抽屉，
+         不再单独放一个悬浮按钮，避免两个入口在同一角落互相压住 -->
     <ChatDrawer
       v-model="chatOpen"
       :seed-question="chatSeed"
@@ -179,8 +201,8 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { clearSession, currentRole } from '../api/http'
 import ChatDrawer from '../components/ChatDrawer.vue'
+import { useAssistant } from '../composables/useAssistant'
 import { useClock, useSystemStatus } from '../composables/useSystemStatus'
-import moyuImg from '../assets/deepseek-mo-yu.webp'
 
 // 24×24 stroke 图标（无外部图标库依赖）
 const ICONS = {
@@ -242,8 +264,8 @@ const MENUS = {
 
 const menus = computed(() => MENUS[role] || MENUS.student)
 const drawer = ref(false)
-const chatOpen = ref(false)
-const chatSeed = ref('')
+// 抽屉开关与宠物共用同一份状态：宠物点开后，这里的抽屉会立即响应
+const { open: chatOpen, seed: chatSeed, ask } = useAssistant()
 
 // 每个板块的专属 AI 问法（与后端智能体真实能力一一对应，不是装饰）。
 // askAI() 不带参数 = 只开抽屉，由用户自由提问。
@@ -305,8 +327,7 @@ const PAGE_AI = {
 const aiChips = computed(() => PAGE_AI[route.name] || [])
 
 function askAI(question) {
-  chatSeed.value = String(question || '').trim()
-  chatOpen.value = true
+  ask(question)
 }
 
 const isMobile = ref(false)
@@ -396,36 +417,125 @@ onBeforeUnmount(() => {
 <style scoped>
 .shell {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  align-items: start;
   background: transparent;
 }
 
-/* ---------- 顶栏：64px，白底 82% + 毛玻璃 ---------- */
-.topnav {
+/* ---------- 左侧栏：品牌 + 导航 + 本页问法，整列吸顶 ---------- */
+.sidebar {
   position: sticky;
   top: 0;
-  z-index: 40;
-  height: 64px;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: saturate(180%) blur(14px);
-  -webkit-backdrop-filter: saturate(180%) blur(14px);
-  border-bottom: 1px solid #d2d2d7;
-  transition: box-shadow 200ms ease, border-color 200ms ease;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 14px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border-right: 1px solid var(--cf-line);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cf-line-strong) transparent;
 }
 
-.topnav.is-scrolled {
-  box-shadow: 0 6px 20px rgba(33, 40, 90, 0.06);
-  border-bottom-color: #e6e9f5;
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 14px;
 }
 
-.topnav-inner {
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--cf-mid);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.side-item:hover {
+  background: rgba(91, 91, 214, 0.07);
+  color: var(--cf-coral);
+}
+
+.side-item.is-active {
+  background: linear-gradient(135deg, #eef0ff 0%, #e9f7f4 100%);
+  color: #4a4ac0;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(91, 91, 214, 0.18);
+}
+
+/* ---------- 右侧主区 + 顶栏：只留状态与账号 ---------- */
+.shell-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  flex: 0 0 56px;
+  height: 56px;
+  background: rgba(247, 248, 250, 0.86);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--cf-line);
+  transition: box-shadow 200ms ease;
+}
+
+.topbar.is-scrolled {
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+}
+
+.topbar-inner {
   height: 100%;
-  /* 与 .page-main 同一容器宽度：左右留白 = max(24, (视口-1680)/2)；≥1800px 见文末媒体查询 */
+  /* 和 .page-main 用同一套容器算式 + 同样的 24px 内边距，
+     标题文字与正文卡片才会落在同一条竖线上 */
   width: min(1680px, calc(100% - 48px));
   margin: 0 auto;
   padding: 0 24px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
+}
+
+/* 顶栏里的页面标题：沿用原 .page-head 的排版（标题与副标题按基线对齐） */
+.topbar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 页标题是这一屏的最大标题，必须压过卡片标题（20px 的 .bento-title 除外，
+   它只出现在卡片内做区块名）。原来 15px 比卡片标题还小，层级是反的。 */
+.topbar-title-main {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--cf-ink);
+  white-space: nowrap;
+}
+
+.topbar-title-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cf-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 品牌：紫蓝渐变方块 + 两行字 */
@@ -438,19 +548,42 @@ onBeforeUnmount(() => {
 }
 
 .brand-mark {
+  position: relative;
+  overflow: hidden;
   width: 32px;
   height: 32px;
   flex: 0 0 32px;
   border-radius: 10px;
-  /* Apple 风格：品牌标记用纯黑，不用渐变 */
-  background: #1d1d1f;
+  /* 品牌标：靛蓝→青的斜向渐变，右上角一点高光，胜过纯黑方块 */
+  background: linear-gradient(145deg, #7c6cf8 0%, #5b5bd6 52%, #0f9d8a 120%);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 6px 16px rgba(91, 91, 214, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+/* 品牌标扫光：8 秒一次，很慢，只作为入口处的“活气” */
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  bottom: -60%;
+  left: -140%;
+  width: 120%;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%);
+  transform: rotate(8deg);
+  animation: brand-shine 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes brand-shine {
+  0%, 74% { left: -140%; }
+  88%, 100% { left: 140%; }
 }
 
 .brand-text {
@@ -464,57 +597,17 @@ onBeforeUnmount(() => {
   font-size: 14.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
-  color: #1d1d1f;
+  color: var(--cf-ink);
   white-space: nowrap;
 }
 
 .brand-sub {
   font-size: 11px;
-  color: #86868b;
+  color: var(--cf-faint);
   white-space: nowrap;
 }
 
-/* 导航 pill：横向排列，不换行；极窄时自身横向滚动（无滚动条） */
-.nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.nav::-webkit-scrollbar {
-  display: none;
-}
-
-.nav-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: #6e6e73;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-.nav-pill:hover {
-  background: #f4f4fb;
-  color: #0058b0;
-}
-
-.nav-pill.is-active {
-  background: #efedff;
-  color: #0071e3;
-  font-weight: 600;
-}
-
+/* 导航图标：横向 pill 和竖排侧栏共用，尺寸一致 */
 .nav-icon {
   width: 16px;
   height: 16px;
@@ -527,7 +620,7 @@ onBeforeUnmount(() => {
   opacity: 0.85;
 }
 
-.nav-pill.is-active .nav-icon {
+.side-item.is-active .nav-icon {
   opacity: 1;
 }
 
@@ -544,10 +637,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 5px 11px;
-  border: 1px solid #d2d2d7;
+  border: 1px solid var(--cf-line);
   border-radius: 999px;
-  background: #fff;
-  color: #6e6e73;
+  background: var(--cf-surface-solid);
+  color: var(--cf-mid);
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -555,14 +648,14 @@ onBeforeUnmount(() => {
 }
 
 .status-btn:hover {
-  background: #e8f2fd;
-  color: #0071e3;
+  background: var(--cf-coral-soft);
+  color: var(--cf-coral);
 }
 
 .clock {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
-  color: #86868b;
+  color: var(--cf-faint);
   white-space: nowrap;
 }
 
@@ -571,19 +664,19 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 3px 10px 3px 3px;
-  border: 1px solid #d2d2d7;
+  border: 1px solid var(--cf-line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--cf-surface-solid);
   font-family: inherit;
   font-size: 12.5px;
-  color: #1d1d1f;
+  color: var(--cf-ink);
   cursor: pointer;
   transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .user-btn:hover {
   background: #f7f7fd;
-  border-color: #e0e3f2;
+  border-color: var(--cf-line-strong);
 }
 
 .user-avatar {
@@ -592,8 +685,8 @@ onBeforeUnmount(() => {
   flex: 0 0 26px;
   border-radius: 8px;
   /* 淡蓝底 + Apple 蓝字，替代原来的紫渐变 */
-  background: #e8f2fd;
-  color: #0071e3;
+  background: var(--cf-coral-soft);
+  color: var(--cf-coral);
   font-size: 11.5px;
   font-weight: 600;
   display: inline-flex;
@@ -618,21 +711,21 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--cf-ink);
 }
 
 .user-pop-role {
   margin: 0 0 8px;
   font-size: 12px;
-  color: #86868b;
+  color: var(--cf-faint);
 }
 
 .logout-btn {
   border: 0;
   border-radius: 8px;
   padding: 6px 10px;
-  background: #e8f2fd;
-  color: #0071e3;
+  background: var(--cf-coral-soft);
+  color: var(--cf-coral);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
@@ -640,16 +733,16 @@ onBeforeUnmount(() => {
 }
 
 .logout-btn:hover {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--cf-coral-soft);
+  color: var(--cf-danger);
 }
 
 .icon-btn {
   width: 34px;
   height: 34px;
-  border: 1px solid #d2d2d7;
+  border: 1px solid var(--cf-line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--cf-surface-solid);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -658,7 +751,7 @@ onBeforeUnmount(() => {
 }
 
 .icon-btn:hover {
-  background: #f1efff;
+  background: var(--cf-coral-soft);
 }
 
 .hamburger,
@@ -667,7 +760,7 @@ onBeforeUnmount(() => {
   display: block;
   width: 16px;
   height: 1.5px;
-  background: #6e6e73;
+  background: var(--cf-mid);
   content: '';
   position: relative;
 }
@@ -687,7 +780,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--cf-mid);
 }
 
 .hp-row {
@@ -698,11 +791,11 @@ onBeforeUnmount(() => {
 
 .hp-row span {
   width: 60px;
-  color: #86868b;
+  color: var(--cf-faint);
 }
 
 .hp-row b {
-  color: #1d1d1f;
+  color: var(--cf-ink);
   font-weight: 500;
   margin-left: auto;
 }
@@ -713,10 +806,10 @@ onBeforeUnmount(() => {
 }
 
 .ghost-btn {
-  border: 1px solid #d2d2d7;
+  border: 1px solid var(--cf-line);
   border-radius: 999px;
-  background: #fff;
-  color: #6e6e73;
+  background: var(--cf-surface-solid);
+  color: var(--cf-mid);
   font-size: 12px;
   font-family: inherit;
   padding: 5px 12px;
@@ -725,8 +818,8 @@ onBeforeUnmount(() => {
 }
 
 .ghost-btn:hover:not(:disabled) {
-  background: #e8f2fd;
-  color: #0071e3;
+  background: var(--cf-coral-soft);
+  color: var(--cf-coral);
 }
 
 .ghost-btn:disabled {
@@ -734,91 +827,104 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 
-/* ---------- 本页 AI 助手条：全宽纯色底（Apple 风格不用渐变），内容与页面同宽 ---------- */
-.ai-strip {
-  background: #f5f5f7;
-  border-bottom: 1px solid var(--bento-border, #d2d2d7);
-}
-
-.ai-strip-inner {
-  /* 与 .page-main 同宽同偏移，再各留 24px —— 这样 AI 问法条第一枚 chip、
-     页面标题、第一张卡片的左边缘落在同一条竖线上。
-     不用 100vw 参与计算：竖向滚动条会让 100vw 比 clientWidth 多 ~15px，
-     1920 下会偏 7~8px。 */
-  width: min(1680px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 9px 24px;
+/* ---------- 侧栏里的本页问法：跟在导航下方，分隔线与导航拉开层次 ---------- */
+.side-ai {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
+  min-width: 0;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cf-line);
 }
 
-.ai-strip-label {
+.ai-rail-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin: 0 0 2px;
   font-size: 12.5px;
   font-weight: 650;
-  color: #0071e3;
+  color: var(--cf-coral);
   white-space: nowrap;
 }
 
-.ai-strip-dot {
+.ai-rail-dot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 18px;
   border-radius: 6px;
-  background: #0071e3;
+  background: linear-gradient(140deg, #7c6cf8, #5b5bd6 60%, #0f9d8a 130%);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  box-shadow: 0 3px 8px rgba(91, 91, 214, 0.3);
 }
 
-.ai-chip {
-  border: 1px solid rgba(0, 113, 227, 0.24);
-  background: rgba(255, 255, 255, 0.9);
-  color: #0071e3;
-  border-radius: 999px;
-  padding: 5px 12px;
+.ai-rail-item {
+  border: 1px solid rgba(91, 91, 214, 0.18);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--cf-coral);
+  border-radius: 10px;
+  padding: 9px 12px;
   font-size: 12.5px;
   font-family: inherit;
+  line-height: 1.5;
+  /* 横排时是 nowrap 的胶囊；改成竖栏后必须允许折行，
+     否则长问法会把侧栏撑宽、把正文挤窄。 */
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
   cursor: pointer;
-  transition: all 300ms var(--qh-ease, ease);
-  white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition:
+    background-color 200ms var(--qh-ease, ease),
+    border-color 200ms var(--qh-ease, ease),
+    color 200ms var(--qh-ease, ease),
+    box-shadow 200ms var(--qh-ease, ease);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
 }
 
-.ai-chip:hover {
-  background: #0071e3;
-  border-color: #0071e3;
+.ai-rail-item:hover {
+  background: linear-gradient(135deg, #6d5cf6, #4f46e5);
+  border-color: transparent;
   color: #fff;
-  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.24);
+  box-shadow: 0 8px 18px rgba(91, 91, 214, 0.3);
 }
 
-.ai-more {
+.ai-rail-more {
+  align-self: flex-start;
   border: none;
   background: none;
-  color: #0071e3;
+  color: var(--cf-coral);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 4px 2px;
   white-space: nowrap;
 }
 
-.ai-more:hover {
+.ai-rail-more:hover {
   text-decoration: underline;
 }
 
-/* ---------- 内容区：与顶栏同容器（1680px 封顶，≥1800px 再放宽），页面自带 24px 内边距 ---------- */
+/* ---------- 内容区：在右侧主区里再居中一层（1680px 封顶） ----------
+   上下左右的呼吸统一交给 .bento-page 的 24px（手机 16px），这里不再额外加顶部
+   padding，否则「顶栏→首卡」是 44px、左右只有 24px，首屏会显得头轻脚重。 */
 .page-main {
   width: min(1680px, calc(100% - 48px));
+  min-width: 0;
   margin: 0 auto;
   padding: 0;
+}
+
+/* 少数没有 .bento-page 包裹的页面（如 404）自己补回同一套内距；
+   排除移动端专用的 .page-head，它的内距由 1023px 断点自己管 */
+.page-main > :not(.bento-page):not(.page-head) {
+  padding: 24px;
 }
 
 .page-head {
@@ -834,14 +940,14 @@ onBeforeUnmount(() => {
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: #1d1d1f;
+  color: var(--cf-ink);
   white-space: nowrap;
 }
 
 .page-sub {
   margin: 0;
   font-size: 12px;
-  color: #86868b;
+  color: var(--cf-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -852,20 +958,20 @@ onBeforeUnmount(() => {
   height: 7px;
   border-radius: 8px;
   display: inline-block;
-  background: #d4d4d8;
+  background: var(--cf-line-strong);
   flex: 0 0 7px;
 }
 
 .dot-ok {
-  background: #16a34a;
+  background: var(--cf-teal);
 }
 
 .dot-warn {
-  background: #d97706;
+  background: var(--cf-warning);
 }
 
 .dot-bad {
-  background: #dc2626;
+  background: var(--cf-danger);
 }
 
 /* ---------- 移动端导航抽屉 ---------- */
@@ -873,7 +979,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 44;
-  background: rgba(24, 24, 27, 0.42);
+  background: rgba(14, 58, 61, 0.42);
 }
 
 .nav-drawer {
@@ -884,9 +990,9 @@ onBeforeUnmount(() => {
   max-width: 84vw;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-right: 1px solid #d2d2d7;
-  box-shadow: 0 12px 40px rgba(24, 24, 27, 0.16);
+  background: var(--cf-surface-solid);
+  border-right: 1px solid var(--cf-line);
+  box-shadow: 0 12px 40px rgba(14, 58, 61, 0.16);
   transform: translateX(-100%);
   transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -902,7 +1008,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  border-bottom: 1px solid #d2d2d7;
+  border-bottom: 1px solid var(--cf-line);
 }
 
 .drawer-nav {
@@ -918,19 +1024,19 @@ onBeforeUnmount(() => {
   padding: 9px 11px;
   margin: 2px 0;
   border-radius: 10px;
-  color: #6e6e73;
+  color: var(--cf-mid);
   text-decoration: none;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
 .drawer-item:hover {
-  background: #f4f4fb;
-  color: #0058b0;
+  background: var(--cf-coral-soft);
+  color: var(--cf-coral);
 }
 
 .drawer-item.is-active {
-  background: #efedff;
-  color: #0071e3;
+  background: var(--cf-coral-soft);
+  color: var(--cf-coral);
   font-weight: 600;
 }
 
@@ -947,19 +1053,39 @@ onBeforeUnmount(() => {
 
 .drawer-hint {
   font-size: 11px;
-  color: #86868b;
+  color: var(--cf-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .drawer-item.is-active .drawer-hint {
-  color: #818cf8;
+  color: var(--cf-coral);
+}
+
+/* 抽屉里的 AI 问法：跟桌面侧栏同一套卡片样式，只是换成抽屉的内边距 */
+.drawer-ai {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--cf-line);
+}
+
+.drawer-ai-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--cf-coral);
 }
 
 .drawer-foot {
   flex: 0 0 auto;
-  border-top: 1px solid #d2d2d7;
+  border-top: 1px solid var(--cf-line);
   padding: 10px;
 }
 
@@ -968,10 +1094,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
-  background: #fff;
-  border: 1px solid #d2d2d7;
+  background: var(--cf-surface-solid);
+  border: 1px solid var(--cf-line);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(33, 40, 90, 0.04);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
 }
 
 .user-meta {
@@ -981,58 +1107,7 @@ onBeforeUnmount(() => {
 
 .user-role {
   font-size: 11px;
-  color: #86868b;
-}
-
-/* ---------- 悬浮 AI 助手入口（右下角小人） ---------- */
-.assistant-fab {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 43;
-  width: 92px;
-  height: 92px;
-  padding: 0;
-  border: 0;
-  border-radius: 22px;
-  background: transparent;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: visible;
-  transition: transform 150ms ease, box-shadow 150ms ease;
-}
-
-.assistant-fab:hover {
-  transform: translateY(-3px) scale(1.04);
-}
-
-.fab-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 10px rgba(24, 24, 27, 0.16));
-}
-
-.assistant-fab.is-open {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.fab-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  /* 角标用 Apple 红：红色在这里承载「有新消息」的语义，不是装饰 */
-  background: #ff3b30;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid #fff;
-  box-shadow: 0 2px 6px rgba(255, 59, 48, 0.3);
+  color: var(--cf-faint);
 }
 
 /* 抽屉本体：抹掉默认内边距，交给 ChatDrawer 自己排布 */
@@ -1040,28 +1115,29 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
-/* ---------- 宽屏放宽容器：2200/2560 下左右不再空一大片。
-   三处必须同步放宽（顶栏 / AI 问法条 / 内容区），否则三者左缘会错开。
+/* ---------- 宽屏放宽内容区：2200/2560 下右侧不再空一大片。
    不用 100vw 参与计算：竖向滚动条会让 100vw 比 clientWidth 宽约 15px。 ---------- */
 @media (min-width: 1800px) {
-  .topnav-inner,
-  .ai-strip-inner,
+  .topbar-inner,
   .page-main {
     width: min(1920px, calc(100% - 64px));
   }
 }
 
-/* ---------- 1180px 以下：顶栏收窄，先砍次要信息保「不换行」 ---------- */
+/* ---------- 1180px 以下：侧栏收窄，顶栏先砍次要信息保「不换行」 ---------- */
 @media (max-width: 1180px) {
-  .topnav-inner {
-    gap: 12px;
-    padding: 0 24px;
+  .shell {
+    grid-template-columns: 208px minmax(0, 1fr);
   }
 
-  .brand-sub,
-  .clock,
-  .status-text,
-  .user-name {
+  .topbar-inner {
+    gap: 10px;
+  }
+
+  /* 只砍顶栏里的次要信息；抽屉里要保留姓名，否则只剩「学生账号 · 退出」 */
+  .topbar-inner .clock,
+  .topbar-inner .status-text,
+  .topbar-inner .user-name {
     display: none;
   }
 
@@ -1072,45 +1148,52 @@ onBeforeUnmount(() => {
   .user-btn {
     padding: 3px;
   }
-
-  .nav-pill {
-    padding: 7px 10px;
-    font-size: 13px;
-  }
 }
 
 @media (max-width: 1023px) {
-  .topnav {
-    height: 56px;
+  /* 侧栏整体收起（v-if 已不渲染），栅格随之退化成单列 */
+  .shell {
+    display: block;
   }
 
-  .topnav-inner {
+  .shell-main {
+    min-height: 100vh;
+  }
+
+  .topbar,
+  .topbar-inner {
     height: 56px;
+    flex-basis: 56px;
+  }
+
+  /* 手机上顶栏铺满整宽，左右各 16px 与页面内边距对齐 */
+  .topbar-inner {
     width: 100%;
     padding: 0 16px;
     gap: 10px;
   }
 
-  /* 手机上不再留 24px 容器内缩，交给页面自身的 16px 内边距 */
+  .brand-compact {
+    gap: 8px;
+  }
+
+  .brand-compact .brand-mark {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 9px;
+    font-size: 13px;
+  }
+
+  .brand-compact .brand-title {
+    font-size: 15px;
+  }
+
+  /* 手机上不再留 24px 容器内缩，交给页面自身的 16px 内边距；
+     标题仍在正文里（.page-head），顶部留白由它给，这里不重复加 */
   .page-main {
     width: 100%;
-  }
-
-  /* 手机上 AI 问法条横向滑动，不折行占高 */
-  .ai-strip-inner {
-    width: 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding: 8px 16px;
-  }
-
-  .ai-strip-inner::-webkit-scrollbar {
-    display: none;
-  }
-
-  .ai-strip-label span:last-child {
-    display: none;
+    padding-top: 0;
   }
 
   .page-head {
@@ -1123,20 +1206,13 @@ onBeforeUnmount(() => {
     font-size: 16px;
   }
 
-  .assistant-fab {
-    right: 12px;
-    bottom: 12px;
-    width: 72px;
-    height: 72px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-pill,
-  .ai-chip,
-  .assistant-fab,
+  .side-item,
+  .ai-rail-item,
   .nav-drawer,
-  .topnav {
+  .topbar {
     transition: none;
   }
 }

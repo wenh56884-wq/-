@@ -97,7 +97,7 @@ function goBack() {
 .nf-path code {
   padding: 2px 6px;
   border-radius: 6px;
-  background: #f4f4f5;
+  background: #eef0f5;
   font-size: 11.5px;
 }
 </style>

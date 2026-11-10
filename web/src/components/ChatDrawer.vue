@@ -618,19 +618,19 @@ async function vote(msg, rating) {
   font-size: 14px;
   font-weight: 650;
   letter-spacing: -0.01em;
-  color: #171a2b;
+  color: #16181d;
 }
 
 .chat-sub {
   font-size: 11px;
-  color: #9297ab;
+  color: #9aa1ad;
 }
 
 .icon-btn {
   width: 30px;
   height: 30px;
   margin-left: auto;
-  border: 1px solid #eceef7;
+  border: 1px solid #e4e7ee;
   border-radius: 10px;
   background: #ffffff;
   cursor: pointer;
@@ -648,7 +648,7 @@ async function vote(msg, rating) {
   width: 16px;
   height: 16px;
   fill: none;
-  stroke: #5b6178;
+  stroke: #5f6672;
   stroke-width: 1.8;
   stroke-linecap: round;
 }
@@ -659,8 +659,8 @@ async function vote(msg, rating) {
   padding: 8px 10px;
   font-size: 12px;
   color: #5b5bd6;
-  background: #f0eeff;
-  border: 1px solid #e4e0ff;
+  background: #ececfb;
+  border: 1px solid #dcdcf9;
   border-radius: 10px;
 }
 
@@ -678,13 +678,13 @@ async function vote(msg, rating) {
 .chat-empty-title {
   font-size: 14px;
   font-weight: 650;
-  color: #171a2b;
+  color: #16181d;
 }
 
 .chat-empty-sub {
   margin-top: 4px;
   font-size: 12px;
-  color: #9297ab;
+  color: #9aa1ad;
 }
 
 .example-btn {
@@ -693,10 +693,10 @@ async function vote(msg, rating) {
   margin-top: 8px;
   padding: 9px 11px;
   text-align: left;
-  border: 1px solid #eceef7;
+  border: 1px solid #e4e7ee;
   border-radius: 10px;
   background: #ffffff;
-  color: #5b6178;
+  color: #5f6672;
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -705,7 +705,7 @@ async function vote(msg, rating) {
 
 .example-btn:hover:not(:disabled) {
   background: #f1efff;
-  color: #4a4ac0;
+  color: #0058b0;
 }
 
 .example-btn:disabled {
@@ -733,7 +733,7 @@ async function vote(msg, rating) {
   height: 28px;
   flex: 0 0 28px;
   border-radius: 8px;
-  background: #2563eb;
+  background: #5b5bd6;
   color: #fff;
   font-size: 11px;
   display: inline-flex;
@@ -742,26 +742,26 @@ async function vote(msg, rating) {
 }
 
 .msg-row.user .avatar {
-  background: linear-gradient(135deg, #6d5bd0, #3b82f6);
+  background: #5b5bd6;
   color: #ffffff;
 }
 
 .bubble {
   max-width: 80%;
   background: #ffffff;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
+  border: 1px solid #e4e7ee;
+  border-radius: 12px;
   padding: 8px 10px;
   font-size: 13px;
   line-height: 1.75;
 }
 
 .msg-row.user .bubble {
-  /* 用户气泡：紫蓝渐变，与 AI 白底气泡拉开视觉层级 */
-  background: linear-gradient(135deg, #6d5bd0 0%, #4f6ff0 55%, #3b82f6 100%);
+  /* 用户气泡：Apple 蓝实底，与 AI 白底气泡拉开视觉层级 */
+  background: #5b5bd6;
   border-color: transparent;
   color: #ffffff;
-  box-shadow: 0 6px 18px rgba(91, 91, 214, 0.22);
+  box-shadow: 0 2px 8px rgba(91, 91, 214, 0.2);
 }
 
 .bubble-text {
@@ -775,14 +775,14 @@ async function vote(msg, rating) {
   height: 1em;
   margin-left: 2px;
   vertical-align: -0.15em;
-  background: #2563eb;
+  background: #5b5bd6;
   animation: caret-blink 1s steps(2, start) infinite;
 }
 
 .stream-status {
   margin-top: 6px;
   font-size: 11px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .bubble-foot {
@@ -801,10 +801,10 @@ async function vote(msg, rating) {
 }
 .cite-title { font-size: 11px; color: #64748b; margin-bottom: 4px; }
 .cite-item { font-size: 12px; color: #334155; line-height: 1.7; }
-.cite-no { color: #2563eb; margin-right: 4px; }
+.cite-no { color: #5b5bd6; margin-right: 4px; }
 .cite-doc { font-weight: 600; }
 .cite-pos { color: #64748b; margin-left: 6px; }
-.cite-item a { color: #2563eb; text-decoration: none; }
+.cite-item a { color: #5b5bd6; text-decoration: none; }
 .cite-item a:hover { text-decoration: underline; }
 
 /* 自主大脑执行轨迹 */
@@ -848,14 +848,14 @@ async function vote(msg, rating) {
 .trace-tool {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 600;
-  color: #52525b;
+  color: #5f6672;
 }
 .trace-ok { color: #15803d; font-size: 11px; }
 .trace-ok.bad { color: #b91c1c; }
 .trace-purpose { color: #64748b; }
 .trace-args {
   margin-top: 3px;
-  color: #7c3aed;
+  color: #0058b0;
   word-break: break-all;
 }
 .trace-obs {
@@ -870,10 +870,10 @@ async function vote(msg, rating) {
 
 .chip {
   padding: 1px 6px;
-  border: 1px solid #e4e4e7;
+  border: 1px solid #e4e7ee;
   border-radius: 8px;
   background: #ffffff;
-  color: #52525b;
+  color: #5f6672;
   font-size: 11px;
 }
 
@@ -892,7 +892,7 @@ async function vote(msg, rating) {
 .vote-group { margin-left: auto; display: inline-flex; gap: 4px; }
 
 .vote-btn {
-  border: 1px solid #e4e4e7;
+  border: 1px solid #e4e7ee;
   border-radius: 8px;
   background: #ffffff;
   font-size: 12px;
@@ -901,8 +901,8 @@ async function vote(msg, rating) {
   cursor: pointer;
   color: #71717a;
 }
-.vote-btn:hover:not(:disabled) { border-color: #a1a1aa; }
-.vote-btn.active { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.vote-btn:hover:not(:disabled) { border-color: #9aa1ad; }
+.vote-btn.active { background: #ececfb; border-color: #93c5fd; color: #4a4ac0; }
 .vote-btn:disabled { opacity: 0.55; cursor: default; }
 
 .followups {
@@ -913,15 +913,15 @@ async function vote(msg, rating) {
 }
 
 .followup-btn {
-  border: 1px solid #dbeafe;
+  border: 1px solid #dcdcf9;
   border-radius: 14px;
   background: #f8fafc;
-  color: #1d4ed8;
+  color: #4a4ac0;
   font-size: 12px;
   padding: 4px 10px;
   cursor: pointer;
 }
-.followup-btn:hover:not(:disabled) { background: #eff6ff; }
+.followup-btn:hover:not(:disabled) { background: #ececfb; }
 .followup-btn:disabled { opacity: 0.5; cursor: default; }
 
 .bubble-err {
@@ -955,12 +955,12 @@ async function vote(msg, rating) {
 .typing-text {
   margin-left: 6px;
   font-size: 12px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .chat-foot {
   flex: 0 0 auto;
-  border-top: 1px solid #e4e4e7;
+  border-top: 1px solid #e4e7ee;
   background: #ffffff;
   padding: 10px 16px 14px;
 }
@@ -975,10 +975,10 @@ async function vote(msg, rating) {
 
 .clear-btn {
   margin-left: auto;
-  border: 1px solid #e4e4e7;
+  border: 1px solid #e4e7ee;
   border-radius: 8px;
   background: #ffffff;
-  color: #52525b;
+  color: #5f6672;
   font-size: 12px;
   font-family: inherit;
   padding: 6px 10px;
@@ -1005,8 +1005,8 @@ async function vote(msg, rating) {
   padding: 8px 10px;
   border: 0;
   border-radius: 8px;
-  background: #f4f4f5;
-  color: #18181b;
+  background: #eef0f5;
+  color: #16181d;
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -1023,7 +1023,7 @@ async function vote(msg, rating) {
   padding: 0 14px;
   border: 0;
   border-radius: 8px;
-  background: #2563eb;
+  background: #5b5bd6;
   color: #ffffff;
   font-size: 13px;
   font-weight: 500;
@@ -1033,7 +1033,7 @@ async function vote(msg, rating) {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #4a4ac0;
 }
 
 .send-btn:disabled {
@@ -1081,19 +1081,19 @@ async function vote(msg, rating) {
 .memory-title {
   font-size: 16px;
   font-weight: 650;
-  color: #171a2b;
+  color: #16181d;
 }
 .memory-sub {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: #9297ab;
+  color: #9aa1ad;
 }
 .memory-empty {
   padding: 32px 12px;
   text-align: center;
   font-size: 13px;
-  color: #9297ab;
+  color: #9aa1ad;
 }
 .memory-list {
   display: flex;
@@ -1102,7 +1102,7 @@ async function vote(msg, rating) {
 }
 .memory-item {
   padding: 12px;
-  border: 1px solid #eceef7;
+  border: 1px solid #e4e7ee;
   border-radius: 12px;
   background: #fff;
 }
@@ -1114,14 +1114,14 @@ async function vote(msg, rating) {
 .memory-kind {
   padding: 1px 8px;
   border-radius: 999px;
-  background: #f0eeff;
+  background: #ececfb;
   color: #5b5bd6;
   font-size: 11px;
   font-weight: 600;
 }
 .memory-importance {
   font-size: 11px;
-  color: #9297ab;
+  color: #9aa1ad;
 }
 .memory-del {
   margin-left: auto;
@@ -1135,19 +1135,19 @@ async function vote(msg, rating) {
   margin-top: 8px;
   font-size: 13px;
   line-height: 1.7;
-  color: #171a2b;
+  color: #16181d;
   white-space: pre-wrap;
 }
 .memory-time {
   margin-top: 6px;
   font-size: 11px;
-  color: #9297ab;
+  color: #9aa1ad;
 }
 .memory-back {
   flex: 0 0 auto;
   height: 38px;
   margin-top: auto;
-  border: 1px solid #eceef7;
+  border: 1px solid #e4e7ee;
   border-radius: 10px;
   background: #fff;
   color: #5b5bd6;

@@ -1,37 +1,67 @@
 :root {
-  /* 品牌/数据语义色（预警等级是数据表达，不是装饰） */
-  --qh-red: #e5484d;
-  --qh-orange: #f59e0b;
+  /* ===== 设计 token（cf-*，供 console 组件与全局使用）=====
+     配色原则：中性底 + 单一强调色（靛蓝），绿/橙/红只用于数据语义。
+     旧版是「薄荷绿底 + 珊瑚红强调」，珊瑚红同时承担「主操作」和「预警红」
+     两个含义，与危险色撞车，所以强调色换成与首屏视频同色系的靛蓝。 */
+  --cf-bg: #f7f8fa;
+  --cf-bg-deep: #eef0f5;
+  --cf-surface: rgba(255, 255, 255, 0.78);
+  --cf-surface-solid: #ffffff;
+  --cf-ink: #16181d;
+  --cf-mid: #5f6672;
+  --cf-faint: #9aa1ad;
+  --cf-line: #e4e7ee;
+  --cf-line-strong: #cfd4de;
+  /* 名字是历史遗留（原为珊瑚红），值现在是品牌靛蓝；新代码优先用 --qh-primary */
+  --cf-coral: #5b5bd6;
+  --cf-coral-soft: #ececfb;
+  /* teal / aqua 是「正常·无风险」的语义色，不参与强调，别当主色用 */
+  --cf-teal: #0f9d8a;
+  --cf-teal-soft: #ddf6f1;
+  --cf-aqua: #46c9bf;
+  --cf-warning: #c98900;
+  --cf-danger: #d83b32;
+  --cf-radius: 8px;
+  --cf-shadow: 0 6px 30px rgba(16, 24, 40, 0.08);
+
+  /* ===== 兼容旧变量名（--qh-*）映射到 Medusa：全站组件读这套自动换肤 ===== */
+  /* 预警语义色（数据表达，非装饰，保留红/橙/黄） */
+  --qh-red: #d83b32;
+  --qh-orange: #c98900;
   --qh-yellow: #d4a20a;
-  /* 布局中性色：参考讯飞星辰 MaaS 的冷白 + 紫蓝体系 */
-  --qh-bg: #f5f7fc;
+  /* 布局中性色：冷调灰白 + 近黑文字 */
+  --qh-bg: #f7f8fa;
   --qh-surface: #ffffff;
-  --qh-border: #eceef7;
-  --qh-text: #171a2b;
-  --qh-text-sub: #5b6178;
-  --qh-text-mute: #9297ab;
+  --qh-border: #e4e7ee;
+  --qh-text: #16181d;
+  --qh-text-sub: #5f6672;
+  --qh-text-mute: #9aa1ad;
+  /* 主强调色：靛蓝（按钮/选中/关键强调）。改这一处即可全站换主色 */
   --qh-primary: #5b5bd6;
-  --qh-primary-soft: #f0eeff;
+  --qh-primary-soft: #ececfb;
   --qh-primary-deep: #4a4ac0;
-  --qh-radius-lg: 12px;
-  --qh-radius-xl: 16px;
-  --qh-shadow: 0 2px 10px rgba(33, 40, 90, 0.04), 0 8px 24px rgba(33, 40, 90, 0.04);
-  --qh-shadow-hover: 0 10px 30px rgba(33, 40, 90, 0.1);
-  --qh-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --qh-radius-lg: 8px;
+  --qh-radius-xl: 14px;
+  --qh-shadow: 0 6px 30px rgba(16, 24, 40, 0.08);
+  --qh-shadow-hover: 0 10px 30px rgba(16, 24, 40, 0.12);
+  --qh-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 
-  /* Element Plus 主题色：全站按钮/标签/链接/聚焦环统一到紫蓝 */
+  /* ===== 字体：Inter（标题/数字）+ JetBrains Mono（标签/状态/表格）===== */
+  --cf-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --cf-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Element Plus 主题色：全站按钮/标签/链接/聚焦环统一到靛蓝 */
   --el-color-primary: #5b5bd6;
-  --el-color-primary-light-3: #8585e4;
-  --el-color-primary-light-5: #adadee;
-  --el-color-primary-light-7: #d3d3f6;
-  --el-color-primary-light-8: #e3e3f9;
-  --el-color-primary-light-9: #f0eeff;
+  --el-color-primary-light-3: #8f8fe8;
+  --el-color-primary-light-5: #bdbdf2;
+  --el-color-primary-light-7: #dcdcf9;
+  --el-color-primary-light-8: #ececfb;
+  --el-color-primary-light-9: #f4f4fe;
   --el-color-primary-dark-2: #4a4ac0;
-  --el-border-radius-base: 10px;
-  --el-border-radius-small: 8px;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
 
-  /* Element Plus 字号：默认 14/13/12 在小屏和投影下偏挤，整体抬一档到 15/14/13。
-     改这里即可全站生效（按钮/输入框/表格/标签都读这套变量），不必逐组件覆盖 */
+  /* Element Plus 字号：默认 14/13/12 在小屏和投影下偏挤，整体抬一档到 15/14/13 */
   --el-font-size-extra-large: 22px;
   --el-font-size-large: 18px;
   --el-font-size-medium: 16px;
@@ -46,16 +76,55 @@
 
 body {
   margin: 0;
-  background:
-    radial-gradient(1100px 520px at 82% -220px, rgba(129, 140, 248, 0.18), transparent 65%),
-    radial-gradient(900px 480px at 8% -260px, rgba(56, 189, 248, 0.1), transparent 62%),
-    var(--qh-bg);
-  background-attachment: fixed;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  /* 浅青白底 + 顶部两团极光（靛蓝 / 青）+ 极淡工程网格。
+     光晕用 fixed 附着：滚动时页面内容在光里走，不会出现“背景跟着滑”的廉价感。 */
+  background-color: var(--cf-bg);
+  background-image:
+    radial-gradient(1200px 520px at 6% -10%, rgba(91, 91, 214, 0.13), transparent 62%),
+    radial-gradient(1000px 460px at 98% -6%, rgba(15, 157, 138, 0.11), transparent 58%),
+    linear-gradient(rgba(15, 157, 138, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 157, 138, 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px;
+  background-attachment: fixed, fixed, scroll, scroll;
+  font-family: var(--cf-font-sans);
   font-size: 15px;
   line-height: 1.65;
-  color: var(--qh-text);
+  color: var(--cf-ink);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(91, 91, 214, 0.18);
+  color: var(--cf-ink);
+}
+
+/* 统一聚焦环：键盘可达性红线，任何组件都不许吃掉 focus-visible */
+:focus-visible {
+  outline: 2px solid rgba(91, 91, 214, 0.55);
+  outline-offset: 2px;
+}
+
+/* 细滚动条：鼠标不动时几乎看不见，滚动时才显出靛蓝滑块 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 91, 214, 0.28) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: rgba(91, 91, 214, 0.26);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(91, 91, 214, 0.42);
 }
 
 .page {
@@ -75,11 +144,10 @@ body {
   margin-bottom: 10px;
 }
 
-/* 卡片（含 Element Plus 的 el-card）：白底 + 描边 + 12px 圆角；
-   hover 仅允许 2px 抬升与轻量阴影扩散，保证阅读稳定 */
+/* 卡片（含 Element Plus 的 el-card）：浅青白底 + 细线 + 8px 圆角 */
 .el-card {
   border: 1px solid var(--qh-border) !important;
-  border-radius: var(--qh-radius-xl) !important;
+  border-radius: var(--qh-radius-lg) !important;
   background: var(--qh-surface);
   box-shadow: var(--qh-shadow);
   transition:
@@ -89,8 +157,7 @@ body {
 }
 
 .el-card:hover {
-  transform: translateY(-2px);
-  border-color: #e2e5f3 !important;
+  border-color: var(--cf-line-strong) !important;
   box-shadow: var(--qh-shadow-hover);
 }
 
@@ -98,43 +165,64 @@ body {
   border-bottom-color: var(--qh-border) !important;
 }
 
-/* 全站按钮/输入框统一 Bento token */
+/* 全站按钮：Medusa 圆角 + 珊瑚红主按钮 */
 .el-button {
-  border-radius: 14px;
+  border-radius: var(--qh-radius-lg) !important;
   font-weight: 500;
   transition:
-    transform 180ms var(--qh-ease),
-    box-shadow 180ms var(--qh-ease),
-    background-color 180ms var(--qh-ease);
+    transform 300ms var(--qh-ease),
+    box-shadow 300ms var(--qh-ease),
+    background-color 300ms var(--qh-ease);
 }
 
 .el-button:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
-.el-button--primary {
-  --el-button-bg-color: #5b5bd6;
-  --el-button-border-color: #5b5bd6;
-  --el-button-hover-bg-color: #4a4ac0;
-  --el-button-hover-border-color: #4a4ac0;
-  --el-button-active-bg-color: #3f3fae;
-  --el-button-active-border-color: #3f3fae;
-  box-shadow: 0 6px 16px rgba(91, 91, 214, 0.22);
+/* 主按钮：靛蓝→深靛蓝渐变 + 内高光 + 落影。
+   只作用于默认形态（plain / text / link 保持文字形态，不被填色）。 */
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: transparent;
+  --el-button-hover-bg-color: transparent;
+  --el-button-active-bg-color: transparent;
+  border-color: transparent;
+  background-image: linear-gradient(135deg, #6d5cf6 0%, #5b5bd6 52%, #4a4ac0 100%);
+  box-shadow:
+    0 6px 16px rgba(79, 70, 229, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
-.el-button--primary:hover {
-  box-shadow: 0 8px 20px rgba(91, 91, 214, 0.3);
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+  border-color: transparent;
+  background-image: linear-gradient(135deg, #7c6cf8 0%, #5f5fdd 52%, #4f46e5 100%);
+  box-shadow:
+    0 10px 24px rgba(79, 70, 229, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  transform: translateY(-1px);
 }
 
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active {
+  transform: translateY(0) scale(0.99);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.28);
+}
+
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover {
+  background-image: none;
+  box-shadow: none;
+  transform: none;
+}
+
+/* 输入框：浅青底填充，聚焦亮起珊瑚环 */
 .el-input__wrapper,
 .el-select__wrapper,
 .el-textarea__inner {
-  border-radius: 10px;
-  background: #f7f8fd;
-  box-shadow: 0 0 0 1px var(--qh-border) inset;
+  border-radius: var(--qh-radius-lg);
+  background: var(--cf-bg-deep);
+  box-shadow: 0 0 0 1px transparent inset;
   transition:
-    box-shadow 220ms var(--qh-ease),
-    background-color 220ms var(--qh-ease);
+    box-shadow 300ms var(--qh-ease),
+    background-color 300ms var(--qh-ease);
 }
 
 .el-input__wrapper.is-focus,
@@ -142,11 +230,11 @@ body {
 .el-textarea__inner:focus {
   background: #fff;
   box-shadow:
-    0 0 0 1px #8585e4 inset,
-    0 0 0 4px rgba(91, 91, 214, 0.14) !important;
+    0 0 0 1px #5b5bd6 inset,
+    0 0 0 4px rgba(91, 91, 214, 0.22) !important;
 }
 
-/* 路由切换动画：轻量淡入位移，不用弹性曲线 */
+/* 路由切换动画 */
 .page-fade-enter-active,
 .page-fade-leave-active {
   transition: opacity 240ms var(--qh-ease), transform 240ms var(--qh-ease);
@@ -162,29 +250,62 @@ body {
   transform: translateY(-4px);
 }
 
-/* 弹层统一：对话框/气泡卡/消息条圆角随品牌，阴影用软阴影 */
+/* 骨架屏：不用渐变，用纯中性灰静止块 */
+.el-skeleton__item,
+.el-skeleton__p,
+.el-skeleton__text,
+.el-skeleton__h1,
+.el-skeleton__h3,
+.el-skeleton__button,
+.el-skeleton__image {
+  background-image: none !important;
+  background-color: #eef0f5 !important;
+}
+
+/* 信任说明条：原先是 el-alert success，通栏浅绿块的视觉重量盖过了正文。
+   降级成中性底脚注，绿色只保留在勾选图标上。 */
+.trust-bar.el-alert {
+  background: var(--cf-surface-solid);
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  padding: 9px 14px;
+  color: var(--cf-mid);
+}
+
+.trust-bar.el-alert .el-alert__title {
+  color: var(--cf-mid);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.trust-bar.el-alert .el-alert__icon {
+  color: var(--cf-teal);
+  font-size: 15px;
+}
+
+/* 弹层统一 */
 .el-dialog {
   border-radius: var(--qh-radius-xl) !important;
-  box-shadow: 0 18px 50px rgba(33, 40, 90, 0.16);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
 }
 
 .el-popper.is-light {
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(33, 40, 90, 0.1);
+  border-radius: var(--qh-radius-lg);
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.1);
 }
 
 .el-message {
-  border-radius: 12px;
+  border-radius: var(--qh-radius-lg);
 }
 
-/* 单选按钮组（身份切换等）：选中态走紫蓝实底，不做默认蓝 */
+/* 单选按钮组：选中态走珊瑚红实底 */
 .el-radio-button__original-radio:checked + .el-radio-button__inner {
   background-color: var(--qh-primary);
   border-color: var(--qh-primary);
   box-shadow: -1px 0 0 0 var(--qh-primary);
 }
 
-/* 长文本限制行宽，保证一行不超过 65~75 字符 */
+/* 长文本限制行宽 */
 .el-descriptions__body,
 .reason-line,
 .tag-line,
@@ -207,20 +328,17 @@ p {
   }
 }
 
-/* ---------- 侧边抽屉（el-drawer）内统一排版 ----------
-   抽屉比页面窄，el-descriptions 的标签列会被挤到一字宽，
-   「学历/专业/年龄」竖排成一字一行、表格还限宽留白。
-   这里统一：标签不折行 + 淡灰底 + 整体圆角铺满；区块标题加品牌色竖条。 */
+/* ---------- 侧边抽屉（el-drawer）内统一排版 ---------- */
 .el-drawer .drawer-panel .el-descriptions__body {
   max-width: none;
-  border-radius: 10px;
+  border-radius: var(--qh-radius-lg);
   overflow: hidden;
 }
 
 .el-drawer .drawer-panel .el-descriptions__label.el-descriptions__cell {
   width: 1%;
   white-space: nowrap;
-  background: #fafafa;
+  background: var(--cf-bg-deep);
   color: var(--qh-text-sub);
   font-size: 13.5px;
   font-weight: 500;
@@ -251,13 +369,10 @@ p {
   width: 3px;
   height: 14px;
   border-radius: 2px;
-  background: #2563eb;
+  background: var(--qh-primary);
 }
 
-/* ---------- 移动端触摸目标 ----------
-   桌面端按鼠标精度设计（EP 小按钮 24px、行内链接只有文字高），手指按不准。
-   1024px 以下：小按钮抬到 32px，行内链接用伪元素向外扩命中区——
-   扩的是命中区不是盒子，所以排版与视觉都不变，只是点得中。 */
+/* ---------- 移动端触摸目标 ---------- */
 @media (max-width: 1023px) {
   .el-button--small,
   .el-button--mini {
@@ -279,9 +394,103 @@ p {
     inset: -7px -4px;
   }
 
-  /* 图片与卡片链接多为块级，本身已够大，不必再外扩 */
   a.img-link::after,
   a.block-link::after {
     content: none;
+  }
+}
+
+/* ---------- 统一视觉收口：减少“白板感”，让内容层级更清晰 ---------- */
+.page-main {
+  position: relative;
+}
+
+.page-main::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 180px;
+  pointer-events: none;
+  background: radial-gradient(circle at 12% 0%, rgba(91, 91, 214, 0.1), transparent 44%),
+    radial-gradient(circle at 88% 0%, rgba(15, 157, 138, 0.09), transparent 40%);
+  opacity: 0.85;
+}
+
+.page-head,
+.bento-page,
+.page-main > .page {
+  position: relative;
+  z-index: 1;
+}
+
+.bento-card,
+.el-card {
+  box-shadow: 0 10px 28px rgba(14, 58, 61, 0.06);
+}
+
+.bento-card:hover,
+.el-card:hover {
+  transform: translateY(-2px);
+}
+
+.hero-card:hover,
+.page-hero:hover {
+  transform: none;
+}
+
+/* ---------- 数据表：表头浅染、行悬停极淡靛蓝、数字等宽 ---------- */
+.el-table {
+  --el-table-header-bg-color: #f6f7fc;
+  --el-table-row-hover-bg-color: rgba(91, 91, 214, 0.055);
+  --el-table-border-color: var(--cf-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.el-table th.el-table__cell {
+  background: linear-gradient(180deg, #f8f9fe, #f4f5fb) !important;
+  color: var(--cf-mid);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+}
+
+.el-table td.el-table__cell {
+  color: var(--cf-ink);
+}
+
+/* 关键数字（金额、分数、名次）用等宽数字，纵向对齐不跳动 */
+.bento-stat,
+.el-table,
+.metric-value,
+.stat-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 标签/徽标：浅底 + 细边，深色字保证 4.5:1 ---------- */
+.el-tag {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.el-tag--primary.el-tag--light {
+  background: var(--qh-primary-soft);
+  border-color: #dcdcf9;
+  color: var(--qh-primary-deep);
+}
+
+/* ---------- 空状态：别让它像报错 ---------- */
+.el-empty__description p {
+  color: var(--cf-faint);
+  font-size: 13.5px;
+}
+
+@media (max-width: 1023px) {
+  .page-main::before {
+    height: 120px;
+  }
+
+  .bento-card:hover,
+  .el-card:hover {
+    transform: none;
   }
 }

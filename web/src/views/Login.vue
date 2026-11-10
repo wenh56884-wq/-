@@ -1,11 +1,12 @@
 <template>
   <div class="login-shell">
-    <div class="login-wrap">
-      <!-- 左：渐变品牌区 -->
-      <section class="brand-side">
+    <!-- 左：3D 生涯导航核心 + 品牌叠层 -->
+    <section class="field-side">
+      <VideoBackdrop class="login-video" :scrim="0" object-position="51% 8%" />
+      <div class="field-overlay">
         <div class="brand-top">
           <span class="brand-mark">启</span>
-          <span class="brand-kicker">QIHANG · 生涯与岗位匹配</span>
+          <span class="brand-kicker">QIHANG · 生涯领域控制台</span>
         </div>
 
         <div class="brand-copy">
@@ -19,131 +20,114 @@
             <span>多智能体</span>
             <span>多租户隔离</span>
           </div>
+
+          <!-- 落地门：先看到品牌介绍，点「开始使用」才放登录表单 -->
+          <button
+            type="button"
+            class="enter-btn"
+            :class="{ 'is-gone': stage !== 'welcome' }"
+            @click="enterLogin"
+          >
+            开始使用
+            <svg class="enter-arw" viewBox="0 0 12 10" fill="none" aria-hidden="true">
+              <path d="M0.8 5h10M7.1 1.4 10.9 5l-3.8 3.6" stroke="currentColor"
+                    stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右：登录控制卡（点「开始使用」后才出现） -->
+    <section class="form-side" :class="{ 'is-live': stage === 'login' }" :aria-hidden="stage !== 'login'">
+      <div class="form-card">
+        <div class="panel-head">
+          <div>
+            <p class="panel-eyebrow">WELCOME BACK</p>
+            <h2 class="panel-title">登录启航</h2>
+            <p class="panel-sub">选择身份，进入你的工作台</p>
+          </div>
+          <span class="panel-badge"><i />安全登录</span>
         </div>
 
-        <div class="brand-metrics">
-          <div>
-            <b>10,000</b>
-            <span>在校学生</span>
-          </div>
-          <div>
-            <b>2,931</b>
-            <span>岗位画像</span>
-          </div>
-          <div>
-            <b>3,477</b>
-            <span>图谱节点</span>
-          </div>
+        <el-form label-position="top" class="login-form" @submit.prevent="onLogin">
+          <el-form-item label="身份">
+            <el-radio-group v-model="form.role" class="role-switch">
+              <el-radio-button value="teacher">教师端</el-radio-button>
+              <el-radio-button value="student">学生端</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item :label="form.role === 'teacher' ? '工号' : '学号'">
+            <el-input
+              ref="accountRef"
+              v-model="form.account"
+              size="large"
+              autocomplete="username"
+              :placeholder="form.role === 'teacher' ? '如 T001' : '如 AI20230001'"
+            />
+          </el-form-item>
+
+          <el-form-item label="口令">
+            <el-input
+              v-model="form.password"
+              size="large"
+              type="password"
+              show-password
+              autocomplete="current-password"
+              placeholder="学生初始口令为学号"
+              @keyup.enter="onLogin"
+            />
+          </el-form-item>
+
+          <el-button class="login-btn" :loading="loading" @click="onLogin">
+            进入工作台
+          </el-button>
+        </el-form>
+
+        <div class="demo-box">
+          <strong>演示账号（点一下自动填入）</strong>
+          <button type="button" class="demo-item"
+                  @click="fillDemo('teacher', 'T001', 'teacher@123')">
+            教师：T001 / teacher@123
+          </button>
+          <button type="button" class="demo-item"
+                  @click="fillDemo('student', 'AI20230001', 'AI20230001')">
+            学生（大四）：AI20230001 / AI20230001
+          </button>
+          <button type="button" class="demo-item"
+                  @click="fillDemo('student', 'AI20260001', 'AI20260001')">
+            学生（大一）：AI20260001 / AI20260001
+          </button>
         </div>
-      </section>
-
-      <!-- 右：白色表单卡 -->
-      <section class="form-side">
-        <div class="form-card">
-          <div class="panel-head">
-            <div>
-              <p class="panel-eyebrow">欢迎回来</p>
-              <h2 class="panel-title">登录启航</h2>
-              <p class="panel-sub">选择身份，进入你的工作台</p>
-            </div>
-            <span class="panel-badge"><i />安全登录</span>
-          </div>
-
-          <el-form label-position="top" class="login-form" @submit.prevent="onLogin">
-            <el-form-item label="身份">
-              <el-radio-group v-model="form.role" class="role-switch">
-                <el-radio-button value="teacher">教师端</el-radio-button>
-                <el-radio-button value="student">学生端</el-radio-button>
-              </el-radio-group>
-            </el-form-item>
-
-            <el-form-item :label="form.role === 'teacher' ? '工号' : '学号'">
-              <el-input
-                v-model="form.account"
-                size="large"
-                autocomplete="username"
-                :placeholder="form.role === 'teacher' ? '如 T001' : '如 AI20230001'"
-              />
-            </el-form-item>
-
-            <el-form-item label="口令">
-              <el-input
-                v-model="form.password"
-                size="large"
-                type="password"
-                show-password
-                autocomplete="current-password"
-                placeholder="学生初始口令为学号"
-                @keyup.enter="onLogin"
-              />
-            </el-form-item>
-
-            <el-button class="login-btn" :loading="loading" @click="onLogin">
-              进入工作台
-            </el-button>
-          </el-form>
-
-          <div class="demo-box">
-            <strong>演示账号（点一下自动填入）</strong>
-            <button type="button" class="demo-item"
-                    @click="fillDemo('teacher', 'T001', 'teacher@123')">
-              教师：T001 / teacher@123
-            </button>
-            <button type="button" class="demo-item"
-                    @click="fillDemo('student', 'AI20230001', 'AI20230001')">
-              学生（大四）：AI20230001 / AI20230001
-            </button>
-            <button type="button" class="demo-item"
-                    @click="fillDemo('student', 'AI20260001', 'AI20260001')">
-              学生（大一）：AI20260001 / AI20260001
-            </button>
-          </div>
-        </div>
-
-        <ul class="feature-list">
-          <li>
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 10-4-2.5-7-5.5-7-10V6l7-3z" /></svg>
-            </span>
-            <b>学业预警</b><span>三色风险 + 逐条归因</span>
-          </li>
-          <li>
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
-            </span>
-            <b>岗位匹配</b><span>四维加权推荐</span>
-          </li>
-          <li>
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-            </span>
-            <b>模拟面试</b><span>逐题点评与报告</span>
-          </li>
-          <li>
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="3" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
-            </span>
-            <b>数据隔离</b><span>租户过滤在数据层</span>
-          </li>
-        </ul>
-      </section>
-    </div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import http, { saveSession } from '../api/http'
+import VideoBackdrop from '../components/VideoBackdrop.vue'
 
 const form = reactive({ role: 'teacher', account: 'T001', password: 'teacher@123' })
 const loading = ref(false)
 const router = useRouter()
 const route = useRoute()
 
-// 演示账号一键填充：省得手输学号时把 8 位写成 7 位（AI20260001 vs AI2026001）
+/* 落地门：welcome 只展示品牌层，点「开始使用」才放登录表单 */
+const stage = ref('welcome')
+const accountRef = ref(null)
+
+function enterLogin() {
+  stage.value = 'login'
+  nextTick(() => accountRef.value?.focus())
+}
+
+// 演示账号一键填充：省得手输学号时把 8 位写成 7 位
 function fillDemo(role, account, password) {
   form.role = role
   form.account = account
@@ -177,58 +161,159 @@ async function onLogin() {
 
 <style scoped>
 .login-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 28px 24px;
-  background:
-    radial-gradient(900px 520px at 8% 0%, #eef0ff 0%, transparent 60%),
-    radial-gradient(760px 460px at 100% 100%, #e8f6ff 0%, transparent 55%),
-    var(--qh-bg, #f5f7fc);
-}
-
-.login-wrap {
-  width: min(1180px, 100%);
-  display: grid;
-  grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
-  gap: 22px;
-  align-items: stretch;
-}
-
-/* ---------- 左：渐变品牌区 ---------- */
-.brand-side {
   position: relative;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 76% 12%, rgba(70, 201, 191, 0.12), transparent 30%),
+    var(--cf-bg);
+}
+
+/* 左：3D 生涯导航核心 */
+.field-side {
+  position: relative;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 100%;
+  display: flex;
+  min-height: 100vh;
+  isolation: isolate;
+  overflow: hidden;
+  background: #082d35;
+}
+
+.field-side::before,
+.field-side::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(2px);
+  display: none;
+}
+
+.field-side::before {
+  width: 58vw;
+  height: 58vw;
+  left: -18vw;
+  top: -20vw;
+  background: radial-gradient(circle, rgba(70, 201, 191, 0.24), transparent 66%);
+  animation: login-orbit-glow 12s ease-in-out infinite alternate;
+}
+
+.field-side::after {
+  width: 44vw;
+  height: 44vw;
+  right: -18vw;
+  bottom: -22vw;
+  background: radial-gradient(circle, rgba(91, 91, 214, 0.16), transparent 68%);
+  animation: login-orbit-glow 15s ease-in-out -4s infinite alternate-reverse;
+}
+
+.field-side :deep(.career-field) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(21, 89, 92, 0.72), transparent 28%),
+    linear-gradient(145deg, #082d35 0%, #0b3d43 52%, #142b45 100%);
+}
+
+.field-side :deep(.login-video) {
+  z-index: 0;
+  background: #000;
+}
+
+.field-side :deep(.login-video .vb-video) {
+  width: max(100vw, calc(100dvh * 1.6));
+  height: max(62.5vw, 100dvh);
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  object-fit: cover;
+  object-position: 51% 8%;
+}
+
+.field-side :deep(.login-video .vb-scrim) {
+  background: transparent !important;
+}
+
+.field-side :deep(.career-field::before) {
+  background-image:
+    linear-gradient(rgba(143, 218, 210, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(143, 218, 210, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 82%);
+}
+
+.field-side :deep(.career-field::after) {
+  inset: 22px;
+  border-color: rgba(143, 218, 210, 0.2);
+  border-radius: 18px;
+}
+
+.field-side :deep(.career-field__canvas) {
+  opacity: 0.9;
+}
+
+.field-side :deep(.career-field__topline),
+.field-side :deep(.career-field__footer) {
+  color: rgba(209, 242, 238, 0.62);
+}
+
+.field-side :deep(.career-field__brand) {
+  color: #d1f2ee;
+}
+
+.field-side :deep(.career-field__mode) {
+  border-left-color: rgba(143, 218, 210, 0.28);
+}
+
+.field-side :deep(.career-field__axis--x) {
+  background: linear-gradient(90deg, transparent, rgba(143, 218, 210, 0.3), transparent);
+}
+
+.field-side :deep(.career-field__axis--y) {
+  background: linear-gradient(180deg, transparent, rgba(143, 218, 210, 0.24), transparent);
+}
+
+.field-side :deep(.career-field__node) {
+  border-color: rgba(143, 218, 210, 0.24);
+  background: rgba(5, 34, 41, 0.48);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  color: #d1f2ee;
+}
+
+.field-side :deep(.career-field__node small) {
+  color: rgba(183, 225, 220, 0.6);
+}
+
+.field-side :deep(.career-field__fallback-ring) {
+  border-color: rgba(143, 218, 210, 0.24);
+}
+
+.field-side :deep(.career-field__fallback-ring--two) {
+  border-color: rgba(255, 134, 108, 0.42);
+}
+
+.field-overlay {
+  position: relative;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 26px;
-  padding: 34px 36px;
-  border-radius: var(--qh-radius-xl, 16px);
-  color: #fff;
-  background:
-    radial-gradient(120% 130% at 84% -6%, rgba(255, 255, 255, 0.24), transparent 46%),
-    linear-gradient(135deg, #6366f1 0%, #5b5bd6 52%, #7c3aed 100%);
-  box-shadow: 0 14px 34px rgba(91, 91, 214, 0.26);
-}
-
-/* 细网格底纹：不外链图片，纯 CSS */
-.brand-side::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: linear-gradient(200deg, rgba(0, 0, 0, 0.85), transparent 62%);
-  -webkit-mask-image: linear-gradient(200deg, rgba(0, 0, 0, 0.85), transparent 62%);
+  gap: 24px;
+  padding: clamp(28px, 5vw, 68px);
+  width: 100%;
   pointer-events: none;
-}
-
-.brand-side > * {
-  position: relative;
 }
 
 .brand-top {
@@ -238,32 +323,46 @@ async function onLogin() {
 }
 
 .brand-mark {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #7c6cf8 0%, #5b5bd6 52%, #0f9d8a 120%);
+  color: #fff;
+  font-size: 19px;
   font-weight: 700;
+  box-shadow:
+    0 8px 22px rgba(91, 91, 214, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .brand-kicker {
+  font-family: var(--cf-font-mono);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(209, 242, 238, 0.76);
 }
 
+/* 标题做轻微渐变字：白 → 浅青，深色视频上更亮眼，也不影响可读性 */
 .brand-title {
   margin: 0;
-  font-size: clamp(28px, 2.6vw, 38px);
-  line-height: 1.18;
+  font-size: clamp(26px, 2.4vw, 36px);
+  line-height: 1.2;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  color: #f5fffd;
+  background: linear-gradient(118deg, #ffffff 0%, #eafffb 46%, #b9f3ea 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
   text-wrap: balance;
+  /* 视频里有亮区，给一行极淡的投影兜底行高对比 */
+  filter: drop-shadow(0 2px 18px rgba(2, 20, 28, 0.5));
 }
 
 .brand-sub {
@@ -271,7 +370,7 @@ async function onLogin() {
   max-width: 36ch;
   font-size: 14px;
   line-height: 1.7;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(209, 242, 238, 0.72);
 }
 
 .brand-chips {
@@ -284,56 +383,145 @@ async function onLogin() {
 .brand-chips span {
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  background: rgba(255, 255, 255, 0.14);
-  font-size: 12px;
+  border: 1px solid rgba(143, 218, 210, 0.3);
+  background: rgba(5, 34, 41, 0.34);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  font-family: var(--cf-font-mono);
+  font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(232, 255, 251, 0.9);
+  transition: border-color 220ms var(--qh-ease), background-color 220ms var(--qh-ease),
+    transform 220ms var(--qh-ease);
 }
 
-.brand-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.24);
+.brand-chips span:hover {
+  border-color: rgba(185, 243, 234, 0.5);
+  background: rgba(15, 157, 138, 0.22);
+  transform: translateY(-1px);
 }
 
-.brand-metrics div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* 落地门的「开始使用」：白底胶囊 + 箭头，视频之上要够亮才显眼 */
+.enter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 24px;
+  padding: 13px 22px 13px 26px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--cf-ink, #0d2b30);
+  font-family: var(--cf-font-sans, inherit);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 10px 30px rgba(1, 23, 31, 0.32);
+  transition:
+    background-color 300ms var(--qh-ease),
+    box-shadow 300ms var(--qh-ease),
+    transform 300ms var(--qh-ease),
+    opacity 240ms ease,
+    visibility 0s;
 }
 
-.brand-metrics b {
-  font-size: 22px;
-  font-weight: 680;
-  font-variant-numeric: tabular-nums;
+.enter-btn:hover {
+  background: #f2fffc;
+  box-shadow: 0 14px 38px rgba(1, 23, 31, 0.38);
 }
 
-.brand-metrics span {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
+.enter-btn:active {
+  transform: scale(0.98);
 }
 
-/* ---------- 右：白色表单卡 + 能力清单 ---------- */
+.enter-arw {
+  width: 13px;
+  height: 11px;
+  flex: 0 0 auto;
+  display: block;
+  transition: transform 300ms var(--qh-ease);
+}
+
+.enter-btn:hover .enter-arw {
+  transform: translateX(3px);
+}
+
+/* 点下去之后整颗按钮退场，让位给登录卡（同样只淡出，不位移） */
+.enter-btn.is-gone {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    visibility 0s linear 180ms;
+}
+
+@keyframes login-orbit-glow {
+  from { transform: translate3d(-2%, -1%, 0) scale(0.96); opacity: 0.72; }
+  to { transform: translate3d(3%, 2%, 0) scale(1.04); opacity: 1; }
+}
+
+/* 右：登录控制卡 */
 .form-side {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  width: 100%;
+  max-width: none;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
   justify-content: center;
-  min-width: 0;
+  align-items: center;
+  padding: 32px;
+  background: transparent;
+  pointer-events: none;
+  /* 落地门：默认收起，点「开始使用」后淡入。
+     只做透明度 —— 位移和缩放会读成「弹窗跳出」，跟整页的静态气质冲突。
+     visibility 负责把整块从 Tab 序和读屏里摘掉。 */
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 240ms ease,
+    visibility 0s linear 240ms;
+}
+
+.form-side.is-live {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 240ms ease,
+    visibility 0s;
 }
 
 .form-card {
+  position: relative;
+  width: min(440px, calc(100vw - 48px));
   padding: 30px 32px;
-  background: var(--qh-surface, #fff);
-  border: 1px solid var(--qh-border, #eceef7);
-  border-radius: var(--qh-radius-xl, 16px);
-  box-shadow: var(--qh-shadow, 0 2px 10px rgba(33, 40, 90, 0.04), 0 8px 24px rgba(33, 40, 90, 0.04));
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(228, 231, 238, 0.92);
+  border-radius: var(--qh-radius-xl);
+  box-shadow:
+    0 30px 80px rgba(1, 23, 31, 0.34),
+    0 2px 8px rgba(1, 23, 31, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.6) inset;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  pointer-events: auto;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+
+/* 卡片顶部一道靛蓝→青的渐变发丝线：整块玻璃立起来的关键一笔 */
+.form-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #6d5cf6, #5b5bd6 46%, #0f9d8a);
 }
 
 .panel-head {
@@ -345,23 +533,24 @@ async function onLogin() {
 
 .panel-eyebrow {
   margin: 0 0 4px;
+  font-family: var(--cf-font-mono);
   font-size: 12px;
   font-weight: 600;
-  color: #9297ab;
+  color: var(--cf-teal);
 }
 
 .panel-title {
   margin: 0;
-  font-size: 28px;
-  font-weight: 680;
+  font-size: 26px;
+  font-weight: 700;
   line-height: 1.2;
-  color: #171a2b;
+  color: var(--cf-ink);
 }
 
 .panel-sub {
   margin: 6px 0 0;
   font-size: 13px;
-  color: #5b6178;
+  color: var(--cf-mid);
 }
 
 .panel-badge {
@@ -370,9 +559,10 @@ async function onLogin() {
   gap: 6px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #f0fdf4;
-  color: #15803d;
-  font-size: 12px;
+  background: var(--cf-teal-soft);
+  color: var(--cf-teal);
+  font-family: var(--cf-font-mono);
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -381,7 +571,7 @@ async function onLogin() {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #22c55e;
+  background: var(--cf-teal);
 }
 
 .login-form {
@@ -400,16 +590,10 @@ async function onLogin() {
 
 .role-switch :deep(.el-radio-button__inner) {
   width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--qh-border, #eceef7);
+  border-radius: var(--qh-radius-lg);
+  border: 1px solid var(--cf-line);
   box-shadow: none;
   transition: all 220ms ease;
-}
-
-.role-switch :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background: var(--qh-primary, #5b5bd6);
-  border-color: var(--qh-primary, #5b5bd6);
-  color: #fff;
 }
 
 .login-btn {
@@ -417,41 +601,53 @@ async function onLogin() {
   height: 46px;
   margin-top: 4px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--qh-radius-lg);
   font-size: 15px;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #6366f1, #5b5bd6);
-  --el-button-bg-color: #5b5bd6;
-  --el-button-border-color: #5b5bd6;
-  --el-button-hover-bg-color: #4a4ac0;
-  --el-button-hover-border-color: #4a4ac0;
-  --el-button-active-bg-color: #3f3fae;
-  transition: transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+  background: transparent;
+  --el-button-bg-color: transparent;
+  --el-button-border-color: transparent;
+  --el-button-hover-bg-color: transparent;
+  --el-button-hover-border-color: transparent;
+  --el-button-active-bg-color: transparent;
+  background-image: linear-gradient(135deg, #6d5cf6 0%, #5b5bd6 52%, #4a4ac0 100%);
+  box-shadow:
+    0 10px 24px rgba(79, 70, 229, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition:
+    transform 300ms var(--qh-ease),
+    box-shadow 300ms var(--qh-ease),
+    background-image 300ms var(--qh-ease);
 }
 
 .login-btn:hover {
+  background-image: linear-gradient(135deg, #7c6cf8 0%, #5f5fdd 52%, #4f46e5 100%);
+  box-shadow:
+    0 14px 30px rgba(79, 70, 229, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(91, 91, 214, 0.32);
 }
 
 .login-btn:active {
-  transform: scale(0.98);
+  transform: translateY(0) scale(0.99);
 }
 
 .demo-box {
   display: grid;
   gap: 5px;
   padding: 12px 14px;
-  border: 1px solid var(--qh-border, #eceef7);
-  border-radius: 14px;
-  background: #f7f8fd;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--qh-radius-lg);
+  background: var(--cf-bg-deep);
+  font-family: var(--cf-font-mono);
   font-size: 12px;
-  color: #5b6178;
+  color: var(--cf-mid);
 }
 
 .demo-box strong {
-  color: #171a2b;
+  color: var(--cf-ink);
+  font-family: var(--cf-font-sans);
   font-size: 12px;
 }
 
@@ -461,7 +657,7 @@ async function onLogin() {
   background: none;
   font: inherit;
   font-size: 12px;
-  color: var(--qh-primary, #5b5bd6);
+  color: var(--cf-coral);
   text-align: left;
   cursor: pointer;
 }
@@ -470,95 +666,85 @@ async function onLogin() {
   text-decoration: underline;
 }
 
-.feature-list {
-  margin: 0;
-  padding: 14px 18px;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 18px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid var(--qh-border, #eceef7);
-  border-radius: 14px;
-}
-
-.feature-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 12.5px;
-  color: #5b6178;
-}
-
-.feature-list b {
-  flex: 0 0 auto;
-  color: #171a2b;
-  font-weight: 600;
-}
-
-.feature-list li span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.feature-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  border-radius: 9px;
-  background: var(--qh-primary-soft, #f0eeff);
-  color: var(--qh-primary, #5b5bd6);
-}
-
-.feature-icon svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* ---------- 响应式 ---------- */
+/* 响应式：移动端堆叠，3D 核心降为矮横幅，登录卡在下方 */
 @media (max-width: 1023px) {
-  .login-wrap {
-    grid-template-columns: 1fr;
-    max-width: 560px;
-    margin: 0 auto;
+  .login-shell {
+    min-height: 100svh;
   }
 
-  .brand-side {
-    padding: 24px 24px 22px;
-    gap: 18px;
+  .field-side {
+    min-height: 100svh;
   }
 
-  .brand-metrics {
-    padding-top: 14px;
+  .field-side::before {
+    width: 90vw;
+    height: 90vw;
+    left: -24vw;
+    top: -42vw;
   }
 
-  .brand-metrics b {
-    font-size: 18px;
+  .field-side::after {
+    width: 70vw;
+    height: 70vw;
+    right: -28vw;
+    bottom: -48vw;
+  }
+
+  .field-overlay {
+    padding: 20px 20px 18px;
+    gap: 14px;
+  }
+
+  .brand-title {
+    font-size: 22px;
+  }
+
+  .brand-sub {
+    font-size: 13px;
+  }
+
+  .field-side :deep(.career-field__node) {
+    background: rgba(5, 34, 41, 0.58);
+  }
+
+  .form-side {
+    padding: 20px;
   }
 
   .form-card {
+    width: min(440px, calc(100vw - 40px));
     padding: 24px 22px;
+  }
+
+  .field-overlay {
+    padding: 20px;
+  }
+
+  .brand-copy {
+    max-width: 260px;
+    margin-top: 80px;
+  }
+
+  /* 压暗文案但不动 .brand-copy 整块 —— 里面的「开始使用」按钮不能跟着变淡
+    （父级 opacity 会成组生效，子元素无法超出） */
+  .brand-title,
+  .brand-sub,
+  .brand-chips {
+    opacity: 0.72;
   }
 }
 
-@media (max-width: 700px) {
-  .login-shell {
-    padding: 16px 12px;
-    align-items: flex-start;
+@media (prefers-reduced-motion: reduce) {
+  .field-side::before,
+  .field-side::after {
+    animation: none;
   }
 
-  .feature-list {
-    grid-template-columns: 1fr;
+  .form-side,
+  .form-side.is-live,
+  .enter-btn,
+  .enter-arw {
+    transition: none;
   }
 }
 </style>

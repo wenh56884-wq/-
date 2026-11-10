@@ -3,6 +3,7 @@
     <div class="bento-grid">
     <!-- Hero：一句话结论 + 关键指标 + 主按钮。数值取自 class-overview / warnings 的分布 -->
     <section class="bento-card bento-span-4 page-hero">
+      <VideoBackdrop :scrim="0.5" object-position="50% 40%" />
       <div class="ph-main">
         <div class="ph-left">
           <p class="ph-eyebrow">本学期结论 · {{ overview.term || term || '-' }}</p>
@@ -426,11 +427,12 @@ import * as echarts from 'echarts'
 import http from '../api/http'
 import router from '../router'
 import CountNumber from '../components/CountNumber.vue'
+import VideoBackdrop from '../components/VideoBackdrop.vue'
 import { useClock } from '../composables/useSystemStatus'
 
 const LEVEL_TEXT = { red: '红色', orange: '橙色', yellow: '黄色', none: '正常', unknown: '数据不足' }
 const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 'success', unknown: 'info' }
-const COLORS = ['#e5484d', '#f5a623', '#f0c808', '#4cb971', '#86909c']
+const COLORS = ['#e5484d', '#f5a623', '#f0c808', '#4cb971', '#5f6672']
 
 const HISTORY_KEY = 'qh_class_history'
 const className = ref(localStorage.getItem('qh_last_class') || '')
@@ -509,8 +511,8 @@ const INTENT_META = [
   { key: '考公', label: '考公', color: '#dc2626' },
   { key: '考研', label: '考研', color: '#d97706' },
   { key: '考编', label: '考编', color: '#16a34a' },
-  { key: '就业', label: '就业', color: '#2563eb' },
-  { key: '未填写', label: '未填写', color: '#a1a1aa' }
+  { key: '就业', label: '就业', color: '#5b5bd6' },
+  { key: '未填写', label: '未填写', color: '#9aa1ad' }
 ]
 
 // 职业目标人数全部来自 /teacher/class-overview，前端只做展示，不做任何推断
@@ -707,7 +709,7 @@ function renderBar() {
     {
       grid: { left: 48, right: 16, top: 24, bottom: 32 },
       xAxis: { type: 'category', data: labels, axisLabel: { color: '#4e5969' } },
-      yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#e5e6eb' } } },
+      yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#e4e7ee' } } },
       tooltip: { trigger: 'axis' },
       series: [
         {
@@ -813,14 +815,14 @@ function renderRadar(data) {
         radius: '66%',
         axisName: { color: '#4e5969' },
         splitArea: { areaStyle: { color: ['rgba(37, 99, 235, 0.03)', 'rgba(37, 99, 235, 0.06)'] } },
-        splitLine: { lineStyle: { color: '#e5e6eb' } }
+        splitLine: { lineStyle: { color: '#e4e7ee' } }
       },
       series: [
         {
           type: 'radar',
           areaStyle: { opacity: 0.18 },
-          lineStyle: { color: '#2563eb', width: 2 },
-          itemStyle: { color: '#2563eb' },
+          lineStyle: { color: '#5b5bd6', width: 2 },
+          itemStyle: { color: '#5b5bd6' },
           symbolSize: 6,
           data: [
             {
@@ -882,7 +884,7 @@ function renderGap(data) {
       grid: { left: 80, right: 24, top: 28, bottom: 28 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       legend: { data: ['班级具备率', '岗位需求率'], textStyle: { color: '#4e5969' } },
-      xAxis: { type: 'value', max: 1, splitLine: { lineStyle: { color: '#e5e6eb' } } },
+      xAxis: { type: 'value', max: 1, splitLine: { lineStyle: { color: '#e4e7ee' } } },
       yAxis: {
         type: 'category',
         data: rows.map((row) => row.dimension),
@@ -902,7 +904,7 @@ function renderGap(data) {
           itemStyle: {
             color: (params) => {
               const level = rows[params.dataIndex]?.level
-              return level === 'red' ? '#e5484d' : level === 'orange' ? '#f5a623' : '#86909c'
+              return level === 'red' ? '#e5484d' : level === 'orange' ? '#f5a623' : '#5f6672'
             },
             borderRadius: [0, 4, 4, 0]
           }
@@ -958,7 +960,7 @@ onBeforeUnmount(() => {
 
 .engine-line {
   font-size: 12px;
-  color: #86909c;
+  color: #5f6672;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -987,19 +989,25 @@ onBeforeUnmount(() => {
   margin-left: 12px;
 }
 
-/* ---------- 顶部 Hero：一句话结论 + 关键指标 + 主按钮 ---------- */
+/* ---------- 顶部 Hero：暗色视频底 + 一句话结论 + 关键指标 + 主按钮 ---------- */
 .page-hero {
-  padding: 20px 22px;
-  background:
-    radial-gradient(
-      115% 140% at 100% 0%,
-      var(--bento-accent-soft) 0%,
-      rgba(240, 238, 255, 0) 62%
-    ),
-    #ffffff;
+  position: relative;
+  overflow: hidden;
+  min-height: 200px;
+  padding: 28px 30px;
+  /* 视频未就绪/离线时的兜底色，避免白底闪一下 */
+  background: #16181d;
+  border: 0;
+  color: #fff;
+}
+
+.page-hero:hover {
+  box-shadow: none;
 }
 
 .ph-main {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1017,8 +1025,8 @@ onBeforeUnmount(() => {
   margin: 0 0 10px;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--bento-accent-soft);
-  color: var(--bento-accent);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
   font-size: 11.5px;
   font-weight: 600;
 }
@@ -1028,14 +1036,14 @@ onBeforeUnmount(() => {
   font-size: clamp(17px, 1.5vw, 21px);
   font-weight: 650;
   line-height: 1.5;
-  color: var(--bento-text);
+  color: #fff;
 }
 
 .ph-desc {
   margin: 8px 0 0;
   font-size: 12.5px;
   line-height: 1.7;
-  color: var(--bento-mute);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .ph-actions {
@@ -1049,6 +1057,19 @@ onBeforeUnmount(() => {
   border-radius: var(--bento-radius-sm);
 }
 
+/* 暗色 Hero 上的次级按钮：透明玻璃 + 白字，主按钮仍是 Apple 蓝 */
+.page-hero .ph-btn:not(.el-button--primary) {
+  --el-button-bg-color: rgba(255, 255, 255, 0.12);
+  --el-button-border-color: rgba(255, 255, 255, 0.22);
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.2);
+  --el-button-hover-border-color: rgba(255, 255, 255, 0.32);
+  --el-button-hover-text-color: #ffffff;
+  --el-button-active-bg-color: rgba(255, 255, 255, 0.26);
+  --el-button-active-border-color: rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+}
+
 .ph-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1059,9 +1080,9 @@ onBeforeUnmount(() => {
 .ph-stat {
   min-width: 100px;
   padding: 12px 14px;
-  border: 1px solid var(--bento-border);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 14px;
-  background: #fbfbff;
+  background: rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1069,14 +1090,14 @@ onBeforeUnmount(() => {
 
 .ph-stat-label {
   font-size: 12px;
-  color: var(--bento-mute);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .ph-stat-value {
   font-size: 22px;
   font-weight: 650;
   line-height: 1.25;
-  color: var(--bento-text);
+  color: #fff;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1084,14 +1105,15 @@ onBeforeUnmount(() => {
   margin-left: 2px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--bento-mute);
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.ph-stat-value.lv-red { color: var(--qh-red); }
-.ph-stat-value.lv-orange { color: var(--qh-orange); }
-.ph-stat-value.lv-yellow { color: #b98900; }
-.ph-stat-value.lv-none { color: #16a34a; }
-.ph-stat-value.lv-unknown { color: #86909c; }
+/* 暗底上语义色统一提亮，保证对比度 */
+.ph-stat-value.lv-red { color: #ff6961; }
+.ph-stat-value.lv-orange { color: #ff9f0a; }
+.ph-stat-value.lv-yellow { color: #ffd60a; }
+.ph-stat-value.lv-none { color: #0f9d8a; }
+.ph-stat-value.lv-unknown { color: rgba(255, 255, 255, 0.7); }
 
 /* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
 .qh-icon {
@@ -1119,7 +1141,7 @@ onBeforeUnmount(() => {
 .qh-arrow {
   font-size: 13px;
   line-height: 1;
-  color: #b9b1ea;
+  color: #5b5bd6;
   opacity: 0;
   transform: translate(-2px, 2px);
   transition:
@@ -1147,8 +1169,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--bento-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.05);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.05);
   transition:
     transform 220ms var(--bento-ease),
     box-shadow 220ms var(--bento-ease),
@@ -1157,10 +1179,10 @@ onBeforeUnmount(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   box-shadow:
     0 2px 6px rgba(91, 91, 214, 0.1),
-    0 12px 28px rgba(23, 26, 43, 0.07);
+    0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
 .stat-top {
@@ -1274,7 +1296,7 @@ onBeforeUnmount(() => {
   gap: 2px;
   overflow: hidden;
   border-radius: 999px;
-  background: #f4f4f5;
+  background: #eef0f5;
 }
 
 .seg {
@@ -1348,7 +1370,7 @@ onBeforeUnmount(() => {
 .hero-link {
   padding: 6px 12px;
   border-radius: 999px;
-  background: #f4f4f5;
+  background: #eef0f5;
   color: var(--bento-sub);
   font-size: 12px;
   text-decoration: none;
@@ -1359,7 +1381,7 @@ onBeforeUnmount(() => {
 }
 
 .hero-link:hover {
-  background: #18181b;
+  background: #16181d;
   color: #fff;
   transform: translateY(-1px);
 }
@@ -1429,14 +1451,14 @@ onBeforeUnmount(() => {
 .intent-item {
   border: 1px solid var(--qh-border);
   border-radius: 16px;
-  background: #fafafa;
+  background: #f7f8fa;
   padding: 14px 16px;
   transition: transform 220ms var(--bento-ease), box-shadow 220ms var(--bento-ease);
 }
 
 .intent-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06);
 }
 
 .intent-label {
@@ -1479,8 +1501,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 14px 16px;
   margin-bottom: 14px;
-  background: linear-gradient(135deg, #eef4ff, #f7f9fc);
-  border-radius: 12px;
+  /* Apple 风格：纯灰底，替代原来的淡蓝渐变 */
+  background: #f7f8fa;
+  border-radius: 14px;
 }
 
 .profile-avatar {
@@ -1488,7 +1511,7 @@ onBeforeUnmount(() => {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: #2563eb;
+  background: #5b5bd6;
   color: #fff;
   font-size: 20px;
   font-weight: 600;
@@ -1505,7 +1528,7 @@ onBeforeUnmount(() => {
 
 .profile-head-sub {
   font-size: 12px;
-  color: #86909c;
+  color: #5f6672;
   margin-top: 2px;
 }
 
@@ -1592,7 +1615,7 @@ onBeforeUnmount(() => {
 
 .gap-note {
   font-size: 12px;
-  color: #86909c;
+  color: #5f6672;
   margin-top: 6px;
 }
 

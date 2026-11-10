@@ -748,7 +748,7 @@ onMounted(loadSessions)
 }
 
 .sess-item.is-active {
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   background: var(--bento-accent-soft);
 }
 
@@ -927,7 +927,7 @@ onMounted(loadSessions)
 
 .msg.user .avatar {
   /* Apple 蓝实底，替代原来的蓝紫渐变 */
-  background: #0071e3;
+  background: #5b5bd6;
   color: #ffffff;
 }
 
@@ -935,7 +935,7 @@ onMounted(loadSessions)
   max-width: min(78%, 720px);
   padding: 11px 14px;
   border-radius: 14px;
-  background: #f5f5f7;
+  background: #f7f8fa;
   font-size: 14px;
   line-height: 1.85;
   color: var(--bento-text);
@@ -943,7 +943,7 @@ onMounted(loadSessions)
 }
 
 .msg.user .bubble {
-  background: #0071e3;
+  background: #5b5bd6;
   color: #ffffff;
 }
 
@@ -977,7 +977,7 @@ onMounted(loadSessions)
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #b9b1ea;
+  background: #5b5bd6;
   animation: bounce 1.2s infinite;
 }
 
@@ -1212,7 +1212,7 @@ onMounted(loadSessions)
   padding: 7px 18px;
   border: none;
   border-radius: 999px;
-  background: #0071e3;
+  background: #5b5bd6;
   font-size: 14px;
   font-weight: 600;
   color: #ffffff;
@@ -1271,7 +1271,7 @@ onMounted(loadSessions)
 }
 
 .icon-btn:hover {
-  background: #f4f4f5;
+  background: #eef0f5;
 }
 
 .mini-ico {
@@ -1312,7 +1312,7 @@ onMounted(loadSessions)
 }
 
 .search-item:hover {
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   background: #fbfbff;
 }
 

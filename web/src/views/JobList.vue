@@ -341,8 +341,8 @@ onMounted(() => {
   border: 1px solid var(--bento-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.05);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.05);
 }
 
 .filter-bar :deep(.el-card__body) {
@@ -374,7 +374,7 @@ onMounted(() => {
 }
 
 .filter-total b {
-  color: #18181b;
+  color: #16181d;
   font-size: 14px;
 }
 
@@ -387,8 +387,8 @@ onMounted(() => {
   border: 1px solid var(--bento-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.05);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.05);
   transition:
     transform 220ms var(--bento-ease),
     box-shadow 220ms var(--bento-ease),
@@ -397,10 +397,10 @@ onMounted(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   box-shadow:
     0 2px 6px rgba(91, 91, 214, 0.1),
-    0 12px 28px rgba(23, 26, 43, 0.07);
+    0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
 .stat-top {
@@ -415,7 +415,7 @@ onMounted(() => {
   margin-left: auto;
   font-size: 14px;
   line-height: 1;
-  color: #b9b1ea;
+  color: #5b5bd6;
   opacity: 0.45;
   transition: opacity 180ms var(--bento-ease);
 }
@@ -450,7 +450,7 @@ onMounted(() => {
 .qh-arrow {
   font-size: 14px;
   line-height: 1;
-  color: #b9b1ea;
+  color: #5b5bd6;
   opacity: 0.45;
 }
 
@@ -486,7 +486,7 @@ onMounted(() => {
   font-size: 13.5px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: #f4f4f5;
+  background: #eef0f5;
   color: var(--bento-sub);
 }
 
@@ -602,21 +602,21 @@ onMounted(() => {
   gap: 8px;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px dashed #ececef;
+  border-bottom: 1px dashed #e4e7ee;
 }
 
 .jd-sec-name {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: #18181b;
+  color: #16181d;
 }
 
 .jd-sec-count {
   margin-left: auto;
   font-size: 12.5px;
   font-style: normal;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .jd-items {
@@ -641,7 +641,7 @@ onMounted(() => {
   margin-top: 2px;
   border-radius: 6px;
   background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  color: #5b5bd6;
   font-size: 12.5px;
   font-weight: 600;
   display: inline-flex;
@@ -668,7 +668,7 @@ onMounted(() => {
 .jd-p.jd-en {
   font-size: 13.5px;
   line-height: 1.6;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 .official-link {
   align-self: flex-start;

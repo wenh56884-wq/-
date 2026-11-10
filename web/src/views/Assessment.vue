@@ -473,7 +473,7 @@ onMounted(loadHistory)
 
 .opt-item:hover {
   transform: translateY(-1px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   background: #fbfbff;
 }
 
@@ -491,7 +491,7 @@ onMounted(loadHistory)
   height: 28px;
   flex: 0 0 28px;
   border-radius: 8px;
-  background: #f4f4f5;
+  background: #eef0f5;
   font-size: 14px;
   font-weight: 600;
   color: var(--bento-sub);

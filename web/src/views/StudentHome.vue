@@ -1,8 +1,15 @@
 <template>
   <div class="page bento-page">
+    <FreshmanGuide
+      :open="freshmanGuideOpen"
+      :grade="guide.grade || '大一'"
+      @complete="finishFreshmanGuide(true)"
+      @skip="finishFreshmanGuide(false)"
+    />
     <div class="bento-grid">
     <!-- Hero：一句话结论 + 关键指标 + 主按钮。结论只组织引擎返回的数值，不做任何推断 -->
     <section class="bento-card bento-span-4 page-hero">
+      <VideoBackdrop :scrim="0.5" object-position="50% 40%" />
       <div class="ph-main">
         <div class="ph-left">
           <p class="ph-eyebrow">本学期结论 · {{ warning.term || term || '-' }}</p>
@@ -61,7 +68,7 @@
       </button>
     </div>
 
-    <el-card v-loading="guideLoading" shadow="never"
+    <el-card ref="guideCard" v-loading="guideLoading" shadow="never"
       class="guide-card bento-span-2 bento-row-2"
       :class="{ 'guide-stretch': !(guide.needs_intent) && (guide.steps || []).length }">
       <template #header>
@@ -418,12 +425,14 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import http from '../api/http'
 import router from '../router'
 import CountNumber from '../components/CountNumber.vue'
+import FreshmanGuide from '../components/FreshmanGuide.vue'
+import VideoBackdrop from '../components/VideoBackdrop.vue'
 import { useClock } from '../composables/useSystemStatus'
 
 const LEVEL_TEXT = { red: '红色预警', orange: '橙色预警', yellow: '黄色预警', none: '正常', unknown: '数据不足' }
@@ -442,6 +451,8 @@ const intentSaving = ref(false)
 const guide = ref({})
 const selectedIntent = ref('')
 const showIntentPicker = ref(false)
+const freshmanGuideOpen = ref(false)
+const guideCard = ref(null)
 const warningLoading = ref(false)
 const recLoading = ref(false)
 const warningTip = ref('')
@@ -449,6 +460,7 @@ const recTip = ref('')
 const warning = ref({})
 const recs = ref({})
 const items = ref([])
+const FRESHMAN_GUIDE_STORAGE_VERSION = 'v1'
 
 // 快捷入口：6 个刚好填满 2 列网格，与侧栏可见页面一一对应（不新增不存在的路由）
 const QUICK_LINKS = [
@@ -694,6 +706,31 @@ async function saveIntent() {
   }
 }
 
+function freshmanGuideStorageKey() {
+  const studentNo = localStorage.getItem('qh_student_no') || 'anonymous'
+  return `qh_freshman_guide_${FRESHMAN_GUIDE_STORAGE_VERSION}_${studentNo}`
+}
+
+function maybeOpenFreshmanGuide() {
+  const grade = String(guide.value?.grade || '')
+  if (!grade.includes('大一')) return
+  if (localStorage.getItem(freshmanGuideStorageKey()) === 'done') return
+  freshmanGuideOpen.value = true
+}
+
+async function finishFreshmanGuide(scrollToDirection) {
+  freshmanGuideOpen.value = false
+  try {
+    localStorage.setItem(freshmanGuideStorageKey(), 'done')
+  } catch {
+    /* 浏览器禁用本地存储时仍允许完成引导 */
+  }
+  if (!scrollToDirection) return
+  await nextTick()
+  const node = guideCard.value?.$el || guideCard.value
+  node?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+}
+
 async function loadWarning() {
   warningLoading.value = true
   warningTip.value = ''
@@ -742,7 +779,9 @@ watch(autoRefresh, (on) => {
 })
 
 onMounted(async () => {
-  await Promise.all([reloadAll(), loadGuide(), loadNotices()])
+  const guideTask = loadGuide().then(maybeOpenFreshmanGuide)
+  const pageTask = Promise.all([reloadAll(), loadNotices()])
+  await Promise.all([guideTask, pageTask])
   // 每 60 秒查一次未读：官方发布新通知后，这里会自己亮红点
   noticeTimer = setInterval(loadNotices, 60000)
 })
@@ -765,9 +804,9 @@ onBeforeUnmount(() => {
   gap: 14px;
   margin-bottom: 0;
   font-size: 13.5px;
-  color: #86909c;
+  color: #5f6672;
   background: #fff;
-  border: 1px solid #f4f4f5;
+  border: 1px solid #eef0f5;
   border-radius: 14px;
   padding: 8px 14px;
 }
@@ -776,19 +815,25 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
-/* ---------- 顶部 Hero：一句话结论 + 关键指标 + 主按钮 ---------- */
+/* ---------- 顶部 Hero：暗色视频底 + 一句话结论 + 关键指标 + 主按钮 ---------- */
 .page-hero {
-  padding: 20px 22px;
-  background:
-    radial-gradient(
-      115% 140% at 100% 0%,
-      var(--bento-accent-soft) 0%,
-      rgba(240, 238, 255, 0) 62%
-    ),
-    #ffffff;
+  position: relative;
+  overflow: hidden;
+  min-height: 200px;
+  padding: 28px 30px;
+  /* 视频未就绪/离线时的兜底色，避免白底闪一下 */
+  background: #16181d;
+  border: 0;
+  color: #fff;
+}
+
+.page-hero:hover {
+  box-shadow: none;
 }
 
 .ph-main {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -806,8 +851,8 @@ onBeforeUnmount(() => {
   margin: 0 0 10px;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--bento-accent-soft);
-  color: var(--bento-accent);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
   font-size: 13px;
   font-weight: 600;
 }
@@ -817,14 +862,14 @@ onBeforeUnmount(() => {
   font-size: clamp(17px, 1.5vw, 21px);
   font-weight: 650;
   line-height: 1.5;
-  color: var(--bento-text);
+  color: #fff;
 }
 
 .ph-desc {
   margin: 8px 0 0;
   font-size: 14px;
   line-height: 1.7;
-  color: var(--bento-mute);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .ph-actions {
@@ -838,6 +883,19 @@ onBeforeUnmount(() => {
   border-radius: var(--bento-radius-sm);
 }
 
+/* 暗色 Hero 上的次级按钮：透明玻璃 + 白字，主按钮仍是 Apple 蓝 */
+.page-hero .ph-btn:not(.el-button--primary) {
+  --el-button-bg-color: rgba(255, 255, 255, 0.12);
+  --el-button-border-color: rgba(255, 255, 255, 0.22);
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.2);
+  --el-button-hover-border-color: rgba(255, 255, 255, 0.32);
+  --el-button-hover-text-color: #ffffff;
+  --el-button-active-bg-color: rgba(255, 255, 255, 0.26);
+  --el-button-active-border-color: rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+}
+
 .ph-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -848,9 +906,9 @@ onBeforeUnmount(() => {
 .ph-stat {
   min-width: 100px;
   padding: 12px 14px;
-  border: 1px solid var(--bento-border);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 14px;
-  background: #fbfbff;
+  background: rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -858,14 +916,14 @@ onBeforeUnmount(() => {
 
 .ph-stat-label {
   font-size: 13.5px;
-  color: var(--bento-mute);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .ph-stat-value {
   font-size: 22px;
   font-weight: 650;
   line-height: 1.25;
-  color: var(--bento-text);
+  color: #fff;
   font-variant-numeric: tabular-nums;
 }
 
@@ -873,14 +931,15 @@ onBeforeUnmount(() => {
   margin-left: 2px;
   font-size: 13.5px;
   font-weight: 500;
-  color: var(--bento-mute);
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.ph-stat-value.lv-red { color: var(--qh-red); }
-.ph-stat-value.lv-orange { color: var(--qh-orange); }
-.ph-stat-value.lv-yellow { color: #b98900; }
-.ph-stat-value.lv-none { color: #16a34a; }
-.ph-stat-value.lv-unknown { color: #86909c; }
+/* 暗底上语义色统一提亮，保证对比度 */
+.ph-stat-value.lv-red { color: #ff6961; }
+.ph-stat-value.lv-orange { color: #ff9f0a; }
+.ph-stat-value.lv-yellow { color: #ffd60a; }
+.ph-stat-value.lv-none { color: #0f9d8a; }
+.ph-stat-value.lv-unknown { color: rgba(255, 255, 255, 0.7); }
 
 /* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
 .qh-icon {
@@ -908,7 +967,7 @@ onBeforeUnmount(() => {
 .qh-arrow {
   font-size: 14px;
   line-height: 1;
-  color: #b9b1ea;
+  color: #5b5bd6;
   opacity: 0;
   transform: translate(-2px, 2px);
   transition:
@@ -941,8 +1000,8 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   background: #ffffff;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.04);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.04);
   text-decoration: none;
   transition:
     transform 220ms var(--bento-ease),
@@ -952,10 +1011,10 @@ onBeforeUnmount(() => {
 
 .quick-item:hover {
   transform: translateY(-2px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   box-shadow:
     0 2px 6px rgba(91, 91, 214, 0.1),
-    0 12px 28px rgba(23, 26, 43, 0.07);
+    0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
 .quick-item .qh-icon { grid-area: icon; }
@@ -987,15 +1046,12 @@ onBeforeUnmount(() => {
 }
 
 .guide-stretch {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
+  /* 规划内容按自身高度收拢，避免为了匹配右侧卡片而制造大片空白 */
+  align-self: start;
 }
 
 .guide-stretch :deep(.el-card__body) {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
+  display: block;
 }
 
 .guide-head {
@@ -1031,7 +1087,7 @@ onBeforeUnmount(() => {
 
 .intent-desc {
   font-size: 13.5px;
-  color: #86909c;
+  color: #5f6672;
   margin-top: 8px;
 }
 
@@ -1049,7 +1105,7 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--qh-primary-soft, #f0eeff);
+  background: var(--qh-primary-soft, #ececfb);
   color: var(--qh-primary, #5b5bd6);
   font-size: 13px;
   font-weight: 600;
@@ -1060,14 +1116,14 @@ onBeforeUnmount(() => {
   font-size: 17px;
   font-weight: 650;
   line-height: 1.45;
-  color: var(--qh-text, #171a2b);
+  color: var(--qh-text, #16181d);
 }
 
 .onboard-sub {
   margin: 0;
   font-size: 14px;
   line-height: 1.7;
-  color: var(--qh-text-sub, #5b6178);
+  color: var(--qh-text-sub, #5f6672);
 }
 
 .onboard-pick {
@@ -1082,7 +1138,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid var(--qh-border, #eceef7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 12px;
   background: #fff;
   text-align: left;
@@ -1094,26 +1150,26 @@ onBeforeUnmount(() => {
 }
 
 .pick-card:hover {
-  border-color: #c9cbf5;
+  border-color: #dcdcf9;
   transform: translateY(-1px);
 }
 
 .pick-card.is-on {
   border-color: var(--qh-primary, #5b5bd6);
-  background: var(--qh-primary-soft, #f0eeff);
+  background: var(--qh-primary-soft, #ececfb);
   box-shadow: 0 6px 16px rgba(91, 91, 214, 0.14);
 }
 
 .pick-name {
   font-size: 15px;
   font-weight: 600;
-  color: var(--qh-text, #171a2b);
+  color: var(--qh-text, #16181d);
 }
 
 .pick-desc {
   font-size: 13.5px;
   line-height: 1.6;
-  color: var(--qh-text-sub, #5b6178);
+  color: var(--qh-text-sub, #5f6672);
 }
 
 .onboard-foot {
@@ -1126,7 +1182,7 @@ onBeforeUnmount(() => {
 
 .onboard-hint {
   font-size: 13.5px;
-  color: var(--qh-text-mute, #9297ab);
+  color: var(--qh-text-mute, #9aa1ad);
 }
 
 @media (max-width: 560px) {
@@ -1219,7 +1275,7 @@ onBeforeUnmount(() => {
 
 .guide-cta-btn:hover {
   transform: translateY(-1px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   background: var(--bento-accent-soft);
   color: var(--bento-accent);
 }
@@ -1229,7 +1285,7 @@ onBeforeUnmount(() => {
 }
 
 .guide-step {
-  border: 1px solid #e5e6eb;
+  border: 1px solid #e4e7ee;
   border-radius: 6px;
   padding: 10px 12px;
   background: #fff;
@@ -1272,7 +1328,7 @@ onBeforeUnmount(() => {
 }
 
 .muted {
-  color: #86909c;
+  color: #5f6672;
   font-size: 13.5px;
 }
 
@@ -1293,13 +1349,13 @@ onBeforeUnmount(() => {
 }
 
 .missing {
-  color: #86909c;
+  color: #5f6672;
 }
 
 .engine-line {
   margin-top: 10px;
   font-size: 13.5px;
-  color: #86909c;
+  color: #5f6672;
 }
 
 .err {
@@ -1336,7 +1392,7 @@ onBeforeUnmount(() => {
 
 .rec-cell:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(24, 24, 27, 0.08);
+  box-shadow: 0 4px 12px rgba(14, 58, 61, 0.08);
 }
 
 @keyframes cell-in {
@@ -1430,7 +1486,7 @@ onBeforeUnmount(() => {
 }
 
 .mini-tag.more {
-  background: #f4f4f5;
+  background: #eef0f5;
   color: var(--qh-text-sub);
   cursor: help;
 }
@@ -1462,10 +1518,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid var(--qh-border, #e4e4e7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 8px;
   background: #ffffff;
-  color: var(--qh-text-sub, #52525b);
+  color: var(--qh-text-sub, #5f6672);
   font-size: 13.5px;
   font-family: inherit;
   cursor: pointer;
@@ -1473,8 +1529,8 @@ onBeforeUnmount(() => {
 }
 
 .bell-btn:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #ececfb;
+  color: #4a4ac0;
 }
 
 .bell-btn.has-new {
@@ -1512,7 +1568,7 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #fafafa;
+  background: #f7f8fa;
 }
 
 .detail-head {
@@ -1523,7 +1579,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 0 16px;
   background: #ffffff;
-  border-bottom: 1px solid var(--qh-border, #e4e4e7);
+  border-bottom: 1px solid var(--qh-border, #e4e7ee);
 }
 
 .detail-head-text {
@@ -1533,7 +1589,7 @@ onBeforeUnmount(() => {
 .detail-title {
   font-size: 14px;
   font-weight: 600;
-  color: #18181b;
+  color: #16181d;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1541,14 +1597,14 @@ onBeforeUnmount(() => {
 
 .detail-sub {
   font-size: 13.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .icon-btn {
   width: 30px;
   height: 30px;
   margin-left: auto;
-  border: 1px solid var(--qh-border, #e4e4e7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 8px;
   background: #ffffff;
   cursor: pointer;
@@ -1559,14 +1615,14 @@ onBeforeUnmount(() => {
 }
 
 .icon-btn:hover {
-  background: #f4f4f5;
+  background: #eef0f5;
 }
 
 .ico {
   width: 16px;
   height: 16px;
   fill: none;
-  stroke: #52525b;
+  stroke: #5f6672;
   stroke-width: 1.8;
   stroke-linecap: round;
 }
@@ -1585,14 +1641,14 @@ onBeforeUnmount(() => {
 
 .kpi {
   background: #ffffff;
-  border: 1px solid var(--qh-border, #e4e4e7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 8px;
   padding: 8px 10px;
 }
 
 .kpi-label {
   font-size: 13.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .kpi-value {
@@ -1604,7 +1660,7 @@ onBeforeUnmount(() => {
 
 .kpi-value.small {
   font-size: 14px;
-  color: #18181b;
+  color: #16181d;
 }
 
 .sec-title {
@@ -1614,10 +1670,10 @@ onBeforeUnmount(() => {
   /* 岗位卡内最多 7 个区块，拉开距离并加分隔线，避免挤成一团看不出分组 */
   margin: 22px 0 10px;
   padding-top: 14px;
-  border-top: 1px solid var(--qh-border, #e4e4e7);
+  border-top: 1px solid var(--qh-border, #e4e7ee);
   font-size: 15px;
   font-weight: 600;
-  color: #18181b;
+  color: #16181d;
 }
 
 .track-switch {
@@ -1626,7 +1682,7 @@ onBeforeUnmount(() => {
 
 .dim-list {
   background: #ffffff;
-  border: 1px solid var(--qh-border, #e4e4e7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 8px;
   padding: 14px;
 }
@@ -1644,28 +1700,28 @@ onBeforeUnmount(() => {
 
 .dim-name {
   flex: 0 0 72px;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .dim-bar {
   flex: 1 1 auto;
   height: 6px;
   border-radius: 8px;
-  background: #f4f4f5;
+  background: #eef0f5;
   overflow: hidden;
 }
 
 .dim-bar i {
   display: block;
   height: 100%;
-  background: #2563eb;
+  background: #5b5bd6;
   border-radius: 8px;
 }
 
 .dim-value {
   flex: 0 0 56px;
   text-align: right;
-  color: #18181b;
+  color: #16181d;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1675,7 +1731,7 @@ onBeforeUnmount(() => {
   padding-left: 18px;
   font-size: 13.5px;
   line-height: 1.9;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .ul-gap {
@@ -1687,12 +1743,12 @@ onBeforeUnmount(() => {
   padding-left: 20px;
   font-size: 14px;
   line-height: 2;
-  color: #18181b;
+  color: #16181d;
 }
 
 .comp-loading {
   font-size: 13.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .comp-list {
@@ -1703,7 +1759,7 @@ onBeforeUnmount(() => {
 
 .comp-cell {
   background: #ffffff;
-  border: 1px solid var(--qh-border, #e4e4e7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -1718,9 +1774,9 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   padding: 0 6px;
   border-radius: 8px;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-  color: #1d4ed8;
+  background: #ececfb;
+  border: 1px solid #dcdcf9;
+  color: #4a4ac0;
   font-size: 12.5px;
   line-height: 18px;
 }
@@ -1734,7 +1790,7 @@ onBeforeUnmount(() => {
 .comp-name {
   font-size: 14px;
   font-weight: 600;
-  color: #18181b;
+  color: #16181d;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1743,26 +1799,26 @@ onBeforeUnmount(() => {
 .comp-org {
   margin-top: 2px;
   font-size: 13.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .comp-why {
   margin-top: 4px;
   font-size: 13.5px;
-  color: #52525b;
+  color: #5f6672;
 }
 
 .comp-reward {
   margin-top: 4px;
   font-size: 12.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .comp-link {
   display: inline-block;
   margin-top: 6px;
   font-size: 13.5px;
-  color: #2563eb;
+  color: #5b5bd6;
   text-decoration: none;
 }
 
@@ -1772,7 +1828,7 @@ onBeforeUnmount(() => {
 
 .notice-cell {
   background: #ffffff;
-  border: 1px solid var(--qh-border, #e4e4e7);
+  border: 1px solid var(--qh-border, #e4e7ee);
   border-radius: 8px;
   padding: 10px 12px;
   margin-bottom: 8px;
@@ -1780,14 +1836,14 @@ onBeforeUnmount(() => {
 
 .notice-date {
   font-size: 12.5px;
-  color: #a1a1aa;
+  color: #9aa1ad;
 }
 
 .notice-title {
   margin-top: 4px;
   font-size: 14px;
   line-height: 1.6;
-  color: #18181b;
+  color: #16181d;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -599,8 +599,8 @@ onMounted(() => {
   border: 1px solid var(--bento-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.05);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.05);
 }
 
 .filter-bar :deep(.el-card__body) {
@@ -632,7 +632,7 @@ onMounted(() => {
 }
 
 .filter-total b {
-  color: #18181b;
+  color: #16181d;
   font-size: 14px;
 }
 
@@ -645,8 +645,8 @@ onMounted(() => {
   border: 1px solid var(--bento-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.05);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.05);
   transition:
     transform 220ms var(--bento-ease),
     box-shadow 220ms var(--bento-ease),
@@ -655,10 +655,10 @@ onMounted(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #ded9ff;
+  border-color: #dcdcf9;
   box-shadow:
     0 2px 6px rgba(91, 91, 214, 0.1),
-    0 12px 28px rgba(23, 26, 43, 0.07);
+    0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
 .stat-top {
@@ -693,7 +693,7 @@ onMounted(() => {
 .qh-arrow {
   font-size: 14px;
   line-height: 1;
-  color: #b9b1ea;
+  color: #5b5bd6;
   opacity: 0;
   transform: translate(-2px, 2px);
   transition:
@@ -717,15 +717,15 @@ onMounted(() => {
 }
 
 .type-card.active {
-  border-color: #18181b;
+  border-color: #16181d;
   box-shadow:
-    0 0 0 2px rgba(24, 24, 27, 0.08),
+    0 0 0 2px rgba(14, 58, 61, 0.08),
     var(--bento-shadow);
 }
 
 .type-card.active .bento-icon {
-  color: #18181b;
-  background: #e4e4e7;
+  color: #16181d;
+  background: #e4e7ee;
 }
 .notice-item {
   padding: 12px 8px;
@@ -797,7 +797,7 @@ onMounted(() => {
   width: 3px;
   height: 14px;
   border-radius: 2px;
-  background: #2563eb;
+  background: #5b5bd6;
 }
 .req-list {
   display: flex;
@@ -818,7 +818,7 @@ onMounted(() => {
   padding: 2px 10px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  color: #5b5bd6;
   font-size: 13.5px;
   font-weight: 600;
   line-height: 20px;
@@ -859,8 +859,8 @@ onMounted(() => {
   border: 1px solid var(--bento-border);
   border-radius: 18px;
   box-shadow:
-    0 1px 2px rgba(23, 26, 43, 0.04),
-    0 8px 20px rgba(23, 26, 43, 0.05);
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 8px 20px rgba(16, 24, 40, 0.05);
 }
 
 .gk-entry :deep(.el-card__body) {
@@ -907,7 +907,7 @@ onMounted(() => {
   color: var(--el-text-color-regular);
 }
 .gk-summary b {
-  color: #18181b;
+  color: #16181d;
   font-size: 16px;
 }
 .gk-summary-note {
@@ -930,7 +930,7 @@ onMounted(() => {
 }
 .gk-source a {
   margin-left: 6px;
-  color: #2563eb;
+  color: #5b5bd6;
 }
 .gk-detail {
   display: flex;

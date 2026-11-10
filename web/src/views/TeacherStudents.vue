@@ -273,8 +273,8 @@ const INTENT_META = [
   { key: '考公', label: '考公', color: '#dc2626' },
   { key: '考研', label: '考研', color: '#d97706' },
   { key: '考编', label: '考编', color: '#16a34a' },
-  { key: '就业', label: '就业', color: '#2563eb' },
-  { key: '未填写', label: '未填写', color: '#a1a1aa' }
+  { key: '就业', label: '就业', color: '#5b5bd6' },
+  { key: '未填写', label: '未填写', color: '#9aa1ad' }
 ]
 
 const intentItems = computed(() => {
@@ -529,7 +529,7 @@ function renderTrend(data) {
       grid: { left: 44, right: 16, top: 24, bottom: 28 },
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: series.map((row) => row.term), boundaryGap: false },
-      yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#e5e6eb' } } },
+      yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#e4e7ee' } } },
       series: [
         {
           type: 'line',
@@ -591,18 +591,18 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
   padding: 12px 16px;
   background: var(--qh-surface, #fff);
-  border: 1px solid #f4f4f5;
+  border: 1px solid #eef0f5;
   border-radius: 16px;
   font-size: 13px;
   transition: box-shadow 260ms var(--qh-ease);
 }
 
 .intent-bar:hover {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 30px rgba(16, 24, 40, 0.06);
 }
 
 .intent-bar-label {
-  color: var(--qh-text-mute, #86909c);
+  color: var(--qh-text-mute, #5f6672);
   margin-right: 2px;
 }
 
@@ -622,7 +622,7 @@ onBeforeUnmount(() => {
 
 .intent-bar-total {
   margin-left: auto;
-  color: var(--qh-text-mute, #86909c);
+  color: var(--qh-text-mute, #5f6672);
   font-size: 12px;
 }
 
@@ -635,7 +635,7 @@ onBeforeUnmount(() => {
 
 .refresh-tip {
   font-size: 12px;
-  color: #86909c;
+  color: #5f6672;
   margin-right: 4px;
 }
 
@@ -660,13 +660,13 @@ onBeforeUnmount(() => {
 }
 
 .detail-no {
-  color: #86909c;
+  color: #5f6672;
   margin-right: 10px;
 }
 
 .detail-source {
   font-size: 12px;
-  color: #86909c;
+  color: #5f6672;
 }
 
 .detail-desc {
@@ -683,7 +683,7 @@ onBeforeUnmount(() => {
 
 .muted {
   font-size: 13px;
-  color: #86909c;
+  color: #5f6672;
 }
 
 .missing {

@@ -601,7 +601,7 @@ onMounted(async () => {
 .question { font-size: 15px; font-weight: 600; margin-bottom: 10px; line-height: 1.6; }
 .q-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin: -2px 0 12px; font-size: 13.5px; color: #6b7280; }
-.q-source .src-txt a { color: #2563eb; text-decoration: none; }
+.q-source .src-txt a { color: #5b5bd6; text-decoration: none; }
 .q-source .src-txt a:hover { text-decoration: underline; }
 .comment { line-height: 1.7; font-size: 14px; }
 .report { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.8; margin: 0; }
@@ -655,7 +655,7 @@ onMounted(async () => {
 .plan-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .plan-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px;
   background: #f8fafc; }
-.plan-when { font-size: 13.5px; color: #2563eb; font-weight: 600; }
+.plan-when { font-size: 13.5px; color: #5b5bd6; font-weight: 600; }
 .plan-focus { font-weight: 600; margin: 4px 0; }
 .plan-action { font-size: 13.5px; color: #4b5563; line-height: 1.6; }
 

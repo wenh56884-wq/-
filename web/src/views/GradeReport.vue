@@ -383,7 +383,7 @@ function renderChart() {
     },
     yAxis: {
       type: 'value', min: 0, max: 100,
-      splitLine: { lineStyle: { color: '#f4f4f5' } }
+      splitLine: { lineStyle: { color: '#eef0f5' } }
     },
     series: [
       {
@@ -396,8 +396,8 @@ function renderChart() {
       {
         name: '加权均分', type: 'line', smooth: true,
         data: rows.map((r) => r.weighted),
-        lineStyle: { color: '#2563eb', width: 2 },
-        itemStyle: { color: '#2563eb' }
+        lineStyle: { color: '#5b5bd6', width: 2 },
+        itemStyle: { color: '#5b5bd6' }
       }
     ]
   }, true)
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
   gap: 2px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: #fafafa;
+  background: #f7f8fa;
 }
 
 .summary-stats span {
@@ -539,7 +539,7 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   margin-bottom: 16px;
   border-radius: 14px;
-  background: #fafafa;
+  background: #f7f8fa;
   font-size: 14px;
   color: var(--bento-sub);
 }
@@ -605,7 +605,7 @@ onBeforeUnmount(() => {
   gap: 2px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: #fafafa;
+  background: #f7f8fa;
 }
 
 .class-stats span {
