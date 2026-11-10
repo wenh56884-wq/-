@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -31,6 +32,8 @@ from engine import workflow as workflow_engine
 from engine.career_rules import CAREER_ENGINE_VERSION
 from engine.rules import LEVELS
 from engine.store import DuckDBStore
+
+logger = logging.getLogger(__name__)
 
 # 工具层版本（随返回值下发，便于前端/Critic 溯源）
 TOOLS_VERSION = "tools-v2"
@@ -117,7 +120,7 @@ def _query(sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
             cur.execute(sql, tuple(params))
             return [dict(r) for r in cur.fetchall()]
     except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
-        print(f"[tools] MySQL 查询失败：{exc}", file=sys.stderr)
+        logger.warning("MySQL 查询失败：%s", exc, exc_info=True)
         return []
     finally:
         conn.close()
@@ -128,7 +131,7 @@ def _write_raw(sql: str, params: Sequence[Any]) -> int:
     try:
         conn = _connect()
     except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
-        print(f"[tools] MySQL 连接失败：{exc}", file=sys.stderr)
+        logger.warning("MySQL 连接失败：%s", exc, exc_info=True)
         return 0
     try:
         with conn.cursor() as cur:
@@ -136,7 +139,7 @@ def _write_raw(sql: str, params: Sequence[Any]) -> int:
             conn.commit()
             return int(cur.rowcount)
     except (pymysql.MySQLError, OSError) as exc:  # pragma: no cover - 依赖环境
-        print(f"[tools] MySQL 写入失败：{exc}", file=sys.stderr)
+        logger.warning("MySQL 写入失败：%s", exc, exc_info=True)
         return 0
     finally:
         conn.close()
@@ -144,6 +147,7 @@ def _write_raw(sql: str, params: Sequence[Any]) -> int:
 
 def write_audit(
     *,
+    tenant_id: int,
     actor_type: str,
     actor_id: int,
     action: str,
@@ -153,6 +157,7 @@ def write_audit(
     """写一条 audit_log（actor / action / target / detail），失败不影响主流程。"""
     payload = {} if detail is None else dict(detail)
     entry = {
+        "tenant_id": int(tenant_id or 0),
         "actor_type": str(actor_type),
         "actor_id": int(actor_id or 0),
         "action": str(action),
@@ -162,9 +167,10 @@ def write_audit(
     if AUDIT_SINK is not None:
         AUDIT_SINK.append(dict(entry))
     _write_raw(
-        "INSERT INTO `审计日志` (`操作者类型`, `操作者编号`, `动作`, `对象`, `详情`) "
-        "VALUES (%s, %s, %s, %s, %s)",
+        "INSERT INTO `审计日志` (`租户编号`, `操作者类型`, `操作者编号`, `动作`, `对象`, `详情`) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
         (
+            entry["tenant_id"],
             entry["actor_type"],
             entry["actor_id"],
             entry["action"],
@@ -178,13 +184,14 @@ def write_audit(
 def _audit_call(ctx: ToolContext, action: str, target: str = "",
                 detail: Mapping[str, Any] | None = None) -> None:
     """正常调用的留痕。"""
-    write_audit(actor_type=ctx.actor_type, actor_id=_actor_id(ctx),
+    write_audit(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type, actor_id=_actor_id(ctx),
                 action=action, target=target, detail=detail)
 
 
 def _deny(ctx: ToolContext, action: str, target: str, reason: str) -> None:
     """越权：先写审计再抛 PermissionError（**顺序不能反**，否则审计会丢）。"""
     write_audit(
+        tenant_id=ctx.tenant_id,
         actor_type=ctx.actor_type,
         actor_id=_actor_id(ctx),
         action=f"{action}.denied",
@@ -223,7 +230,7 @@ def _nearby_classes(ctx: ToolContext, class_name: str, limit: int = 5) -> list[s
     )
     names = [str(r.get("class_name") or "") for r in rows if r.get("class_name")]
     scope = _teacher_class_scope(ctx)
-    if scope is not None:
+    if scope:
         names = [name for name in names if name in scope]
     if not names:
         return []
@@ -263,21 +270,22 @@ def _nearby_classes(ctx: ToolContext, class_name: str, limit: int = 5) -> list[s
     return picked[:limit]
 
 
-def _teacher_class_scope(ctx: ToolContext) -> set[str] | None:
-    """教师任教班级集合；未配置任何绑定返回 None（兼容旧演示：租户范围）。
+def _teacher_class_scope(ctx: ToolContext) -> set[str]:
+    """教师任教班级集合；未配置任何绑定返回**空集**（不可见任何班级）。
 
-    为什么要 None 而不是空集合：空集合会让所有旧教师账号突然看不到任何班，
-    破坏演示；只有显式配置过 teacher_class 的教师才收窄范围。
+    为什么要空集而不是 None：需求是「辅导员账号只能管理自己任教的班，
+    不能看全校」——未绑定就等于没有任何班级，回退租户范围反而让
+    演示账号能看到全部班级。教师账号必须先用 scripts/seed_teacher_scope.py
+    绑定班级（或管理员在数据层配置）才能看到任何班级数据。
     """
     if ctx.actor_type != ACTOR_TEACHER:
-        return None
+        return set()
     rows = _query(
         "SELECT `班级` AS class_name FROM `教师任教班级` "
         "WHERE `租户编号` = %s AND `教师编号` = %s ORDER BY `班级`",
         (ctx.tenant_id, int(ctx.teacher_id or 0)),
     )
-    names = {str(row.get("class_name")) for row in rows if row.get("class_name")}
-    return names or None
+    return {str(row.get("class_name")) for row in rows if row.get("class_name")}
 
 
 def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, Any]:
@@ -298,9 +306,13 @@ def _require_class(ctx: ToolContext, class_name: str, action: str) -> dict[str, 
     cnt = int(rows[0]["cnt"]) if rows else 0
     if cnt > 0:
         scope = _teacher_class_scope(ctx)
-        if scope is not None and class_name not in scope:
+        if scope:
+            if class_name not in scope:
+                _deny(ctx, action, str(class_name),
+                      f"班级 {class_name} 不在当前教师的任教范围内")
+        else:
             _deny(ctx, action, str(class_name),
-                  f"班级 {class_name} 不在当前教师的任教范围内")
+                  "当前教师账号未绑定任何任教班级，请先配置班级再访问")
         return {"headcount": cnt}
 
     # 该班是否存在于其他租户？存在 → 真越权
@@ -340,7 +352,10 @@ def _fetch_student(ctx: ToolContext, student_no: str, action: str) -> dict[str, 
     if ctx.actor_type == ACTOR_TEACHER:
         scope = _teacher_class_scope(ctx)
         class_name = str(item.get("class_name") or "")
-        if scope is not None and class_name not in scope:
+        if not scope:
+            _deny(ctx, action, str(student_no),
+                  "当前教师账号未绑定任何任教班级，无法查询学生")
+        elif class_name not in scope:
             _deny(ctx, action, str(student_no),
                   f"学生 {student_no} 的班级不在当前教师的任教范围内")
     return item
@@ -450,8 +465,8 @@ def read_features(term: str, student_nos: Sequence[str]) -> list[dict[str, Any]]
 def class_list(ctx: ToolContext) -> dict[str, Any]:
     """教师端班级/学院目录：本租户 student 表按 学院 → 班级 → 专业 分组的名册。
 
-    权限说明：teacher 表没有「任教班级」绑定关系，所以可见范围 = 本租户全部班级，
-    与其余教师端工具一致地只做 tenant_id 隔离；更细的任教授权待有绑定表后再加。
+    权限说明：可见范围 = 该教师「教师任教班级」绑定的班级；未绑定任何班级的
+    账号返回空目录（提示先配置），**不回退全校**。
     """
     ctx = _check_ctx(ctx)
     _require_teacher(ctx, "class_list", "all")
@@ -464,7 +479,7 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
         "ORDER BY s.`学院`, s.`班级`, s.`专业`",
         (ctx.tenant_id,),
     )
-    if scope is not None:
+    if scope:
         rows = [row for row in rows if str(row.get("class_name") or "") in scope]
 
     classes: dict[str, dict[str, Any]] = {}
@@ -527,10 +542,10 @@ def class_list(ctx: ToolContext) -> dict[str, Any]:
         "colleges": [colleges[key] for key in sorted(colleges)],
         "majors": major_rows,
         "major_cnt": len(major_rows),
-        "scope": "assigned" if scope is not None else "tenant",
-        "assigned_class_cnt": len(scope) if scope is not None else 0,
-        "note": ("班级范围 = 任教班级" if scope is not None
-                 else "未配置任教班级，回退本租户全部班级"),
+        "scope": "assigned" if scope else "unbound",
+        "assigned_class_cnt": len(scope),
+        "note": ("班级范围 = 任教班级" if scope
+                 else "未绑定任何任教班级，仅管理员可见配置班级"),
         "tools_version": TOOLS_VERSION,
     }
 
@@ -1858,7 +1873,7 @@ def class_grades_rank(ctx: ToolContext, class_name: str = "",
     ]
     result["class_name"] = str(class_name)
     result["headcount"] = int(roster.get("headcount") or 0)
-    result["scope"] = "assigned" if scope else "tenant"
+    result["scope"] = "assigned" if scope else "unbound"
     result["tools_version"] = TOOLS_VERSION
     _audit_call(ctx, "class_grades_rank", f"{class_name}/{term}",
                 {"student_cnt": len(result["students"]),

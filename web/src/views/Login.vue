@@ -20,6 +20,11 @@
             <span>多智能体</span>
             <span>多租户隔离</span>
           </div>
+          <!-- 教师端入口链接：管理员把 /login?role=teacher 发给辅导员即可直达教师身份 -->
+          <a class="teacher-link" href="/login?role=teacher"
+             @click.prevent="goRole('teacher')">
+            辅导员入口 →
+          </a>
 
           <!-- 落地门：先看到品牌介绍，点「开始使用」才放登录表单 -->
           <button
@@ -100,13 +105,16 @@
             学生（大一）：AI20260001 / AI20260001
           </button>
         </div>
+        <p class="role-hint">
+          辅导员入口：<code>/login?role=teacher</code>（链接直达教师身份，账号与口令照旧）
+        </p>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { nextTick, reactive, ref } from 'vue'
+import { nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -121,6 +129,18 @@ const route = useRoute()
 /* 落地门：welcome 只展示品牌层，点「开始使用」才放登录表单 */
 const stage = ref('welcome')
 const accountRef = ref(null)
+
+// 教师端入口链接（/login?role=teacher）：直达并跳到登录表单，免去再点一次
+function goRole(role) {
+  form.role = role
+  if (stage.value === 'welcome') enterLogin()
+}
+// URL 带 ?role=teacher|student 时跟随链接预选身份
+watch(
+  () => route.query.role,
+  (val) => { if (val === 'teacher' || val === 'student') form.role = val },
+  { immediate: true }
+)
 
 function enterLogin() {
   stage.value = 'login'
@@ -209,7 +229,7 @@ async function onLogin() {
   height: 44vw;
   right: -18vw;
   bottom: -22vw;
-  background: radial-gradient(circle, rgba(91, 91, 214, 0.16), transparent 68%);
+  background: radial-gradient(circle, rgba(25, 81, 195, 0.16), transparent 68%);
   animation: login-orbit-glow 15s ease-in-out -4s infinite alternate-reverse;
 }
 
@@ -331,12 +351,12 @@ async function onLogin() {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(145deg, #7c6cf8 0%, #5b5bd6 52%, #0f9d8a 120%);
+  background: linear-gradient(145deg, #3b6ee5 0%, #1951c3 52%, #0f9d8a 120%);
   color: #fff;
   font-size: 19px;
   font-weight: 700;
   box-shadow:
-    0 8px 22px rgba(91, 91, 214, 0.42),
+    0 8px 22px rgba(25, 81, 195, 0.42),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
@@ -521,7 +541,7 @@ async function onLogin() {
   right: 0;
   left: 0;
   height: 3px;
-  background: linear-gradient(90deg, #6d5cf6, #5b5bd6 46%, #0f9d8a);
+  background: linear-gradient(90deg, #2d61dd, #1951c3 46%, #0f9d8a);
 }
 
 .panel-head {
@@ -611,7 +631,7 @@ async function onLogin() {
   --el-button-hover-bg-color: transparent;
   --el-button-hover-border-color: transparent;
   --el-button-active-bg-color: transparent;
-  background-image: linear-gradient(135deg, #6d5cf6 0%, #5b5bd6 52%, #4a4ac0 100%);
+  background-image: linear-gradient(135deg, #2d61dd 0%, #1951c3 52%, #14419c 100%);
   box-shadow:
     0 10px 24px rgba(79, 70, 229, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
@@ -622,7 +642,7 @@ async function onLogin() {
 }
 
 .login-btn:hover {
-  background-image: linear-gradient(135deg, #7c6cf8 0%, #5f5fdd 52%, #4f46e5 100%);
+  background-image: linear-gradient(135deg, #3b6ee5 0%, #1f5ad0 52%, #14419c 100%);
   box-shadow:
     0 14px 30px rgba(79, 70, 229, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.26);
@@ -744,6 +764,49 @@ async function onLogin() {
   .form-side.is-live,
   .enter-btn,
   .enter-arw {
+    transition: none;
+  }
+}
+
+/* 教师端入口链接：品牌侧，珊瑚红圆角胶囊，hover 轻微提亮 */
+.teacher-link {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--cf-line);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--cf-coral);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 160ms var(--qh-ease), border-color 160ms var(--qh-ease),
+    background-color 160ms var(--qh-ease);
+}
+
+.teacher-link:hover {
+  background: var(--cf-coral-soft);
+  border-color: var(--cf-coral);
+}
+
+/* 教师入口提示：等宽小字，方便复制链接 */
+.role-hint {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--cf-mid);
+}
+
+.role-hint code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--cf-bg-deep);
+  color: var(--cf-coral);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .teacher-link {
     transition: none;
   }
 }

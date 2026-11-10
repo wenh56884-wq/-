@@ -511,7 +511,7 @@ const INTENT_META = [
   { key: '考公', label: '考公', color: '#dc2626' },
   { key: '考研', label: '考研', color: '#d97706' },
   { key: '考编', label: '考编', color: '#16a34a' },
-  { key: '就业', label: '就业', color: '#5b5bd6' },
+  { key: '就业', label: '就业', color: '#1951c3' },
   { key: '未填写', label: '未填写', color: '#9aa1ad' }
 ]
 
@@ -594,6 +594,9 @@ async function loadDirectory() {
     classes.value = data?.classes || []
     colleges.value = data?.colleges || []
     majors.value = data?.majors || []
+    if (!classes.value.length) {
+      ElMessage.warning(data?.note || '当前账号未绑定任何任教班级，请联系管理员配置')
+    }
     if (!className.value) {
       const remembered = localStorage.getItem('qh_last_class')
       const hit = classes.value.find((item) => item.class_name === remembered)
@@ -821,8 +824,8 @@ function renderRadar(data) {
         {
           type: 'radar',
           areaStyle: { opacity: 0.18 },
-          lineStyle: { color: '#5b5bd6', width: 2 },
-          itemStyle: { color: '#5b5bd6' },
+          lineStyle: { color: '#1951c3', width: 2 },
+          itemStyle: { color: '#1951c3' },
           symbolSize: 6,
           data: [
             {
@@ -1141,7 +1144,7 @@ onBeforeUnmount(() => {
 .qh-arrow {
   font-size: 13px;
   line-height: 1;
-  color: #5b5bd6;
+  color: #1951c3;
   opacity: 0;
   transform: translate(-2px, 2px);
   transition:
@@ -1179,9 +1182,9 @@ onBeforeUnmount(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   box-shadow:
-    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 2px 6px rgba(25, 81, 195, 0.1),
     0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
@@ -1511,7 +1514,7 @@ onBeforeUnmount(() => {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: #5b5bd6;
+  background: #1951c3;
   color: #fff;
   font-size: 20px;
   font-weight: 600;

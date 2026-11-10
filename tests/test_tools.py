@@ -207,6 +207,8 @@ def test_default_term_falls_back_to_latest_term(monkeypatch):
 
     def _fake(sql: str, params) -> list[dict]:
         seen.append((sql, tuple(params)))
+        if "FROM `教师任教班级`" in sql:
+            return [{"class_name": CLASS}]
         if "ORDER BY sc.`学期` DESC LIMIT 1" in sql:
             return [{"term": "2025-2026-2"}]
         if "COUNT(DISTINCT s.`编号`) AS cnt" in sql:
@@ -229,7 +231,7 @@ def test_default_term_falls_back_to_latest_term(monkeypatch):
 
 def test_illegal_level_raises_value_error(monkeypatch):
     """非法预警等级 ValueError（区别于越权的 PermissionError）。"""
-    _offline_query(monkeypatch, [{"cnt": 1}])
+    _offline_query(monkeypatch, [{"cnt": 1}, {"class_name": CLASS}])
     monkeypatch.setattr(tools.warning, "compute_class", lambda *a, **k: [])
     with pytest.raises(ValueError):
         tools.warning_list(_teacher(), CLASS, TERM, "purple")
@@ -241,6 +243,8 @@ def test_illegal_level_raises_value_error(monkeypatch):
 def test_returns_are_structured_with_versions(monkeypatch):
     """每个返回值必须是 dict，且带 engine_version / calc_version（禁止自然语言）。"""
     def _fake(sql: str, params) -> list[dict]:
+        if "FROM `教师任教班级`" in sql:
+            return [{"class_name": CLASS}]
         if "COUNT(DISTINCT s.`编号`) AS cnt" in sql:
             return [{"cnt": 2}]
         if "headcount" in sql or "SUM(t.fail_cnt" in sql:

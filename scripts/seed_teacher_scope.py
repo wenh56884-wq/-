@@ -1,7 +1,9 @@
 # scripts/seed_teacher_scope.py
-# 职责：配置教师任教班级（teacher_class），供教师端按班隔离与阈值配置使用
+# 职责：配置教师任教班级（教师任教班级），供教师端按班隔离与阈值配置使用
 # 依赖：pymysql / app.config；不依赖 FastAPI 服务
-# 说明：--clear 清空后回退租户范围；--all 绑定本租户全部班级
+# 说明：--clear 清空绑定——教师此后**看不到任何班级**（2026-11-10 起未绑定不再
+#       回退租户范围，每个辅导员账号只能管理自己绑定的班）；--all 绑定本租户全部班级
+#       （仅在「全校管理员」场景使用）
 
 from __future__ import annotations
 
@@ -87,7 +89,8 @@ def main(argv: list[str] | None = None) -> int:
             conn.commit()
 
         if not target:
-            print(f"{args.teacher}：已清空任教班级，回退本租户全部班级。")
+            print(f"{args.teacher}：已清空任教班级绑定——此后该账号看不到任何班级，"
+                  f"请用 --classes 重新绑定。")
         else:
             print(f"{args.teacher}：已绑定 {len(target)} 个班：")
             for class_name in target:
