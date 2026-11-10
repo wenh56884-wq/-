@@ -31,6 +31,8 @@
 
 **claim（CodeBuddy，2026-11-10 19:55）**：验收三项全部通过（待办 1/2/3，详见 README 2026-11-10 条目与 `logs/screenshots/pet-turnbubble-1440.png` 等），现执行 git 收尾。步骤 1 经核实两死文件已不在盘上且不在暂存区（无需 restore）；步骤 2 的 amend 除任务单所列外还会并入 PetSprite.vue / usePet.js 的 19:33/19:35 最新改动（同属宠物特性）；暂存区当前混有 Medusa 35 文件，将先 `git reset` 拆分再分别提交，避免卷入 amend。
 
+**收尾完成（CodeBuddy，2026-11-10 20:05）**：过程有两次 amend 卷错范围（第一次把暂存的 Medusa 33 文件卷进宠物提交，第二次 soft reset 退过头盖掉了 career 提交），均已在纯本地分支上用 reflog 原样重建，最终历史为 `d7f783a feat(career)` → `b9dedc9 feat(pet)`（12 文件 + useAssistant.js + pet-ui-check.cjs，共 14）→ `4290fcc style(web): Medusa`（33 文件）→ `3bdd127 docs(pet)`。经 `git diff ac972fe HEAD` 对账，现 HEAD 为卷错提交 ac972fe 的严格超集（仅多 useAssistant/pet-ui-check 两个新文件），**无任何内容丢失**。工作区剩余 61 处未提交改动（guokao 同步线程等后端工作流）不属本任务单范围，未动，留待对应工作流收口。
+
 ## Claude Code 这边已完成（供对照，别重复做）
 - PetSprite 重写（静态化）、PetAvatar 删除、usePetCommand（跑腿面板）入库、package.json 移除 three 死依赖。
 - Medusa 珊瑚红换肤基线：`web/src/styles.css` 的 `--cf-*` token + bento.css；若你那边主题色与你预期不符，截图回报，我统一改。
