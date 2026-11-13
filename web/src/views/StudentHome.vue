@@ -15,13 +15,13 @@
           <p class="ph-eyebrow">本学期结论 · {{ warning.term || term || '-' }}</p>
           <h2 class="ph-title">{{ heroConclusion }}</h2>
           <p class="ph-desc">
-            预警、画像、推荐三处数值全部由确定性引擎实算，未通过 Critic 回查的数字不会展示。
+            让启航智能体帮你看懂预警、匹配岗位、拆解能力差距；所有数值由确定性引擎实算并回查。
           </p>
           <div class="ph-actions">
             <el-button type="primary" class="ph-btn" @click="goJobs">查看岗位</el-button>
             <el-button class="ph-btn" @click="goWarning">查看预警</el-button>
             <el-button class="ph-btn" @click="askAI('我这学期的学业预警情况怎么样？')">
-              问 AI
+              问启航智能体
             </el-button>
           </div>
         </div>
@@ -967,7 +967,7 @@ onBeforeUnmount(() => {
 .qh-arrow {
   font-size: 14px;
   line-height: 1;
-  color: #5b5bd6;
+  color: #1951c3;
   opacity: 0;
   transform: translate(-2px, 2px);
   transition:
@@ -1011,9 +1011,9 @@ onBeforeUnmount(() => {
 
 .quick-item:hover {
   transform: translateY(-2px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   box-shadow:
-    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 2px 6px rgba(25, 81, 195, 0.1),
     0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
@@ -1105,8 +1105,8 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--qh-primary-soft, #ececfb);
-  color: var(--qh-primary, #5b5bd6);
+  background: var(--qh-primary-soft, #e9efff);
+  color: var(--qh-primary, #1951c3);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1150,14 +1150,14 @@ onBeforeUnmount(() => {
 }
 
 .pick-card:hover {
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   transform: translateY(-1px);
 }
 
 .pick-card.is-on {
-  border-color: var(--qh-primary, #5b5bd6);
-  background: var(--qh-primary-soft, #ececfb);
-  box-shadow: 0 6px 16px rgba(91, 91, 214, 0.14);
+  border-color: var(--qh-primary, #1951c3);
+  background: var(--qh-primary-soft, #e9efff);
+  box-shadow: 0 6px 16px rgba(25, 81, 195, 0.14);
 }
 
 .pick-name {
@@ -1275,7 +1275,7 @@ onBeforeUnmount(() => {
 
 .guide-cta-btn:hover {
   transform: translateY(-1px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   background: var(--bento-accent-soft);
   color: var(--bento-accent);
 }
@@ -1529,8 +1529,8 @@ onBeforeUnmount(() => {
 }
 
 .bell-btn:hover {
-  background: #ececfb;
-  color: #4a4ac0;
+  background: #e9efff;
+  color: #14419c;
 }
 
 .bell-btn.has-new {
@@ -1714,7 +1714,7 @@ onBeforeUnmount(() => {
 .dim-bar i {
   display: block;
   height: 100%;
-  background: #5b5bd6;
+  background: #1951c3;
   border-radius: 8px;
 }
 
@@ -1774,9 +1774,9 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   padding: 0 6px;
   border-radius: 8px;
-  background: #ececfb;
-  border: 1px solid #dcdcf9;
-  color: #4a4ac0;
+  background: #e9efff;
+  border: 1px solid #baccf0;
+  color: #14419c;
   font-size: 12.5px;
   line-height: 18px;
 }
@@ -1818,7 +1818,7 @@ onBeforeUnmount(() => {
   display: inline-block;
   margin-top: 6px;
   font-size: 13.5px;
-  color: #5b5bd6;
+  color: #1951c3;
   text-decoration: none;
 }
 

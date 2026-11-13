@@ -90,7 +90,7 @@
           </el-button>
         </el-form>
 
-        <div class="demo-box">
+        <div v-if="!publicDemoMode" class="demo-box">
           <strong>演示账号（点一下自动填入）</strong>
           <button type="button" class="demo-item"
                   @click="fillDemo('teacher', 'T001', 'teacher@123')">
@@ -105,8 +105,17 @@
             学生（大一）：AI20260001 / AI20260001
           </button>
         </div>
+        <div v-else class="demo-box">
+          <strong>公网临时演示账号</strong>
+          <span>教师：T001</span>
+          <span>学生：AI20260001（大一） · AI20250001（大二）</span>
+          <span>AI20240004（大三） · AI20230001（大四）</span>
+          <span>共享口令请向演示发布者获取</span>
+        </div>
         <p class="role-hint">
-          辅导员入口：<code>/login?role=teacher</code>（链接直达教师身份，账号与口令照旧）
+          {{ publicDemoMode ? '临时演示仅开放上述模拟账号。' : '辅导员入口：' }}
+          <code v-if="!publicDemoMode">/login?role=teacher</code>
+          <template v-if="!publicDemoMode">（链接直达教师身份，账号与口令照旧）</template>
         </p>
       </div>
     </section>
@@ -121,7 +130,8 @@ import { ElMessage } from 'element-plus'
 import http, { saveSession } from '../api/http'
 import VideoBackdrop from '../components/VideoBackdrop.vue'
 
-const form = reactive({ role: 'teacher', account: 'T001', password: 'teacher@123' })
+const publicDemoMode = import.meta.env.VITE_PUBLIC_DEMO_MODE === 'true'
+const form = reactive({ role: 'teacher', account: 'T001', password: publicDemoMode ? '' : 'teacher@123' })
 const loading = ref(false)
 const router = useRouter()
 const route = useRoute()
@@ -506,6 +516,12 @@ async function onLogin() {
 }
 
 .form-side.is-live {
+  background:
+    radial-gradient(ellipse at 18% 18%, rgba(99, 102, 241, 0.28), transparent 44%),
+    radial-gradient(ellipse at 82% 78%, rgba(20, 184, 166, 0.2), transparent 42%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.56), rgba(30, 41, 80, 0.34));
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
   opacity: 1;
   visibility: visible;
   transition:
@@ -517,13 +533,16 @@ async function onLogin() {
   position: relative;
   width: min(440px, calc(100vw - 48px));
   padding: 30px 32px;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(228, 231, 238, 0.92);
-  border-radius: var(--qh-radius-xl);
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(199, 210, 254, 0.5), transparent 48%),
+    radial-gradient(ellipse at 0% 100%, rgba(204, 251, 241, 0.36), transparent 44%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.97), rgba(246, 249, 255, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  border-radius: 26px;
   box-shadow:
-    0 30px 80px rgba(1, 23, 31, 0.34),
-    0 2px 8px rgba(1, 23, 31, 0.12),
-    0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+    0 36px 100px rgba(8, 18, 48, 0.34),
+    0 10px 30px rgba(39, 70, 158, 0.14),
+    0 0 0 1px rgba(255, 255, 255, 0.74) inset;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -540,8 +559,25 @@ async function onLogin() {
   top: 0;
   right: 0;
   left: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #2d61dd, #1951c3 46%, #0f9d8a);
+  height: 4px;
+  background: linear-gradient(90deg, #60a5fa 0%, #4f46e5 42%, #8b5cf6 72%, #2dd4bf 100%);
+}
+
+.form-card::after {
+  content: '';
+  position: absolute;
+  top: -120px;
+  right: -110px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.2), transparent 70%);
+  pointer-events: none;
+}
+
+.form-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .panel-head {
@@ -556,7 +592,7 @@ async function onLogin() {
   font-family: var(--cf-font-mono);
   font-size: 12px;
   font-weight: 600;
-  color: var(--cf-teal);
+  color: #4f46e5;
 }
 
 .panel-title {
@@ -659,7 +695,7 @@ async function onLogin() {
   padding: 12px 14px;
   border: 1px solid var(--cf-line);
   border-radius: var(--qh-radius-lg);
-  background: var(--cf-bg-deep);
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.9), rgba(236, 253, 250, 0.78));
   font-family: var(--cf-font-mono);
   font-size: 12px;
   color: var(--cf-mid);
@@ -689,7 +725,9 @@ async function onLogin() {
 /* 响应式：移动端堆叠，3D 核心降为矮横幅，登录卡在下方 */
 @media (max-width: 1023px) {
   .login-shell {
-    min-height: 100svh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .field-side {
@@ -728,12 +766,43 @@ async function onLogin() {
   }
 
   .form-side {
-    padding: 20px;
+    position: fixed;
+    inset: 0;
+    align-items: flex-start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: max(16px, env(safe-area-inset-top)) 16px
+      max(16px, env(safe-area-inset-bottom));
+  }
+
+  /* 手机登录改为独立、可滚动的表单页，不再把表单叠在整屏品牌落地页上。 */
+  .login-shell:has(.form-side.is-live) .field-side {
+    visibility: hidden;
+  }
+
+  .form-side.is-live {
+    background:
+      radial-gradient(ellipse at 12% 10%, rgba(99, 102, 241, 0.18), transparent 42%),
+      radial-gradient(ellipse at 92% 92%, rgba(20, 184, 166, 0.16), transparent 40%),
+      linear-gradient(145deg, #eef2ff 0%, #f5f7ff 48%, #ecfdf9 100%);
   }
 
   .form-card {
     width: min(440px, calc(100vw - 40px));
-    padding: 24px 22px;
+    flex: 0 0 auto;
+    margin: auto 0;
+    padding: 24px 22px max(24px, env(safe-area-inset-bottom));
+  }
+
+  .login-form :deep(.el-input__wrapper),
+  .login-form :deep(.el-input__inner) {
+    font-size: 16px;
+  }
+
+  .login-btn,
+  .role-switch :deep(.el-radio-button__inner) {
+    min-height: 48px;
   }
 
   .field-overlay {
@@ -751,6 +820,29 @@ async function onLogin() {
   .brand-sub,
   .brand-chips {
     opacity: 0.72;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-side {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .form-card {
+    width: 100%;
+    padding: 22px 18px max(22px, env(safe-area-inset-bottom));
+  }
+
+  .panel-badge {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .demo-box,
+  .demo-item {
+    font-size: 13px;
+    line-height: 1.6;
   }
 }
 

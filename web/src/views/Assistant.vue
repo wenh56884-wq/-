@@ -58,8 +58,8 @@
 
         <div ref="listRef" class="asst-body">
           <div v-if="!messages.length" class="asst-empty">
-            <div class="empty-title">有什么想问的？</div>
-            <div class="empty-sub">数值只能来自确定性引擎；需要外部事实时开启「智能搜索」</div>
+            <div class="empty-title">{{ role === 'student' ? '你的学业与生涯智能体，随时为你规划下一步' : '有什么想问的？' }}</div>
+            <div class="empty-sub">{{ role === 'student' ? '可以直接问预警原因、岗位匹配、能力差距或下一步行动建议。' : '数值只能来自确定性引擎；需要外部事实时开启「智能搜索」' }}</div>
             <div class="empty-qs">
               <button v-for="q in examples" :key="q" type="button" class="empty-q"
                 :disabled="sending" @click="send(q)">{{ q }}</button>
@@ -121,7 +121,7 @@
         <footer class="asst-compose">
           <div class="compose-box">
             <textarea v-model="query" class="compose-input" rows="1"
-              placeholder="给启航智能助手发送消息，Enter 发送 / Shift+Enter 换行"
+              :placeholder="role === 'student' ? '问问启航：预警解读、岗位匹配、能力提升…（Enter 发送）' : '给启航智能体发送消息，Enter 发送 / Shift+Enter 换行'"
               @keydown.enter.exact.prevent="send()" />
 
             <div class="compose-foot">
@@ -748,7 +748,7 @@ onMounted(loadSessions)
 }
 
 .sess-item.is-active {
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   background: var(--bento-accent-soft);
 }
 
@@ -927,7 +927,7 @@ onMounted(loadSessions)
 
 .msg.user .avatar {
   /* Apple 蓝实底，替代原来的蓝紫渐变 */
-  background: #5b5bd6;
+  background: #1951c3;
   color: #ffffff;
 }
 
@@ -943,7 +943,7 @@ onMounted(loadSessions)
 }
 
 .msg.user .bubble {
-  background: #5b5bd6;
+  background: #1951c3;
   color: #ffffff;
 }
 
@@ -977,7 +977,7 @@ onMounted(loadSessions)
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #5b5bd6;
+  background: #1951c3;
   animation: bounce 1.2s infinite;
 }
 
@@ -1212,7 +1212,7 @@ onMounted(loadSessions)
   padding: 7px 18px;
   border: none;
   border-radius: 999px;
-  background: #5b5bd6;
+  background: #1951c3;
   font-size: 14px;
   font-weight: 600;
   color: #ffffff;
@@ -1312,7 +1312,7 @@ onMounted(loadSessions)
 }
 
 .search-item:hover {
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   background: #fbfbff;
 }
 

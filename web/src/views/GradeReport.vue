@@ -10,7 +10,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="学生">
-            <el-select v-model="studentNo" filterable style="width: 260px" @change="loadGrades">
+            <el-select v-model="studentNo" filterable clearable placeholder="选择学生后查看个人成绩" style="width: 260px" @change="onStudentChange">
               <el-option v-for="s in studentOptions" :key="s.student_no"
                 :label="`${s.student_no} ${s.name || ''}`" :value="s.student_no" />
             </el-select>
@@ -222,7 +222,12 @@
         </el-tabs>
       </section>
 
-      <el-empty v-if="!report && !loading" class="bento-span-4" description="暂无成绩数据" />
+      <el-empty
+        v-if="isTeacher && !report && !loading && !err"
+        class="bento-span-4"
+        description="请选择学生查看个人成绩；班级均分与排名已在上方展示"
+      />
+      <el-empty v-else-if="!isTeacher && !report && !loading" class="bento-span-4" description="暂无成绩数据" />
     </div>
   </div>
 </template>
@@ -318,10 +323,12 @@ async function loadStudents() {
     const wanted = String(route.query.student_no || '')
     if (wanted && students.value.some((s) => s.student_no === wanted)) {
       studentNo.value = wanted
-    } else if (!students.value.some((s) => s.student_no === studentNo.value)) {
-      studentNo.value = students.value[0]?.student_no || ''
+      await loadGrades()
+    } else {
+      // 教师成绩页默认只呈现班级汇总；个人信息必须由教师主动选择。
+      studentNo.value = ''
+      report.value = null
     }
-    if (studentNo.value) await loadGrades()
     await loadRank()
   } catch (e) {
     err.value = e?.response?.data?.detail || '学生名单加载失败'
@@ -347,6 +354,14 @@ async function loadRank() {
 function pickStudent(row) {
   if (!row?.student_no) return
   studentNo.value = row.student_no
+  loadGrades()
+}
+
+function onStudentChange() {
+  if (!studentNo.value) {
+    report.value = null
+    return
+  }
   loadGrades()
 }
 
@@ -396,8 +411,8 @@ function renderChart() {
       {
         name: '加权均分', type: 'line', smooth: true,
         data: rows.map((r) => r.weighted),
-        lineStyle: { color: '#5b5bd6', width: 2 },
-        itemStyle: { color: '#5b5bd6' }
+        lineStyle: { color: '#1951c3', width: 2 },
+        itemStyle: { color: '#1951c3' }
       }
     ]
   }, true)
