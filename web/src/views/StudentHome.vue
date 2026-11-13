@@ -282,7 +282,7 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="quick-card bento-span-2">
+    <el-card shadow="never" class="quick-card bento-span-4">
       <template #header>
         <div class="card-title" style="margin: 0">快捷入口</div>
       </template>
@@ -1050,20 +1050,20 @@ onBeforeUnmount(() => {
 
 .quick-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
 .quick-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   grid-template-areas:
-    'icon blank arrow'
-    'name name name'
-    'desc desc desc';
+    'icon name arrow'
+    'icon desc arrow';
   align-items: center;
-  gap: 4px 10px;
-  padding: 14px;
+  gap: 3px 12px;
+  min-height: 88px;
+  padding: 14px 16px;
   border: 1px solid var(--bento-border);
   border-radius: 16px;
   background: #ffffff;
@@ -1090,14 +1090,17 @@ onBeforeUnmount(() => {
 
 .quick-name {
   grid-area: name;
-  font-size: 14px;
-  font-weight: 600;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 650;
   color: var(--bento-text);
 }
 
 .quick-desc {
   grid-area: desc;
-  font-size: 13.5px;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.45;
   color: var(--bento-mute);
 }
 
@@ -1257,6 +1260,26 @@ onBeforeUnmount(() => {
   .onboard-pick {
     grid-template-columns: 1fr;
   }
+
+  .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .quick-item {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 3px 8px;
+    min-height: 82px;
+    padding: 12px 10px;
+  }
+
+  .quick-item .bento-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .quick-name { font-size: 14px; }
+  .quick-desc { font-size: 12.5px; }
 }
 
 .guide-steps {

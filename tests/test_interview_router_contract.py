@@ -11,7 +11,12 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from app.routers.interview import _evidence, _json_list  # noqa: E402
+from app.routers.interview import (  # noqa: E402
+    _evidence,
+    _json_list,
+    _resume_number_tokens,
+    _rewrite_preserves_numbers,
+)
 
 
 def test_json_list_parses_mysql_json_string():
@@ -41,3 +46,12 @@ def test_evidence_falls_back_to_self_or_db_self_eval():
     assert _evidence({"self": "自评", "experiences": []}, None) == ["自评"]
     # _load_resume() 返回的是中文列名，问卷自填简历没有原文时用「自我评价」
     assert _evidence({"自我评价": "库里的自评", "experiences": []}, None) == ["库里的自评"]
+
+
+def test_resume_rewrite_requires_exact_numeric_evidence():
+    source = "负责 3 个接口，覆盖 500 名用户，效率提升 20%。"
+    assert _resume_number_tokens(source) == ["3", "500", "20%"]
+    assert _rewrite_preserves_numbers(source, "完成 3 个 API，服务 500 位用户，效率提升 20%。")
+    assert not _rewrite_preserves_numbers(source, "完成 5 个 API，服务 500 位用户，效率提升 20%。")
+    assert not _rewrite_preserves_numbers(source, "完成 3 个 API，服务 500 位用户，效率提升 25%。")
+    assert not _rewrite_preserves_numbers(source, "完成 API，服务 500 位用户，效率提升 20%。")

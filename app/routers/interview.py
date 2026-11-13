@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from agents import interviewer
+from agents import llm as llm_client
 from app.audit import audit_event
 from app.auth import get_current_ctx, require_student
 from app.config import get_settings
@@ -173,6 +174,54 @@ class ParseIn(BaseModel):
     text: str
 
 
+class ResumeRewriteIn(BaseModel):
+    text: str
+    target_job: str | None = None
+
+
+def _resume_number_tokens(text: str) -> list[str]:
+    """提取原简历中的数值证据；AI 改写不得遗漏、增加或改动这些数字。"""
+    return re.findall(r"\d+(?:\.\d+)?%?", text or "")
+
+
+def _rewrite_preserves_numbers(source: str, rewritten: str) -> bool:
+    """用多重集合比对数字，避免模型改数量、年份、百分比或重复次数。"""
+    from collections import Counter
+
+    return Counter(_resume_number_tokens(source)) == Counter(_resume_number_tokens(rewritten))
+
+
+@router.post("/resume/rewrite")
+def resume_rewrite(inp: ResumeRewriteIn,
+                   ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """基于学生主动提交的简历文本做表达润色；不读他人数据、不增删数值事实。"""
+    source = (inp.text or "").strip()
+    if len(source) < 30:
+        raise HTTPException(422, "请至少提供 30 个字符的简历内容后再进行 AI 改写")
+    if len(source) > 12000:
+        raise HTTPException(413, "简历内容过长，请控制在 12000 个字符以内")
+    target = (inp.target_job or "").strip()[:120]
+    system = (
+        "你是中文简历编辑助手。只润色用户提供的事实，不得虚构姓名、学校、技能、职责、成果、证书或经历；"
+        "不得新增、删除、换算或改写任何数字、年份、日期、百分比、数量或度量单位；"
+        "不得把参与改成负责/主导，不得把不确定描述升级成确定结论。"
+        "可以改善结构、语法、专业表达和岗位关键词自然度；信息不足处用【建议补充：具体信息】标出。"
+        "只返回可直接使用的简历正文，不要附带解释或 Markdown 代码围栏。"
+    )
+    user = f"目标岗位：{target or '未指定，采用通用校招表达'}\n请改写以下简历，并完整保留所有事实与数字：\n\n{source}"
+    rewritten = llm_client.generate_reply("student", system_prompt=system,
+                                          user_prompt=user, tag="resume.rewrite")
+    if not rewritten:
+        raise HTTPException(503, "AI 简历服务暂不可用，请稍后重试；原文不会被覆盖")
+    result = str(rewritten).strip().removeprefix("```text").removeprefix("```").removesuffix("```").strip()
+    if not result or not _rewrite_preserves_numbers(source, result):
+        audit_event(tenant_id=ctx.tenant_id, actor_type="student", actor_id=ctx.student_id,
+                    action="resume.rewrite.rejected", detail={"reason": "numeric_evidence_mismatch"})
+        raise HTTPException(502, "AI 改写未通过数字事实校验，原文保持不变，请重试")
+    return {"rewritten_text": result, "target_job": target or None,
+            "numbers_verified": True, "saved": False}
+
+
 @router.post("/resume/parse")
 def resume_parse(inp: ParseIn, ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     """粘贴文本 → 规则解析为三段结构（不入库，前端确认后再保存）。"""
@@ -260,7 +309,8 @@ def resume_save(inp: ResumeIn, ctx: ToolContext = Depends(require_student)) -> d
         with conn.cursor() as cur:
             rid = _save_resume(cur, ctx, "questionnaire", parsed, None)
         conn.commit()
-        audit_event(actor_type="student", actor_id=ctx.student_id, action="resume.save",
+        audit_event(tenant_id=ctx.tenant_id, actor_type="student",
+                    actor_id=ctx.student_id, action="resume.save",
                     target=str(rid), detail={"source": "questionnaire"})
         return {"resume_id": rid}
     finally:
@@ -414,7 +464,8 @@ def resume_diagnosis(job_id: int | None = None, job_pool: str | None = None,
             resume = _load_resume(cur, int(row["编号"]), ctx.tenant_id)
             job = _load_job(cur, job_id, job_pool) if job_id else None
         result = diagnose(resume, job)
-        audit_event(actor_type="student", actor_id=ctx.student_id, action="resume.diagnosis",
+        audit_event(tenant_id=ctx.tenant_id, actor_type="student",
+                    actor_id=ctx.student_id, action="resume.diagnosis",
                     target=str(row["编号"]), detail={"job_id": job_id, "issues": len(result["issues"])})
         return result
     finally:
@@ -466,7 +517,8 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
                  json.dumps(outline, ensure_ascii=False), len(outline), INTERVIEW_ENGINE_VERSION))
             sid = cur.lastrowid
         conn.commit()
-        audit_event(actor_type="student", actor_id=ctx.student_id, action="interview.start",
+        audit_event(tenant_id=ctx.tenant_id, actor_type="student",
+                    actor_id=ctx.student_id, action="interview.start",
                     target=str(sid), detail={"job_id": inp.job_id, "rounds": len(outline)})
         q = outline[0]
         return {"session_id": sid, "total_rounds": len(outline), "round": 1,
@@ -641,7 +693,8 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
                         (evaluation["total"], report, json.dumps(gaps, ensure_ascii=False),
                          datetime.now(), sid))
         conn.commit()
-        audit_event(actor_type="student", actor_id=ctx.student_id, action="interview.finish",
+        audit_event(tenant_id=ctx.tenant_id, actor_type="student",
+                    actor_id=ctx.student_id, action="interview.finish",
                     target=str(sid), detail={"total": evaluation["total"], "gaps": len(gaps)})
     finally:
         conn.close()
@@ -780,7 +833,7 @@ def bank_browse(family: str = "", qtype: str = "", q: str = "",
                       "qtype": it.qtype, "question": it.question,
                       "keywords": list(it.keywords), "difficulty": it.difficulty,
                       "source_name": it.source_name, "source_url": it.source_url})
-    audit_event(actor_type=ctx.actor_type,
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
                 actor_id=ctx.teacher_id if ctx.actor_type == "teacher" else ctx.student_id,
                 action="interview.bank.browse",
                 detail={"family": family, "qtype": qtype, "hits": len(items)})
