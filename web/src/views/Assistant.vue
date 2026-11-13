@@ -56,47 +56,6 @@
           </button>
         </header>
 
-        <section class="source-dock" aria-label="资料分析">
-          <div class="source-dock-head">
-            <div>
-              <div class="source-dock-title">资料分析工作台</div>
-              <div class="source-dock-sub">上传多份资料，按同一个问题交叉分析；不会自动写入共享知识库</div>
-            </div>
-            <span class="source-private-badge">临时分析</span>
-          </div>
-          <input ref="sourceInput" class="source-file-input" type="file"
-            accept=".pdf,.docx,.md,.txt" multiple @change="pickSources" />
-          <div class="source-dock-grid">
-            <div class="source-file-list" aria-live="polite">
-              <span v-for="(file, index) in sourceFiles" :key="file.name + file.size + index" class="source-file-chip">
-                <span class="source-file-name">{{ file.name }}</span>
-                <button type="button" :aria-label="`移除 ${file.name}`" @click="removeSource(index)">×</button>
-              </span>
-              <span v-if="!sourceFiles.length" class="source-file-placeholder">还没有选择文件，请在下方输入区添加资料</span>
-            </div>
-          </div>
-          <div class="source-dock-actions">
-            <input v-model="analysisPrompt" class="source-question" type="text"
-              placeholder="例如：帮我提炼这几份材料的重点、冲突和行动建议" maxlength="600"
-              @keydown.enter.prevent="analyzeSources" />
-            <div class="source-switches">
-              <button type="button" class="source-switch" :class="{ 'is-on': sourceUseKnowledge }"
-                @click="sourceUseKnowledge = !sourceUseKnowledge">
-                <span class="toggle-dot" />知识库
-              </button>
-              <button type="button" class="source-switch" :class="{ 'is-on': sourceUseWeb }"
-                @click="sourceUseWeb = !sourceUseWeb">
-                <span class="toggle-dot" />联网
-              </button>
-              <button type="button" class="source-analyze-btn" :disabled="!canAnalyze || analyzingSources"
-                @click="analyzeSources">
-                {{ analyzingSources ? '分析中…' : '开始分析' }}
-              </button>
-            </div>
-          </div>
-          <div v-if="sourceError" class="source-error" role="alert">{{ sourceError }}</div>
-        </section>
-
         <div ref="listRef" class="asst-body">
           <div v-if="!messages.length" class="asst-empty">
             <div class="empty-title">{{ role === 'student' ? '你的学业与生涯智能体，随时为你规划下一步' : '有什么想问的？' }}</div>
@@ -160,10 +119,21 @@
         </div>
 
         <footer class="asst-compose">
+          <input ref="sourceInput" class="source-file-input" type="file"
+            accept=".pdf,.docx,.md,.txt" multiple @change="pickSources" />
           <div class="compose-box">
             <textarea v-model="query" class="compose-input" rows="1"
               :placeholder="role === 'student' ? '问问启航：预警解读、岗位匹配、能力提升…（Enter 发送）' : '给启航智能体发送消息，Enter 发送 / Shift+Enter 换行'"
               @keydown.enter.exact.prevent="send()" />
+
+            <div v-if="sourceFiles.length" class="compose-attachments" aria-live="polite">
+              <span class="compose-attachments-label">已附加资料</span>
+              <span v-for="(file, index) in sourceFiles" :key="file.name + file.size + index" class="source-file-chip">
+                <span class="source-file-name">{{ file.name }}</span>
+                <button type="button" :aria-label="`移除 ${file.name}`" @click="removeSource(index)">×</button>
+              </span>
+            </div>
+            <div v-if="sourceError" class="source-inline-error" role="alert">{{ sourceError }}</div>
 
             <div class="compose-foot">
               <div class="toggles">
@@ -183,8 +153,8 @@
                 </button>
               </div>
               <button class="send-btn" type="button"
-                :disabled="sending || !query.trim()" @click="send()">
-                {{ sending ? '生成中' : '发送' }}
+                :disabled="sending || analyzingSources || !query.trim()" @click="send()">
+                {{ analyzingSources ? '分析中' : sending ? '生成中' : '发送' }}
               </button>
             </div>
           </div>
@@ -297,7 +267,7 @@ const sessionsLoading = ref(false)
 const deepThinking = ref(false)
 const webSearch = ref(false)
 
-// 资料分析工作台：文件只在本次请求内解析，不写入共享知识库。
+// 资料上传分析：文件只在本次请求内解析，不写入共享知识库。
 const sourceInput = ref(null)
 const sourceFiles = ref([])
 const analysisPrompt = ref('')
@@ -422,6 +392,8 @@ async function analyzeSources() {
     if (pending.citations.length) searchOpen.value = true
     const errors = Array.isArray(data?.errors) ? data.errors : []
     if (errors.length) pending.error = `部分来源未读取：${errors.map((item) => item.source).join('、')}`
+    sourceFiles.value = []
+    analysisPrompt.value = ''
   } catch (err) {
     pending.streaming = false
     pending.status = ''
@@ -592,7 +564,15 @@ async function runWebSearch(text) {
 
 async function send(text) {
   const content = String(text ?? query.value).trim()
-  if (!content || sending.value) return
+  if (!content || sending.value || analyzingSources.value) return
+
+  if (sourceFiles.value.length) {
+    analysisPrompt.value = content
+    sourceUseWeb.value = webSearch.value
+    query.value = ''
+    await analyzeSources()
+    return
+  }
 
   const history = messages.value.slice(-8).map(({ role: r, text: body }) => ({
     role: r === 'user' ? 'user' : 'assistant',
@@ -943,62 +923,12 @@ onMounted(loadSessions)
   border-bottom: 1px solid var(--bento-border);
 }
 
-/* ---------- 多来源资料分析 ---------- */
-.source-dock {
-  margin: 10px 14px 0;
-  padding: 12px 14px 11px;
-  border: 1px solid #cfdcf7;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f8fbff 0%, #f5f8ff 58%, #ffffff 100%);
-}
-
-.source-dock-head,
-.source-dock-grid,
-.source-dock-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.source-dock-head {
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.source-dock-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--bento-text);
-}
-
-.source-dock-sub {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--bento-mute);
-}
-
-.source-private-badge {
-  flex: 0 0 auto;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #e7efff;
-  color: #315db1;
-  font-size: 12px;
-  font-weight: 650;
-}
-
+/* ---------- 资料上传 ---------- */
 .source-file-input {
   display: none;
 }
 
-.source-dock-grid {
-  margin-top: 8px;
-  align-items: flex-start;
-}
-
-.source-upload-btn,
-.source-switch,
-.source-analyze-btn {
+.source-upload-btn {
   min-height: 38px;
   border-radius: 9px;
   cursor: pointer;
@@ -1078,76 +1008,9 @@ onMounted(loadSessions)
   color: #1f2a44;
 }
 
-.source-file-placeholder {
-  color: var(--bento-mute);
-  font-size: 13px;
-}
-
-.source-dock-actions {
-  margin-top: 8px;
-  align-items: stretch;
-}
-
-.source-question {
-  min-width: 0;
-  flex: 1 1 auto;
-  min-height: 38px;
-  padding: 7px 11px;
-  border: 1px solid #d5deee;
-  border-radius: 10px;
-  outline: none;
-  background: #ffffff;
-  color: var(--bento-text);
-  font-size: 13.5px;
-}
-
-.source-question:focus {
-  border-color: #6c8fd9;
-  box-shadow: 0 0 0 3px rgba(72, 110, 195, .12);
-}
-
-.source-switches {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.source-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 10px;
-  border: 1px solid #d5deee;
-  background: #ffffff;
-  color: var(--bento-sub);
-}
-
-.source-switch.is-on {
-  border-color: #9cb6ed;
-  background: #eaf1ff;
-  color: #315db1;
-}
-
-.source-analyze-btn {
-  padding: 0 14px;
-  border: 0;
-  background: linear-gradient(135deg, #2d61dd 0%, #14419c 100%);
-  color: #ffffff;
-  font-weight: 700;
-  box-shadow: 0 5px 14px rgba(33, 80, 174, .18);
-}
-
-.source-analyze-btn:disabled,
 .source-upload-btn:disabled {
   opacity: .48;
   cursor: not-allowed;
-}
-
-.source-error {
-  margin-top: 6px;
-  color: #b42318;
-  font-size: 12.5px;
 }
 
 .asst-id {
@@ -1517,6 +1380,32 @@ onMounted(loadSessions)
   color: var(--bento-text);
 }
 
+.compose-attachments {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 7px;
+}
+
+.compose-attachments-label {
+  color: var(--bento-mute);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.compose-attachments .source-file-chip {
+  max-width: min(260px, 100%);
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.source-inline-error {
+  margin: 0 14px 7px;
+  color: #b42318;
+  font-size: 12.5px;
+}
+
 .compose-foot {
   display: flex;
   align-items: center;
@@ -1773,24 +1662,6 @@ onMounted(loadSessions)
 }
 
 @media (max-width: 767px) {
-  .source-dock {
-    margin: 10px 10px 0;
-    padding: 12px;
-  }
-
-  .source-dock-actions {
-    flex-direction: column;
-  }
-
-  .source-switches {
-    width: 100%;
-  }
-
-  .source-switch,
-  .source-analyze-btn {
-    flex: 1 1 0;
-  }
-
   .bubble {
     max-width: 88%;
   }
