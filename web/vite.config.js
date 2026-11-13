@@ -15,5 +15,20 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
+  },
+  build: {
+    // 将 Element Plus 与 ECharts 从应用入口拆出，降低首屏 chunk 体积并消除单包告警。
+    // 两个按需路由级依赖自身仍会超过 Vite 默认 500KB 阈值，提升阈值避免把正常 vendor chunk 当成构建失败。
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('node_modules/echarts') || id.includes('node_modules\\echarts')) return 'echarts'
+          if (id.includes('node_modules/element-plus') || id.includes('node_modules\\element-plus')) return 'element-plus'
+          return 'vendor'
+        }
+      }
+    }
   }
 })

@@ -68,15 +68,21 @@ def db():
     """MySQL 连接 + 准备一个教师账号与一个真实班级/学生，用例结束清理。"""
     conn = _conn()
     created = False
+    teacher_id = 0
+    original_classes: list[str] = []
     with conn.cursor() as cur:
         cur.execute("SELECT `编号` FROM `教师` WHERE `工号` = %s", (EMPLOYEE_NO,))
-        if cur.fetchone() is None:
+        teacher = cur.fetchone()
+        if teacher is None:
             cur.execute(
                 "INSERT INTO `教师` (`租户编号`, `姓名`, `工号`, `角色`, `口令摘要`) "
                 "VALUES (%s, %s, %s, 'teacher', %s)",
                 (TENANT, "测试教师", EMPLOYEE_NO, hash_password(TEACHER_PWD)),
             )
             created = True
+            teacher_id = int(cur.lastrowid)
+        else:
+            teacher_id = int(teacher["编号"])
         cur.execute(
             "SELECT s.`班级` AS class_name, COUNT(DISTINCT s.`编号`) AS n "
             "FROM `学生` s JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
@@ -91,12 +97,34 @@ def db():
             "ORDER BY s.`学号` LIMIT 1", (TERM, TENANT, klass_row.get("class_name")),
         )
         stu_row = cur.fetchone() or {}
+        # 新的教师端隔离要求教师只能访问已绑定的班级；测试账号仅绑定本夹具选中的班级。
+        # 进程号复用或上次测试中断时，保留现存账号原来的任教绑定。
+        cur.execute("SELECT `班级` FROM `教师任教班级` WHERE `租户编号` = %s AND `教师编号` = %s",
+                    (TENANT, teacher_id))
+        original_classes = [str(row["班级"]) for row in cur.fetchall()]
+        cur.execute("DELETE FROM `教师任教班级` WHERE `租户编号` = %s AND `教师编号` = %s",
+                    (TENANT, teacher_id))
+        if klass_row.get("class_name"):
+            cur.execute(
+                "INSERT INTO `教师任教班级` (`租户编号`, `教师编号`, `班级`) "
+                "VALUES (%s, %s, %s)",
+                (TENANT, teacher_id, klass_row["class_name"]),
+            )
     conn.commit()
     yield conn, str(klass_row.get("class_name") or ""), stu_row
-    if created:
-        with conn.cursor() as cur:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM `教师任教班级` WHERE `租户编号` = %s AND `教师编号` = %s",
+                    (TENANT, teacher_id))
+        if created:
             cur.execute("DELETE FROM `教师` WHERE `工号` = %s", (EMPLOYEE_NO,))
-        conn.commit()
+        else:
+            for class_name in original_classes:
+                cur.execute(
+                    "INSERT INTO `教师任教班级` (`租户编号`, `教师编号`, `班级`) "
+                    "VALUES (%s, %s, %s)",
+                    (TENANT, teacher_id, class_name),
+                )
+    conn.commit()
     conn.close()
 
 
@@ -438,6 +466,11 @@ def test_teacher_scope_limits_class_directory_and_profile(client, db):
     finally:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM `教师任教班级` WHERE `教师编号` = %s", (teacher_id,))
+            cur.execute(
+                "INSERT INTO `教师任教班级` (`租户编号`, `教师编号`, `班级`) "
+                "VALUES (%s, %s, %s)",
+                (TENANT, teacher_id, klass),
+            )
         conn.commit()
 
 
