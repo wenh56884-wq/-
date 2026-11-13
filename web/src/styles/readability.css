@@ -1,0 +1,131 @@
+/* 启航双端共享的可读性与交互基线：提高正文、导航和数据控件字号。 */
+/* 保留现有靛蓝视觉系统，只调整字阶、触控尺寸和窄屏排版。 */
+/* 页面级局部样式仍可定义标题层级，避免改变业务内容结构。 */
+
+:root {
+  --el-font-size-extra-large: 24px;
+  --el-font-size-large: 20px;
+  --el-font-size-medium: 17px;
+  --el-font-size-base: 16px;
+  --el-font-size-small: 15px;
+  --el-font-size-extra-small: 14px;
+}
+
+body {
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Element Plus 在紧凑视图里的默认文字偏细小，集中提高易读性。 */
+.el-button,
+.el-input__inner,
+.el-textarea__inner,
+.el-select__placeholder,
+.el-select__selected-item,
+.el-form-item__label,
+.el-radio,
+.el-checkbox,
+.el-switch__label,
+.el-tabs__item,
+.el-pagination,
+.el-dropdown-menu__item,
+.el-menu-item,
+.el-sub-menu__title {
+  font-size: 15px !important;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-button {
+  min-height: 40px;
+}
+
+.el-table {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.el-table th.el-table__cell {
+  font-size: 14px !important;
+}
+
+.el-tag {
+  min-height: 26px;
+  padding-inline: 10px;
+  font-size: 14px !important;
+  line-height: 1.45;
+}
+
+.el-button--small,
+.el-input--small,
+.el-select--small,
+.el-tag--small {
+  --el-font-size-base: 14px;
+}
+
+/* 共享壳层：导航和页面标题更容易扫读，提示文字仍维持次级层次。 */
+.side-item,
+.drawer-item {
+  min-height: 44px;
+  font-size: 15px !important;
+}
+
+.page-title {
+  font-size: 20px !important;
+  line-height: 1.35;
+}
+
+.page-sub {
+  font-size: 14px !important;
+  line-height: 1.55;
+}
+
+.brand-sub,
+.side-hint,
+.drawer-hint {
+  font-size: 13px !important;
+}
+
+/* 键盘焦点清晰可见；减少动态效果偏好的用户不承受转场动画。 */
+:focus-visible {
+  outline-width: 3px;
+}
+
+@media (max-width: 767px) {
+  body {
+    font-size: 16px;
+  }
+
+  .el-button,
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-select__placeholder,
+  .el-select__selected-item,
+  .el-form-item__label {
+    font-size: 16px !important;
+  }
+
+  .el-button,
+  .el-input__wrapper,
+  .el-select__wrapper {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

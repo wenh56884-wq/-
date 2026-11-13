@@ -5,6 +5,8 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
+    // 开发模式允许同一局域网的设备访问；仅适合可信局域网，不是公网部署。
+    host: '0.0.0.0',
     port: 5173,
     proxy: {
       '/api': {
