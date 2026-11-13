@@ -122,6 +122,28 @@ CREATE TABLE IF NOT EXISTS `成绩` (
   COMMENT='成绩';
 
 -- -----------------------------------------------------------
+-- 5.1 学业警示记录（学生手册口径）
+--     只记录已发出的学业警示快照；当前学期是否新增由 engine.warning
+--     按不及格课程学分 >= 15 确定性计算，避免模型或前端改写政策。
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `学业警示记录` (
+    `编号`        BIGINT        NOT NULL AUTO_INCREMENT,
+    `租户编号`    BIGINT        NOT NULL,
+    `学生编号`    BIGINT        NOT NULL,
+    `学期`        VARCHAR(20)   NOT NULL,
+    `不及格学分`  DECIMAL(5,1)  NOT NULL,
+    `警示序号`    TINYINT       NOT NULL,
+    `状态`        ENUM('issued','cancelled') NOT NULL DEFAULT 'issued',
+    `记录时间`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`编号`),
+    UNIQUE KEY uk_academic_warning_student_term (`学生编号`, `学期`),
+    KEY idx_academic_warning_tenant_student (`租户编号`, `学生编号`, `学期`),
+    CONSTRAINT fk_academic_warning_tenant FOREIGN KEY (`租户编号`) REFERENCES `租户`(`编号`),
+    CONSTRAINT fk_academic_warning_student FOREIGN KEY (`学生编号`) REFERENCES `学生`(`编号`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='学生手册学业警示历史快照';
+
+-- -----------------------------------------------------------
 -- 6. 考勤
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `考勤` (
@@ -216,6 +238,7 @@ CREATE TABLE IF NOT EXISTS `班级预警阈值` (
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `审计日志` (
     `编号`        BIGINT       NOT NULL AUTO_INCREMENT,
+    `租户编号`    BIGINT       NOT NULL DEFAULT 1,
     `操作者类型`  VARCHAR(20)  NOT NULL,
     `操作者编号`  BIGINT       NOT NULL,
     `动作`        VARCHAR(80)  NOT NULL,
@@ -223,6 +246,7 @@ CREATE TABLE IF NOT EXISTS `审计日志` (
     `详情`        JSON,
     `创建时间`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`编号`),
-    KEY idx_audit_log_created (`创建时间`)
+    KEY idx_audit_log_created (`创建时间`),
+    KEY idx_audit_tenant_action_time (`租户编号`, `动作`, `创建时间`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='审计日志';

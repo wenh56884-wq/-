@@ -19,6 +19,11 @@ from engine.rules import (
 
 # 引擎版本号，用于前端/审计溯源
 ENGINE_VERSION = "warning-v2"
+HANDBOOK_POLICY_VERSION = "cqfinance-2024-student-handbook"
+HANDBOOK_POLICY_SOURCE = "重庆财经学院学业警示规定（修订）·《重庆财经学院2024级学生手册》"
+HANDBOOK_WARNING_CREDIT_LIMIT = 15.0
+HANDBOOK_CANCEL_RATIO = 0.5
+HANDBOOK_MAX_WARNING_COUNT = 3
 # 风险分裁剪区间
 SCORE_MIN = 0
 SCORE_MAX = 100
@@ -69,12 +74,72 @@ def normalize_metrics(raw: Mapping[str, Any]) -> dict[str, Any]:
         return round(float(v), _METRIC_NDIGITS[key])
 
     fail_count = raw.get("fail_count")
-    return {
+    result: dict[str, Any] = {
         "fail_count": None if fail_count is None else int(fail_count),
         "gpa": _f("gpa"),
         "gpa_drop": _f("gpa_drop"),
         "attendance_rate": _f("attendance_rate"),
         "class_rank_pct": _f("class_rank_pct"),
+    }
+    # 手册口径字段是可选的：老的离线调用没有学分/历史警示数据时，
+    # 保持原有风险分契约；真实 MySQL 取数会提供 fail_credits。
+    if "fail_credits" in raw:
+        value = raw.get("fail_credits")
+        result["fail_credits"] = None if value is None else round(float(value), 1)
+    if "warning_count" in raw:
+        value = raw.get("warning_count")
+        result["warning_count"] = None if value is None else max(0, int(value))
+    if "previous_warning_fail_credits" in raw:
+        value = raw.get("previous_warning_fail_credits")
+        result["previous_warning_fail_credits"] = (
+            None if value is None else round(float(value), 1)
+        )
+    return result
+
+
+def handbook_status(metrics: Mapping[str, Any]) -> dict[str, Any] | None:
+    """按《学业警示规定（修订）》计算学业警示状态。
+
+    该函数只在取数包含 ``fail_credits`` 时启用；缺少历史警示次数时明确返回
+    ``None`` 而不是猜测退学状态。所有阈值均为手册硬规则，不由 LLM 修改。
+    """
+    if "fail_credits" not in metrics:
+        return None
+    raw_credits = metrics.get("fail_credits")
+    credits = None if raw_credits is None else round(float(raw_credits), 1)
+    previous = metrics.get("previous_warning_fail_credits")
+    previous_credits = None if previous is None else round(float(previous), 1)
+    warning_count = metrics.get("warning_count")
+    count = None if warning_count is None else max(0, int(warning_count))
+    warning_required = credits is not None and credits >= HANDBOOK_WARNING_CREDIT_LIMIT
+    cancellation_eligible = (
+        previous_credits is not None
+        and credits is not None
+        and credits <= previous_credits * HANDBOOK_CANCEL_RATIO
+        and credits < HANDBOOK_WARNING_CREDIT_LIMIT
+    )
+    withdrawal_required = count is not None and count >= HANDBOOK_MAX_WARNING_COUNT
+    if withdrawal_required:
+        status = "withdrawal_required"
+    elif warning_required:
+        status = "academic_warning"
+    elif cancellation_eligible:
+        status = "cancel_previous_warning"
+    else:
+        status = "normal"
+    return {
+        "status": status,
+        "warning_required": warning_required,
+        "cancellation_eligible": cancellation_eligible,
+        "withdrawal_required": withdrawal_required,
+        "fail_credits": credits,
+        "previous_warning_fail_credits": previous_credits,
+        "warning_count": count,
+        "warning_credit_limit": HANDBOOK_WARNING_CREDIT_LIMIT,
+        "cancel_ratio": HANDBOOK_CANCEL_RATIO,
+        "max_warning_count": HANDBOOK_MAX_WARNING_COUNT,
+        "policy_version": HANDBOOK_POLICY_VERSION,
+        "source": HANDBOOK_POLICY_SOURCE,
     }
 
 
@@ -135,6 +200,47 @@ def fetch_class_threshold_rows(tenant_id: int, class_name: str) -> list[dict[str
     return _query(sql, (tenant_id, class_name))
 
 
+def _fetch_handbook_history(
+    tenant_id: int, class_name: str, term: str
+) -> dict[str, dict[str, Any]] | None:
+    """读取手册学业警示历史；表不存在/数据库不可用时返回 ``None``。
+
+    ``warning_count`` 表示当前学期之前已经发出的警示次数；当前学期是否新增
+    一次由 ``handbook_status`` 根据本学期不及格学分确定，避免重复累计。
+    ``previous_warning_fail_credits`` 取当前学期之前最近一次警示时的不及格学分。
+    """
+    sql = (
+        "SELECT s.`学号` AS student_no, h.`学期` AS warning_term, "
+        "       h.`不及格学分` AS warning_fail_credits "
+        "FROM `学生` s "
+        "JOIN `学业警示记录` h ON h.`学生编号` = s.`编号` "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s AND h.`学期` < %s "
+        "AND h.`状态` = 'issued' "
+        "ORDER BY s.`学号`, h.`学期` DESC"
+    )
+    # 统一走 _query，既保留数据库不可用时的安全降级，也方便离线测试打桩。
+    rows = _query(sql, (tenant_id, class_name, term))
+    if not rows:
+        # 空结果可能表示确实没有历史，也可能是旧库还未迁移；两者都不应
+        # 猜测警示次数。只有新表存在且返回过记录时才启用历史口径。
+        return None
+
+    history: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not row.get("student_no") or not row.get("warning_term"):
+            continue
+        sno = str(row["student_no"])
+        item = history.setdefault(sno, {"warning_count": 0,
+                                        "previous_warning_fail_credits": None})
+        item["warning_count"] += 1
+        if item["previous_warning_fail_credits"] is None:
+            value = row.get("warning_fail_credits")
+            item["previous_warning_fail_credits"] = (
+                None if value is None else round(float(value), 1)
+            )
+    return history
+
+
 def get_rules(tenant_id: int, class_name: str | None = None) -> WarningRules:
     """该租户/班级的预警规则：班级覆盖 > 租户默认 > 引擎内置默认。
 
@@ -180,9 +286,11 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
     cur_sql = (
         "SELECT s.`学号` AS student_no, s.`姓名` AS name, "
         "       AVG(sc.`分数`) AS gpa, "
-        "       SUM(CASE WHEN sc.`分数` < 60 THEN 1 ELSE 0 END) AS fail_count "
+        "       SUM(CASE WHEN sc.`分数` < 60 THEN 1 ELSE 0 END) AS fail_count, "
+        "       SUM(CASE WHEN sc.`分数` < 60 THEN c.`学分` ELSE 0 END) AS fail_credits "
         "FROM `学生` s "
         "JOIN `成绩` sc ON sc.`学生编号` = s.`编号` AND sc.`学期` = %s "
+        "JOIN `课程` c ON c.`编号` = sc.`课程编号` "
         "WHERE s.`租户编号` = %s AND s.`班级` = %s "
         "GROUP BY s.`学号`, s.`姓名`"
     )
@@ -223,6 +331,7 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
     gpa_of = {str(r["student_no"]): round(float(r["gpa"]), 2) for r in cur_rows}
     class_rank_pct = compute_rank_pct(gpa_of)
 
+    handbook_history = _fetch_handbook_history(tenant_id, class_name, term)
     rows: list[dict[str, Any]] = []
     for r in sorted(cur_rows, key=lambda x: str(x["student_no"])):
         sno = str(r["student_no"])
@@ -234,16 +343,27 @@ def fetch_class_rows(tenant_id: int, class_name: str, term: str) -> list[dict[st
         gpa_drop = None if delta is None else round(-delta, 2)
         # 无考勤记录 → None（不得按 1.0 全勤处理）
         rate = attendance.get(sno)
-        rows.append({
+        item: dict[str, Any] = {
             "student_no": sno,
             "name": str(r["name"]) if r["name"] is not None else "",
             "class_name": class_name,
             "fail_count": int(r["fail_count"] or 0),
+            "fail_credits": round(float(r.get("fail_credits") or 0), 1),
             "gpa": gpa,
             "gpa_drop": gpa_drop,
             "attendance_rate": None if rate is None else round(rate, 4),
             "class_rank_pct": class_rank_pct[sno],
-        })
+        }
+        if handbook_history is not None:
+            prior = handbook_history.get(
+                sno, {"warning_count": 0, "previous_warning_fail_credits": None}
+            )
+            # 本学期达到 15 学分时，计入累计警示次数；历史表只存已结束学期。
+            if float(item["fail_credits"] or 0) >= HANDBOOK_WARNING_CREDIT_LIMIT:
+                prior = dict(prior)
+                prior["warning_count"] = int(prior["warning_count"]) + 1
+            item.update(prior)
+        rows.append(item)
     return rows
 
 
@@ -356,7 +476,7 @@ def evaluate_student(
     missing = [k for k in _SCORE_METRICS if m.get(k) is None]
     if coverage < MIN_COVERAGE_TO_RESCALE:
         # 数据不足：等级灰档、不参与红/橙/黄排名，reasons 给出固定话术
-        return {
+        result = {
             "student_no": student_no,
             "name": name if name else str(metrics.get("name") or ""),
             "risk_score": score,
@@ -366,7 +486,11 @@ def evaluate_student(
             "missing": missing,
             "metrics": m,
         }
-    return {
+        policy = handbook_status(m)
+        if policy is not None:
+            result["handbook"] = policy
+        return result
+    result = {
         "student_no": student_no,
         "name": name if name else str(metrics.get("name") or ""),
         "risk_score": score,
@@ -376,6 +500,14 @@ def evaluate_student(
         "missing": missing,
         "metrics": m,
     }
+    policy = handbook_status(m)
+    if policy is not None:
+        result["handbook"] = policy
+        if policy["warning_required"]:
+            result["reasons"] = list(result["reasons"]) + [
+                f"不及格课程学分累计达到手册警示线（{_fmt(policy['fail_credits'])}学分）"
+            ]
+    return result
 
 
 # ----------------------------------------------------------------

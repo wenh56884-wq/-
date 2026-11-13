@@ -608,6 +608,14 @@ def _threshold_snapshot(ctx: ToolContext, class_name: str) -> dict[str, Any]:
     return {
         "class_name": str(class_name),
         "thresholds": rows,
+        "handbook_policy": {
+            "source": warning.HANDBOOK_POLICY_SOURCE,
+            "policy_version": warning.HANDBOOK_POLICY_VERSION,
+            "warning_credit_limit": warning.HANDBOOK_WARNING_CREDIT_LIMIT,
+            "cancel_ratio": warning.HANDBOOK_CANCEL_RATIO,
+            "max_warning_count": warning.HANDBOOK_MAX_WARNING_COUNT,
+            "note": "学业警示以不及格课程学分为准；风险分仅用于排序参考，不能替代手册判定。",
+        },
         "tenant_override_metrics": sorted(tenant_metrics),
         "class_override_metrics": sorted(class_metrics),
         "note": "班级覆盖 > 租户默认 > 引擎内置默认；留空表示回退上一级。",
@@ -896,6 +904,7 @@ def warning_list(ctx: ToolContext, class_name: str, term: str,
             "risk_score": r["risk_score"], "level": r["level"],
             "reasons": r["reasons"], "coverage": r["coverage"],
             "missing": r["missing"],
+            **({"handbook": r["handbook"]} if r.get("handbook") is not None else {}),
         }
         for r in results
         if levels is None or r["level"] in levels
@@ -1121,6 +1130,8 @@ def my_warning(ctx: ToolContext, term: str | None = None) -> dict[str, Any]:
         "coverage": result["coverage"],
         "missing": result["missing"],
         "metrics": dict(result["metrics"]),
+        **({"handbook": result["handbook"]}
+           if result.get("handbook") is not None else {}),
         "engine_version": warning.ENGINE_VERSION,
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,

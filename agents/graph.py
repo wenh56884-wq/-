@@ -184,11 +184,24 @@ def plan_node(state: AgentState) -> dict[str, Any]:
     # 学生端「本人数据」意图要排在知识库**之前**：否则「我的成绩」「我的学分」
     # 会被知识库词表里的「学分」这类制度词抢走，答出一堆管理办法而不是本人数据。
     if ctx.actor_type == "student":
-        personal = student_agent.personal_tool(intent)
+        # 复合规则只看当前问句（raw=query），关键词路由看合并意图（含上一轮），
+        # 两者口径分离：「那我的成绩怎么样」跟在职位表后面仍归成绩而非职位表。
+        personal = student_agent.personal_tool(intent, raw=query)
         if personal:
             return {"plan": {"tool": personal,
                              "args": student_agent.tool_args(personal, query)},
                     "tool_name": personal}
+
+        # 学生端数据追问：「里面/其中/还有硕士的吗」这类短追问指上一轮的数据面
+        #（「里面有哪些是本科就可以考的」= 职位表按学历过滤），沿用同一数据工具。
+        # 追问残词不可信（「我知道我和要求」当关键词只会查空）→ 不带检索词，
+        # 只让学历/地点/政治面貌/年度这类结构化过滤从当前追问里生效。
+        if followup and last_tool in ("exam_positions", "exam_notices"):
+            args = student_agent.tool_args(last_tool, query)
+            args.pop("keyword", None)
+            args.pop("query", None)
+            return {"plan": {"tool": last_tool, "args": args},
+                    "tool_name": last_tool}
 
     if any(k in intent for k in _KB_KEYS()):
         return {"plan": {"tool": "kb_search", "args": {"query": search_query}},
@@ -234,7 +247,8 @@ def _looks_like_followup(query: str) -> bool:
     text = str(query or "").strip()
     if not text or len(text) > 24:
         return False
-    markers = ("那", "这个", "那个", "它", "还有", "再", "呢", "为什么", "怎么算", "具体")
+    markers = ("那", "这个", "那个", "它", "还有", "再", "呢", "为什么", "怎么算",
+               "具体", "里面", "其中", "这些", "上面", "刚才")
     return any(m in text for m in markers)
 
 
@@ -476,6 +490,14 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"红色 {row.get('red_value')}"
                 + (f"，权重 {row.get('weight')}" if row.get("weight") is not None else "") + "。"
             )
+        policy = result.get("handbook_policy") or {}
+        if policy:
+            parts.append(
+                f"学业警示按{policy.get('source')}执行："
+                f"不及格课程学分达到 {policy.get('warning_credit_limit')} 学分触发，"
+                f"累计 {policy.get('max_warning_count')} 次原则上作退学处理；"
+                "风险分仅用于排序参考。"
+            )
     if "items" in result:
         parts.append(f"预警名单共命中 {result.get('count')} 人。")
         for item in (result.get("items") or [])[:3]:
@@ -483,6 +505,9 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"{item.get('name')}（{item.get('student_no')}）风险分 {item.get('risk_score')}，"
                 f"等级 {item.get('level')}；归因：{'；'.join(item.get('reasons') or []) or '无'}。"
             )
+            handbook = item.get("handbook") or {}
+            if handbook:
+                parts.append(f"手册判定：{handbook.get('status')}。")
     if "gaps" in result:
         if result.get("target_direction"):
             parts.append(f"目标岗位方向：{result.get('target_direction')}。")
@@ -503,6 +528,9 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
             f"本人预警：风险分 {result.get('risk_score')}，等级 {result.get('level')}；"
             f"归因：{'；'.join(result.get('reasons') or []) or '无'}。"
         )
+        handbook = result.get("handbook") or {}
+        if handbook:
+            parts.append(f"按学生手册判定：{handbook.get('status')}。")
     # ---- 统一入口能力层模板稿（agent-entry）：原样直引，不归纳不估算 ----
     if "summary" in result and "years" in result:
         s = result.get("summary") or {}
@@ -1004,7 +1032,7 @@ def draft_node(state: AgentState,
     elif str(state.get("tool_name") or "") == "exam_positions":
         # 职位明细是「列明细」型问题：通用草稿把 8 条职位压成 200 字，
         # 用户得不到具体职位；这里走专用表达层（同样受 Critic 数值回流制衡）。
-        if str(state.get("attempts") or 0) >= 3 or not _llm_draft_enabled():
+        if attempts >= 3 or not _llm_draft_enabled():
             draft = _template_draft(result, feedback)
             mode = "template"
         else:

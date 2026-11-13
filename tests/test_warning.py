@@ -274,3 +274,66 @@ def test_level_filter_multi_and_invalid():
         get_warning_list(TENANT_A, CLASS, TERM, "red,purple", rows=rows,
                          rules=_rules())
     assert "purple" in str(ei.value)
+
+
+def test_handbook_warning_uses_failed_course_credits():
+    """手册警示线是当前不及格课程累计学分 15，而不是挂科门数。"""
+    result = compute_student(
+        TENANT_A, "RJ2022001", TERM,
+        metrics={**_metrics(fail_count=1), "fail_credits": 15.0},
+        rules=_rules(),
+    )
+    assert result["handbook"]["status"] == "academic_warning"
+    assert result["handbook"]["warning_required"] is True
+    assert result["handbook"]["fail_credits"] == 15.0
+    assert any("手册警示线" in reason for reason in result["reasons"])
+
+
+def test_handbook_warning_can_cancel_previous_warning():
+    result = compute_student(
+        TENANT_A, "RJ2022001", TERM,
+        metrics={
+            **_metrics(),
+            "fail_credits": 7.5,
+            "previous_warning_fail_credits": 15.0,
+        },
+        rules=_rules(),
+    )
+    assert result["handbook"]["status"] == "cancel_previous_warning"
+    assert result["handbook"]["cancellation_eligible"] is True
+
+
+def test_handbook_warning_marks_third_warning_as_withdrawal_required():
+    result = compute_student(
+        TENANT_A, "RJ2022001", TERM,
+        metrics={
+            **_metrics(),
+            "fail_credits": 15.0,
+            "warning_count": 3,
+        },
+        rules=_rules(),
+    )
+    assert result["handbook"]["status"] == "withdrawal_required"
+    assert result["handbook"]["withdrawal_required"] is True
+
+
+def test_handbook_history_aggregates_issued_records(monkeypatch):
+    """历史表只统计已发出的警示，并取最近一次警示学分作为减半基准。"""
+    def fake_query(sql, params):
+        assert "学业警示记录" in sql
+        assert "状态" in sql
+        return [
+            {"student_no": "S1", "warning_term": "2025-2026-1",
+             "warning_fail_credits": 15.0},
+            {"student_no": "S1", "warning_term": "2024-2025-2",
+             "warning_fail_credits": 18.0},
+            {"student_no": None, "warning_term": None,
+             "warning_fail_credits": None},
+        ]
+
+    monkeypatch.setattr(warning, "_query", fake_query)
+    history = warning._fetch_handbook_history(1, "RJ2401", TERM)
+    assert history == {
+        "S1": {"warning_count": 2,
+                "previous_warning_fail_credits": 15.0}
+    }
