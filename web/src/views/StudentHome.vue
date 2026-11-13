@@ -68,6 +68,61 @@
       </button>
     </div>
 
+    <section class="twin-panel bento-span-4" aria-labelledby="twin-title">
+      <div class="twin-visual" aria-hidden="true">
+        <div class="twin-orbit orbit-one"></div>
+        <div class="twin-orbit orbit-two"></div>
+        <div class="twin-core">
+          <svg viewBox="0 0 64 64" role="presentation">
+            <circle cx="32" cy="21" r="11" />
+            <path d="M12 54c1.5-11 9-17 20-17s18.5 6 20 17" />
+            <path d="M8 32h8M48 32h8M32 4v7M32 53v7" />
+          </svg>
+        </div>
+        <span class="twin-node node-top">学业</span>
+        <span class="twin-node node-right">方向</span>
+        <span class="twin-node node-bottom">岗位</span>
+      </div>
+      <div class="twin-content">
+        <div class="twin-heading">
+          <div>
+            <p class="twin-eyebrow">QIHANG · PERSONAL DIGITAL TWIN</p>
+            <h2 id="twin-title">我的数字孪生</h2>
+            <p class="twin-intro">把已核验的学业状态、生涯目标与岗位推荐汇成一份可更新的个人镜像。</p>
+          </div>
+          <span class="twin-live"><i></i> {{ warningLoading || recLoading ? '同步中' : '数据已连接' }}</span>
+        </div>
+        <div class="twin-facts" aria-label="数字孪生画像摘要">
+          <div class="twin-fact">
+            <span>学业状态</span>
+            <strong>{{ levelText(warning.level) }}</strong>
+            <small>{{ warning.term || term || '等待学期数据' }}</small>
+          </div>
+          <div class="twin-fact">
+            <span>风险分</span>
+            <strong>{{ warning.risk_score ?? '—' }}</strong>
+            <small>来自学业预警引擎</small>
+          </div>
+          <div class="twin-fact">
+            <span>生涯方向</span>
+            <strong>{{ guide.direction?.name || (guide.needs_intent ? '待选择' : '待同步') }}</strong>
+            <small>{{ directionSourceText }}</small>
+          </div>
+          <div class="twin-fact">
+            <span>岗位匹配</span>
+            <strong>{{ items.length }}<em> 个</em></strong>
+            <small>当前推荐结果</small>
+          </div>
+        </div>
+        <div class="twin-foot">
+          <span>镜像依据：学业预警 · 生涯目标 · 岗位推荐</span>
+          <el-button class="twin-ask" @click="askAI('请基于我的数字孪生画像中已同步的学业状态、生涯方向和岗位推荐，帮我解读当前情况，并给出下一步建议；缺失的信息请明确说明，不要推测。')">
+            让智能体解读画像 <span aria-hidden="true">↗</span>
+          </el-button>
+        </div>
+      </div>
+    </section>
+
     <el-card ref="guideCard" v-loading="guideLoading" shadow="never"
       class="guide-card bento-span-2 bento-row-2"
       :class="{ 'guide-stretch': !(guide.needs_intent) && (guide.steps || []).length }">
@@ -1844,6 +1899,109 @@ onBeforeUnmount(() => {
   font-size: 14px;
   line-height: 1.6;
   color: #16181d;
+}
+
+.twin-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.72fr) minmax(0, 2fr);
+  gap: 20px;
+  align-items: center;
+  overflow: hidden;
+  padding: 24px 28px;
+  border: 1px solid #dce6fb;
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse at 5% 50%, rgba(73, 121, 228, 0.11), transparent 34%),
+    linear-gradient(115deg, #f3f7ff 0%, #ffffff 55%, #f0fbf9 100%);
+}
+
+.twin-visual {
+  position: relative;
+  display: grid;
+  min-height: 208px;
+  place-items: center;
+  isolation: isolate;
+}
+
+.twin-orbit {
+  position: absolute;
+  width: 176px;
+  height: 176px;
+  border: 1px solid rgba(57, 104, 207, 0.22);
+  border-radius: 50%;
+}
+
+.orbit-one { transform: scaleY(0.42) rotate(-26deg); }
+.orbit-two { transform: scaleY(0.58) rotate(55deg); border-color: rgba(20, 156, 141, 0.28); }
+
+.twin-core {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 25%, #ffffff, #dce8ff 50%, #b4c8f2);
+  box-shadow: 0 12px 40px rgba(53, 93, 177, 0.2), inset 0 0 22px rgba(255, 255, 255, 0.8);
+}
+
+.twin-core svg { width: 54px; fill: none; stroke: #315db1; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.2; }
+
+.twin-node {
+  position: absolute;
+  z-index: 1;
+  padding: 5px 10px;
+  border: 1px solid rgba(202, 216, 244, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(34, 56, 102, 0.08);
+  color: #34558f;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.node-top { top: 6px; }
+.node-right { right: 4px; top: 48%; }
+.node-bottom { bottom: 6px; }
+
+.twin-content { min-width: 0; }
+.twin-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.twin-eyebrow { margin: 0 0 6px; color: #5072b2; font-size: 11px; font-weight: 750; letter-spacing: 0.12em; }
+.twin-heading h2 { margin: 0; color: #172a4d; font-size: 24px; line-height: 1.3; }
+.twin-intro { margin: 7px 0 0; color: #68758b; font-size: 14px; line-height: 1.6; }
+.twin-live { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #cce9df; border-radius: 999px; background: #f0fbf6; color: #27725d; font-size: 12px; }
+.twin-live i { width: 7px; height: 7px; border-radius: 50%; background: #19a77e; box-shadow: 0 0 0 3px rgba(25, 167, 126, 0.12); }
+.twin-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.twin-fact { min-width: 0; padding: 12px 13px; border: 1px solid #e7edf7; border-radius: 13px; background: rgba(255, 255, 255, 0.78); }
+.twin-fact > span, .twin-fact small { display: block; color: #758198; font-size: 12px; }
+.twin-fact strong { display: block; overflow: hidden; margin: 5px 0 3px; color: #21385f; font-size: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.twin-fact em { font-size: 12px; font-style: normal; font-weight: 500; }
+.twin-fact small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.twin-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; color: #77849b; font-size: 12px; }
+.twin-ask { min-height: 40px; border-color: #cbd9f4; color: #315db1; }
+.twin-ask:hover, .twin-ask:focus-visible { border-color: #315db1; background: #f4f7ff; color: #244b98; }
+.twin-ask:focus-visible { outline: 2px solid #315db1; outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .twin-panel { grid-template-columns: 190px minmax(0, 1fr); gap: 14px; padding: 20px; }
+  .twin-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .twin-panel { grid-template-columns: 1fr; gap: 2px; padding: 18px 16px; }
+  .twin-visual { min-height: 172px; }
+  .twin-orbit { width: 148px; height: 148px; }
+  .twin-core { width: 88px; height: 88px; }
+  .twin-core svg { width: 46px; }
+  .twin-heading { align-items: flex-start; }
+  .twin-heading h2 { font-size: 21px; }
+  .twin-intro { font-size: 13px; }
+  .twin-facts { gap: 8px; margin-top: 15px; }
+  .twin-fact { padding: 10px; }
+  .twin-fact strong { font-size: 18px; }
+  .twin-foot { align-items: flex-start; flex-direction: column; }
+  .twin-ask { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
