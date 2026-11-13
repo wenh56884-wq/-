@@ -67,17 +67,12 @@
           <input ref="sourceInput" class="source-file-input" type="file"
             accept=".pdf,.docx,.md,.txt" multiple @change="pickSources" />
           <div class="source-dock-grid">
-            <button class="source-upload-btn" type="button" :disabled="analyzingSources"
-              @click="sourceInput?.click()">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 16v3h14v-3" /></svg>
-              添加资料
-            </button>
             <div class="source-file-list" aria-live="polite">
               <span v-for="(file, index) in sourceFiles" :key="file.name + file.size + index" class="source-file-chip">
                 <span class="source-file-name">{{ file.name }}</span>
                 <button type="button" :aria-label="`移除 ${file.name}`" @click="removeSource(index)">×</button>
               </span>
-              <span v-if="!sourceFiles.length" class="source-file-placeholder">还没有选择文件</span>
+              <span v-if="!sourceFiles.length" class="source-file-placeholder">还没有选择文件，请在下方输入区添加资料</span>
             </div>
           </div>
           <div class="source-dock-actions">
@@ -172,6 +167,12 @@
 
             <div class="compose-foot">
               <div class="toggles">
+                <button class="source-upload-btn compose-upload" type="button" :disabled="analyzingSources"
+                  aria-label="添加资料" title="上传 PDF、DOCX、Markdown 或 TXT 资料"
+                  @click="sourceInput?.click()">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 16v3h14v-3" /></svg>
+                  资料
+                </button>
                 <button type="button" class="toggle" :class="{ 'is-on': deepThinking }"
                   :title="deepThinkingHint" @click="toggleDeep">
                   <span class="toggle-dot" />深度思考
@@ -1526,7 +1527,30 @@ onMounted(loadSessions)
 
 .toggles {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.compose-upload {
+  min-height: 34px;
+  padding: 4px 11px;
+  border-style: solid;
+  border-color: var(--bento-border-strong);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--bento-sub);
+  font-weight: 400;
+}
+
+.compose-upload svg {
+  width: 15px;
+  height: 15px;
+}
+
+.compose-upload:hover:not(:disabled) {
+  border-color: var(--bento-accent);
+  background: var(--bento-accent-soft);
+  color: var(--bento-accent);
 }
 
 .toggle {
