@@ -2,15 +2,16 @@
   <div class="page bento-page">
     <section class="iv-hero">
       <div class="hero-copy">
-        <div class="eyebrow">CAREER PRACTICE STUDIO</div>
-        <h1>模拟面试</h1>
-        <p>围绕你的简历和目标岗位逐题练习，用清晰的反馈把每次回答变成进步。</p>
+        <div class="eyebrow">启航 · AI CAREER AGENT</div>
+        <h1>让智能体陪你练到会</h1>
+        <p>面试智能体读取你的简历与目标岗位，动态出题、追问薄弱点；每轮点评可核验，最终评分由确定性引擎完成。</p>
       </div>
       <div class="hero-status" aria-label="练习准备情况">
         <div class="status-item">
           <span class="status-dot" :class="resume ? 'ready' : 'pending'"></span>
           <span>{{ resume ? '简历已就绪' : '待录入简历' }}</span>
         </div>
+        <div class="status-item"><span class="status-dot ready"></span><span>智能体动态追问</span></div>
         <div class="status-item"><span class="status-dot ready"></span><span>评分结果可追溯</span></div>
       </div>
     </section>
@@ -143,19 +144,26 @@
         <div class="bento-grid">
         <el-card v-if="!session && !report" shadow="never" class="block-card bento-span-2">
           <template #header>
-            <div class="head-row">
-              <span class="card-title">选择目标岗位开局</span>
+            <div class="setup-card-head">
+              <div>
+                <span class="card-title">和面试智能体开始训练</span>
+                <p>先选一个目标岗位，智能体会按岗位要求组织本场问题。</p>
+              </div>
               <el-tag size="small" type="info" effect="plain">
                 全国岗位池 {{ jobTotal || '…' }} 条
               </el-tag>
             </div>
           </template>
           <div class="flow-steps" aria-label="开始面试的步骤">
-            <div class="flow-step done"><span>01</span><b>准备简历</b></div>
+            <div class="flow-step" :class="resume ? 'done' : 'active'"><span>01</span><b>准备简历</b></div>
             <div class="flow-line"></div>
             <div class="flow-step" :class="resume ? 'active' : ''"><span>02</span><b>选择岗位</b></div>
             <div class="flow-line"></div>
             <div class="flow-step"><span>03</span><b>开始练习</b></div>
+          </div>
+          <div v-if="!resume" class="resume-needed">
+            <div><b>先让智能体认识你</b><span>录入简历后，问题才能结合你的经历进行追问。</span></div>
+            <el-button type="primary" plain @click="tab = 'resume'">去准备简历</el-button>
           </div>
           <div class="job-filters">
             <el-input v-model="jobKeyword" placeholder="搜索岗位 / 技能 / 企业" clearable
@@ -181,10 +189,11 @@
           <el-button type="primary" class="start-button" :loading="starting" :disabled="!jobId || !resume"
             @click="startInterview">开始模拟面试</el-button>
           <div v-if="!resume" class="muted mt8">还没有简历：请先在「我的简历」页录入</div>
-          <div class="interview-hint mt8">
-            <b>本场流程</b>
-            默认 6 轮：动机 → 专业 → 项目 → 情景 → 抗压 → 反问（按简历证据自动裁剪）；
-            答得浅或漏考点时，面试官会追加 1–2 道追问
+          <div class="agent-flow mt8">
+            <div class="agent-flow-title"><span class="agent-pulse"></span>本场由面试智能体驱动</div>
+            <div class="agent-flow-steps">
+              <span>读取简历证据</span><i>→</i><span>匹配岗位能力</span><i>→</i><span>动态追问</span><i>→</i><span>生成可核验复盘</span>
+            </div>
           </div>
         </el-card>
 
@@ -205,6 +214,11 @@
           </div>
           <el-progress :percentage="Math.round(((session.round - 1) / session.total) * 100)"
             :stroke-width="8" :show-text="false" class="iv-progress" />
+          <div class="agent-live-strip">
+            <span class="agent-live-mark">AI</span>
+            <span><b>面试智能体</b> 正在进行{{ session.isProbe ? '针对性追问' : '岗位适配提问' }}，根据你的回答调整下一步问题。</span>
+            <el-tag size="small" type="success" effect="plain">动态面试中</el-tag>
+          </div>
           <div class="question-label">{{ session.label || labelOf(session.type) }}<span>请结合具体经历作答</span></div>
           <div class="question">{{ session.question }}</div>
           <div v-if="session.source" class="q-source">
@@ -400,7 +414,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import http from '../api/http'
 
-const tab = ref('resume')
+const tab = ref('interview')
 const entryMode = ref('paste')
 const pasteText = ref('')
 const templateKind = ref('campus')
@@ -733,6 +747,8 @@ onMounted(async () => {
 .hero-copy p { margin: 0; max-width: 660px; color: rgba(255,255,255,.86); font-size: 16px; line-height: 1.65; }
 .hero-status { display: grid; gap: 10px; min-width: 170px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.2);
   border-radius: 16px; background: rgba(12,39,78,.2); backdrop-filter: blur(8px); }
+.setup-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.setup-card-head p { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.5; }
 .status-item { display: flex; align-items: center; gap: 9px; color: #fff; font-size: 14px; }
 .status-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ffc56d; }
 .status-dot.ready { background: #79e2b2; box-shadow: 0 0 0 4px rgba(121,226,178,.16); }
@@ -773,10 +789,19 @@ onMounted(async () => {
 .flow-step.done span, .flow-step.active span { color: #fff; background: #2465b7; }
 .flow-step.done b, .flow-step.active b { color: var(--el-text-color-primary); }
 .flow-line { height: 1px; flex: 1; min-width: 12px; background: var(--el-border-color-lighter); }
+.resume-needed { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 16px; padding: 13px 14px; border: 1px solid #f4d7a1; border-radius: 12px; background: #fffaf0; }
+.resume-needed div { display: grid; gap: 3px; }
+.resume-needed b { color: #8a5a13; font-size: 14px; }
+.resume-needed span { color: #9a7a42; font-size: 13px; }
 .start-button { margin-top: 12px; min-height: 42px; padding-inline: 22px; }
 .interview-hint, .input-hint { color: var(--el-text-color-secondary); font-size: 13.5px; line-height: 1.65; }
 .interview-hint { padding: 12px 14px; border-radius: 12px; background: #f5f8fc; }
 .interview-hint b { color: var(--el-text-color-primary); margin-right: 6px; }
+.agent-flow { padding: 13px 14px; border: 1px solid #dbe7fb; border-radius: 12px; background: linear-gradient(135deg, #f4f8ff, #fbfdff); }
+.agent-flow-title { display: flex; align-items: center; gap: 7px; color: #245da6; font-size: 13.5px; font-weight: 700; }
+.agent-pulse { width: 8px; height: 8px; border-radius: 50%; background: #2d72db; box-shadow: 0 0 0 4px rgba(45,114,219,.14); }
+.agent-flow-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; color: #536680; font-size: 13px; }
+.agent-flow-steps i { color: #9bb4d8; font-style: normal; }
 .template-preview { margin-top: 12px; padding: 12px 14px; border: 1px solid #e5eaf3; border-radius: 12px; background: #f8faff; }
 .template-preview b { color: #245da6; }
 .template-preview p { margin: 4px 0 8px; color: var(--el-text-color-secondary); font-size: 13px; }
@@ -793,6 +818,10 @@ onMounted(async () => {
 .job-filter { width: 160px; }
 .probe-tag { margin-left: 8px; vertical-align: 1px; }
 .iv-progress { margin-bottom: 12px; }
+.agent-live-strip { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; padding: 9px 11px; border: 1px solid #dce8fa; border-radius: 10px; background: #f7faff; color: #536680; font-size: 13px; line-height: 1.5; }
+.agent-live-strip > span:nth-child(2) { flex: 1; }
+.agent-live-strip b { color: #245da6; }
+.agent-live-mark { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px; background: #245da6; color: #fff; font-size: 11px; font-weight: 700; }
 .iv-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 
 /* ===== 面试评估报告 ===== */
@@ -854,6 +883,11 @@ onMounted(async () => {
   .flow-steps { gap: 6px; }
   .flow-step { gap: 5px; font-size: 12px; }
   .flow-step span { width: 24px; height: 24px; }
+  .setup-card-head { flex-direction: column; }
+  .resume-needed { align-items: flex-start; flex-direction: column; }
+  .agent-flow-steps { line-height: 1.8; }
+  .agent-live-strip { align-items: flex-start; flex-wrap: wrap; }
+  .agent-live-strip > :deep(.el-tag) { margin-left: 35px; }
   .job-filters { display: grid; grid-template-columns: 1fr 1fr; }
   .job-kw { width: auto; grid-column: 1 / -1; }
   .job-filter { width: 100%; }
