@@ -11,13 +11,13 @@
   --bento-text: #16181d;
   --bento-sub: #5f6672;
   --bento-mute: #9aa1ad;
-  --bento-accent: #5b5bd6;
-  --bento-accent-soft: #ececfb;
-  --bento-radius: 16px;
-  --bento-radius-sm: 8px;
-  --bento-gap: 20px;  /* 阴影：Medusa 用青色调，不用黑灰 */
-  --bento-shadow: 0 6px 30px rgba(16, 24, 40, 0.08);
-  --bento-shadow-hover: 0 10px 30px rgba(16, 24, 40, 0.12);
+  --bento-accent: #1951c3;
+  --bento-accent-soft: #e9efff;
+  --bento-radius: 20px;
+  --bento-radius-sm: 10px;
+  --bento-gap: 20px;
+  --bento-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 34px rgba(30, 64, 175, 0.07);
+  --bento-shadow-hover: 0 2px 4px rgba(15, 23, 42, 0.05), 0 20px 44px rgba(30, 64, 175, 0.14);
   --bento-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
@@ -50,14 +50,13 @@
   position: relative;
   min-width: 0;
   /* 与 .bento-page 的 24px 同模数：卡片内文字不贴边，整页只有 16（手机）/24 两档 */
-  padding: 24px;
+  padding: 26px;
   /* 极浅的自上而下渐变：白 → 近白，比纯白更有“材质” */
-  background: linear-gradient(180deg, #ffffff 0%, #fdfdff 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 252, 255, 0.98) 100%);
   border: 1px solid var(--bento-border);
   border-radius: var(--bento-radius);
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 10px 28px rgba(14, 58, 61, 0.06);
+  box-shadow: var(--bento-shadow);
   transition:
     transform 260ms var(--bento-ease),
     box-shadow 260ms var(--bento-ease),
@@ -65,13 +64,21 @@
   will-change: transform;
 }
 
+/* 卡片顶部的细高光让白底在浅灰背景上保留轮廓，避免整站“白板化”。 */
+.bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 12% auto;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+  pointer-events: none;
+}
+
 /* 悬停时浮起 2px + 靛蓝柔光，卡片“亮起来”而不是只加深阴影 */
 .bento-card:hover {
-  border-color: rgba(91, 91, 214, 0.28);
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 16px 38px rgba(14, 58, 61, 0.1),
-    0 0 0 3px rgba(91, 91, 214, 0.06);
+  border-color: rgba(25, 81, 195, 0.28);
+  box-shadow: var(--bento-shadow-hover), 0 0 0 3px rgba(30, 64, 175, 0.055);
 }
 
 .bento-card:active {
@@ -140,7 +147,7 @@
   --el-button-active-border-color: #e9e9f9;
   border-color: transparent;
   background-image: none;
-  color: #4a4ac0;
+  color: #14419c;
   box-shadow: 0 8px 20px rgba(8, 12, 24, 0.28);
 }
 
@@ -163,7 +170,7 @@
 
 .bento-card--soft {
   background: linear-gradient(150deg, #f2f2fe 0%, #eef8f6 100%);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
 }
 
 /* 图标：卡片悬停时独立 scale + 变色 */
@@ -175,9 +182,9 @@
   height: 42px;
   flex: 0 0 42px;
   border-radius: 12px;
-  background: linear-gradient(150deg, #eef0ff 0%, #e9f7f4 100%);
+  background: linear-gradient(150deg, #e9efff 0%, #e9f7f4 100%);
   color: var(--bento-accent);
-  box-shadow: inset 0 0 0 1px rgba(91, 91, 214, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(25, 81, 195, 0.1);
   transition:
     transform 260ms var(--bento-ease),
     background-color 260ms var(--bento-ease),
@@ -189,8 +196,8 @@
   background: linear-gradient(150deg, #e6e6ff 0%, #dff3ef 100%);
   color: var(--bento-accent);
   box-shadow:
-    inset 0 0 0 1px rgba(91, 91, 214, 0.18),
-    0 6px 14px rgba(91, 91, 214, 0.16);
+    inset 0 0 0 1px rgba(25, 81, 195, 0.18),
+    0 6px 14px rgba(25, 81, 195, 0.16);
 }
 
 .bento-icon svg {
@@ -206,7 +213,7 @@
 /* 文本层级 */
 .bento-eyebrow {
   margin: 0 0 6px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--bento-mute);
@@ -214,7 +221,7 @@
 
 .bento-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 650;
   line-height: 1.3;
   color: var(--bento-text);
@@ -222,7 +229,7 @@
 
 .bento-sub {
   margin: 6px 0 0;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.65;
   color: var(--bento-sub);
   max-width: 68ch;
@@ -230,7 +237,7 @@
 
 .bento-stat {
   margin-top: 10px;
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 680;
   line-height: 1.1;
   color: var(--bento-text);
@@ -259,8 +266,8 @@
 .bento-card .el-input-number .el-input__wrapper.is-focus {
   background: #ffffff;
   box-shadow:
-    0 0 0 1px #5b5bd6 inset,
-    0 0 0 4px rgba(91, 91, 214, 0.14);
+    0 0 0 1px #1951c3 inset,
+    0 0 0 4px rgba(25, 81, 195, 0.14);
 }
 
 .bento-card .el-button {
@@ -280,7 +287,7 @@
   --el-button-hover-bg-color: transparent;
   --el-button-active-bg-color: transparent;
   border-color: transparent;
-  background-image: linear-gradient(135deg, #6d5cf6 0%, #5b5bd6 52%, #4a4ac0 100%);
+  background-image: linear-gradient(135deg, #2d61dd 0%, #1951c3 52%, #14419c 100%);
   color: #fff;
   box-shadow:
     0 6px 14px rgba(79, 70, 229, 0.24),
@@ -288,7 +295,7 @@
 }
 
 .bento-card .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
-  background-image: linear-gradient(135deg, #7c6cf8 0%, #5f5fdd 52%, #4f46e5 100%);
+  background-image: linear-gradient(135deg, #3b6ee5 0%, #1f5ad0 52%, #14419c 100%);
   box-shadow: 0 10px 22px rgba(79, 70, 229, 0.32);
 }
 
@@ -310,6 +317,28 @@
   --el-table-border-color: var(--bento-border);
   border-radius: var(--bento-radius-sm);
   overflow: hidden;
+}
+
+/* 统一数据密度：表头退后、行内容前进，数字保持稳定的视觉节奏。 */
+.bento-card .el-table th.el-table__cell {
+  height: 46px;
+  color: #52617b;
+  background: #f5f8ff !important;
+  font-size: 13.5px;
+  letter-spacing: 0.015em;
+}
+
+.bento-card .el-table td.el-table__cell {
+  height: 52px;
+  font-size: 15px;
+}
+
+.bento-card .el-table tr {
+  transition: background-color 160ms ease;
+}
+
+.bento-card .el-table tr:hover > td.el-table__cell {
+  background: rgba(219, 234, 254, 0.42) !important;
 }
 
 /* 响应式：平板 2 列，手机 1 列；跨列/跨行在窄屏全部还原 */
@@ -339,7 +368,8 @@
   }
 
   .bento-card {
-    padding: 16px;
+    padding: 18px;
+    border-radius: 16px;
   }
 
   .bento-card:hover {
@@ -350,6 +380,16 @@
     min-height: 0;
     max-height: none;
     padding: 18px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .bento-grid {
+    gap: 22px;
+  }
+
+  .bento-card {
+    padding: 28px;
   }
 }
 

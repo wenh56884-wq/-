@@ -129,3 +129,192 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Premium dashboard polish ----------
+   这一层只做全站视觉收口，不改变任何业务结构或数据逻辑。 */
+:root {
+  --qh-focus-ring: 0 0 0 4px rgba(59, 130, 246, 0.18);
+  --qh-panel-glass: rgba(255, 255, 255, 0.82);
+  --qh-panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 14px 36px rgba(30, 64, 175, 0.07);
+  --qh-panel-shadow-hover: 0 2px 5px rgba(15, 23, 42, 0.05), 0 22px 48px rgba(30, 64, 175, 0.13);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  background-color: #f8fafc;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(650px 320px at 12% 0%, rgba(59, 130, 246, 0.08), transparent 68%),
+    radial-gradient(560px 280px at 92% 8%, rgba(14, 165, 164, 0.07), transparent 70%);
+}
+
+/* Element Plus 卡片与项目 Bento 卡片使用同一层级。 */
+.el-card:not(.is-always-shadow),
+.filter-bar,
+.list-card,
+.chart-card {
+  border-color: rgba(203, 213, 225, 0.86) !important;
+  box-shadow: var(--qh-panel-shadow);
+}
+
+.el-card:not(.is-always-shadow):hover,
+.filter-bar:hover,
+.list-card:hover,
+.chart-card:hover {
+  border-color: rgba(147, 170, 220, 0.78) !important;
+  box-shadow: var(--qh-panel-shadow-hover);
+}
+
+.el-card__header {
+  min-height: 54px;
+  padding: 16px 20px;
+  background: linear-gradient(180deg, rgba(248, 250, 255, 0.82), rgba(255, 255, 255, 0));
+}
+
+.el-card__body {
+  padding: 20px;
+}
+
+.el-form-item__label {
+  color: #46546b;
+  font-weight: 600;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  min-height: 44px;
+  border: 1px solid transparent;
+  background: rgba(241, 245, 249, 0.86);
+  box-shadow: 0 0 0 1px rgba(203, 213, 225, 0.72) inset;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(147, 170, 220, 0.9) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px #1e40af inset, var(--qh-focus-ring) !important;
+}
+
+.el-button {
+  min-height: 42px;
+  padding-inline: 16px;
+  letter-spacing: 0.01em;
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  background-image: linear-gradient(135deg, #315bd5 0%, #1e40af 58%, #17358f 100%);
+  box-shadow: 0 8px 18px rgba(30, 64, 175, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+  background-image: linear-gradient(135deg, #4770df 0%, #2450c7 58%, #1e40af 100%);
+  box-shadow: 0 12px 24px rgba(30, 64, 175, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.el-button:focus-visible,
+.el-input__wrapper:focus-within,
+.el-select__wrapper:focus-within {
+  outline: none;
+  box-shadow: var(--qh-focus-ring), 0 0 0 1px #1e40af inset !important;
+}
+
+.el-tag {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.el-tag--success.el-tag--light {
+  color: #087f73;
+  background: #e8f8f4;
+  border-color: #b9e7dd;
+}
+
+.el-tag--warning.el-tag--light {
+  color: #9a5b00;
+  background: #fff7e6;
+  border-color: #f7d79b;
+}
+
+.el-tag--danger.el-tag--light {
+  color: #b42318;
+  background: #fff0ef;
+  border-color: #f5c5c1;
+}
+
+/* 筛选区和区块标题统一为“标题 + 辅助说明 + 操作”的产品化排版。 */
+.filter-bar .el-card__body,
+.list-card .el-card__body {
+  padding: 22px;
+}
+
+.card-head,
+.head-row,
+.stat-top {
+  min-height: 30px;
+}
+
+.card-head > .card-title,
+.head-row > .card-title {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.muted,
+.empty-note,
+.missing {
+  color: #64748b;
+}
+
+.el-pagination {
+  --el-pagination-button-height: 38px;
+  --el-pagination-button-width: 38px;
+}
+
+.el-pagination button,
+.el-pagination .el-pager li {
+  border-radius: 9px;
+  font-size: 14px;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 14px;
+  }
+
+  .el-card__header,
+  .el-card__body,
+  .filter-bar .el-card__body,
+  .list-card .el-card__body {
+    padding: 16px;
+  }
+
+  .el-button {
+    min-height: 46px;
+  }
+
+  .el-table {
+    min-width: 680px;
+  }
+
+  .el-table__inner-wrapper {
+    overflow-x: auto;
+  }
+}

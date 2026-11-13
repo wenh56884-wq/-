@@ -423,7 +423,8 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
-/* ---------- 左侧栏：品牌 + 导航 + 本页问法，整列吸顶 ---------- */
+/* ---------- 左侧栏：品牌 + 导航 + 本页问法，整列吸顶 ----------
+   深藏青实底（参考 xsc dashboard 的 #161c2b 侧栏），不再用毛玻璃白 */
 .sidebar {
   position: sticky;
   top: 0;
@@ -431,13 +432,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   padding: 16px 14px;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: saturate(180%) blur(18px);
-  -webkit-backdrop-filter: saturate(180%) blur(18px);
-  border-right: 1px solid var(--cf-line);
+  background: #161c2b;
+  border-right: 1px solid #07070d;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--cf-line-strong) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 }
 
 .side-nav {
@@ -455,22 +454,23 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   font-size: 13.5px;
   font-weight: 500;
-  color: var(--cf-mid);
+  color: #969eaf;
   text-decoration: none;
   white-space: nowrap;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .side-item:hover {
-  background: rgba(91, 91, 214, 0.07);
-  color: var(--cf-coral);
+  background: #1951c3;
+  color: #fff;
 }
 
+/* 选中态对齐参考站：深蓝实底 + 右缘 3px 浅蓝指示条（inset 阴影实现，不挤压布局） */
 .side-item.is-active {
-  background: linear-gradient(135deg, #eef0ff 0%, #e9f7f4 100%);
-  color: #4a4ac0;
+  background: #1951c3;
+  color: #fff;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(91, 91, 214, 0.18);
+  box-shadow: inset -3px 0 0 0 #a3beff;
 }
 
 /* ---------- 右侧主区 + 顶栏：只留状态与账号 ---------- */
@@ -555,7 +555,7 @@ onBeforeUnmount(() => {
   flex: 0 0 32px;
   border-radius: 10px;
   /* 品牌标：靛蓝→青的斜向渐变，右上角一点高光，胜过纯黑方块 */
-  background: linear-gradient(145deg, #7c6cf8 0%, #5b5bd6 52%, #0f9d8a 120%);
+  background: linear-gradient(145deg, #3b6ee5 0%, #1951c3 52%, #0f9d8a 120%);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
@@ -563,7 +563,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 6px 16px rgba(91, 91, 214, 0.32),
+    0 6px 16px rgba(25, 81, 195, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
@@ -601,10 +601,21 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+/* 白字只属于深底（桌面侧栏 / 移动抽屉）；浅色顶栏里的品牌保持墨色 */
+.sidebar .brand-title,
+.nav-drawer .brand-title {
+  color: #fff;
+}
+
 .brand-sub {
   font-size: 11px;
   color: var(--cf-faint);
   white-space: nowrap;
+}
+
+.sidebar .brand-sub,
+.nav-drawer .brand-sub {
+  color: #969eaf;
 }
 
 /* 导航图标：横向 pill 和竖排侧栏共用，尺寸一致 */
@@ -835,8 +846,8 @@ onBeforeUnmount(() => {
   gap: 8px;
   min-width: 0;
   margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--cf-line);
+  padding: 14px 12px 4px;
+  border-top: 1px solid #272d3c;
 }
 
 .ai-rail-label {
@@ -846,7 +857,7 @@ onBeforeUnmount(() => {
   margin: 0 0 2px;
   font-size: 12.5px;
   font-weight: 650;
-  color: var(--cf-coral);
+  color: #a3beff;
   white-space: nowrap;
 }
 
@@ -857,18 +868,18 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   border-radius: 6px;
-  background: linear-gradient(140deg, #7c6cf8, #5b5bd6 60%, #0f9d8a 130%);
+  background: linear-gradient(140deg, #3b6ee5, #1951c3 60%, #0f9d8a 130%);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  box-shadow: 0 3px 8px rgba(91, 91, 214, 0.3);
+  box-shadow: 0 3px 8px rgba(25, 81, 195, 0.3);
 }
 
 .ai-rail-item {
-  border: 1px solid rgba(91, 91, 214, 0.18);
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--cf-coral);
+  border: 1px solid #272d3c;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c8d3e8;
   border-radius: 10px;
   padding: 9px 12px;
   font-size: 12.5px;
@@ -885,21 +896,20 @@ onBeforeUnmount(() => {
     border-color 200ms var(--qh-ease, ease),
     color 200ms var(--qh-ease, ease),
     box-shadow 200ms var(--qh-ease, ease);
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+  box-shadow: none;
 }
 
 .ai-rail-item:hover {
-  background: linear-gradient(135deg, #6d5cf6, #4f46e5);
+  background: #1951c3;
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 8px 18px rgba(91, 91, 214, 0.3);
 }
 
 .ai-rail-more {
   align-self: flex-start;
   border: none;
   background: none;
-  color: var(--cf-coral);
+  color: #a3beff;
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
@@ -990,9 +1000,10 @@ onBeforeUnmount(() => {
   max-width: 84vw;
   display: flex;
   flex-direction: column;
-  background: var(--cf-surface-solid);
-  border-right: 1px solid var(--cf-line);
-  box-shadow: 0 12px 40px rgba(14, 58, 61, 0.16);
+  /* 与桌面侧栏同款深藏青，移动端/桌面端导航一个观感 */
+  background: #161c2b;
+  border-right: 1px solid #07070d;
+  box-shadow: 0 12px 40px rgba(7, 7, 13, 0.3);
   transform: translateX(-100%);
   transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -1008,7 +1019,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--cf-line);
+  border-bottom: 1px solid #272d3c;
 }
 
 .drawer-nav {
@@ -1024,20 +1035,21 @@ onBeforeUnmount(() => {
   padding: 9px 11px;
   margin: 2px 0;
   border-radius: 10px;
-  color: var(--cf-mid);
+  color: #969eaf;
   text-decoration: none;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
 .drawer-item:hover {
-  background: var(--cf-coral-soft);
-  color: var(--cf-coral);
+  background: #1951c3;
+  color: #fff;
 }
 
 .drawer-item.is-active {
-  background: var(--cf-coral-soft);
-  color: var(--cf-coral);
+  background: #1951c3;
+  color: #fff;
   font-weight: 600;
+  box-shadow: inset -3px 0 0 0 #a3beff;
 }
 
 .drawer-text {
@@ -1060,17 +1072,17 @@ onBeforeUnmount(() => {
 }
 
 .drawer-item.is-active .drawer-hint {
-  color: var(--cf-coral);
+  color: #c8d3e8;
 }
 
-/* 抽屉里的 AI 问法：跟桌面侧栏同一套卡片样式，只是换成抽屉的内边距 */
+/* 抽屉里的 AI 问法：跟桌面侧栏同一套深底卡片样式 */
 .drawer-ai {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border-top: 1px solid var(--cf-line);
+  border-top: 1px solid #272d3c;
 }
 
 .drawer-ai-label {
@@ -1080,7 +1092,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 12.5px;
   font-weight: 650;
-  color: var(--cf-coral);
+  color: #a3beff;
 }
 
 .drawer-foot {
@@ -1214,6 +1226,119 @@ onBeforeUnmount(() => {
   .nav-drawer,
   .topbar {
     transition: none;
+  }
+}
+
+/* ---------- 统一壳层的高级化收口 ---------- */
+.sidebar {
+  padding: 20px 16px;
+  background:
+    radial-gradient(260px 220px at 10% 0%, rgba(71, 112, 223, 0.22), transparent 72%),
+    linear-gradient(180deg, #111827 0%, #161c2b 52%, #101827 100%);
+  border-right-color: rgba(148, 163, 184, 0.14);
+}
+
+.side-nav {
+  gap: 4px;
+  margin-top: 20px;
+}
+
+.side-item {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #aeb9cd;
+}
+
+.side-item:hover {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(147, 197, 253, 0.12);
+}
+
+.side-item.is-active {
+  background: linear-gradient(100deg, rgba(49, 91, 213, 0.92), rgba(30, 64, 175, 0.82));
+  border-color: rgba(147, 197, 253, 0.22);
+  box-shadow: inset 3px 0 0 #bfdbfe, 0 8px 18px rgba(2, 6, 23, 0.18);
+}
+
+.topbar {
+  height: 64px;
+  flex-basis: 64px;
+  background: rgba(248, 250, 252, 0.82);
+  border-bottom-color: rgba(203, 213, 225, 0.84);
+}
+
+.topbar-inner {
+  height: 64px;
+}
+
+.topbar-title-main {
+  font-size: 19px;
+  letter-spacing: -0.025em;
+}
+
+.topbar-title-sub {
+  font-size: 13px;
+}
+
+.status-btn,
+.user-btn,
+.icon-btn {
+  min-height: 40px;
+  border-color: rgba(203, 213, 225, 0.92);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.status-btn:hover,
+.user-btn:hover,
+.icon-btn:hover {
+  border-color: rgba(147, 170, 220, 0.9);
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(30, 64, 175, 0.1);
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #dbeafe, #e0e7ff);
+  color: #1e40af;
+  font-size: 12px;
+}
+
+.page-main {
+  isolation: isolate;
+}
+
+@media (max-width: 1023px) {
+  .topbar,
+  .topbar-inner {
+    height: 60px;
+    flex-basis: 60px;
+  }
+
+  .topbar-inner {
+    padding-inline: 14px;
+  }
+
+  .nav-drawer {
+    width: min(320px, 88vw);
+    background:
+      radial-gradient(300px 220px at 6% 0%, rgba(71, 112, 223, 0.22), transparent 72%),
+      linear-gradient(180deg, #111827 0%, #161c2b 52%, #101827 100%);
+  }
+
+  .drawer-item {
+    min-height: 48px;
+    border: 1px solid transparent;
+  }
+
+  .drawer-item.is-active {
+    border-color: rgba(147, 197, 253, 0.22);
+    box-shadow: inset 3px 0 0 #bfdbfe, 0 8px 18px rgba(2, 6, 23, 0.18);
   }
 }
 </style>
