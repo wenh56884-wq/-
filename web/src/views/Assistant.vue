@@ -944,11 +944,11 @@ onMounted(loadSessions)
 
 /* ---------- 多来源资料分析 ---------- */
 .source-dock {
-  margin: 12px 14px 0;
-  padding: 13px 14px 12px;
+  margin: 10px 14px 0;
+  padding: 12px 14px 11px;
   border: 1px solid #cfdcf7;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f8fbff 0%, #f4f7ff 58%, #ffffff 100%);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fbff 0%, #f5f8ff 58%, #ffffff 100%);
 }
 
 .source-dock-head,
@@ -956,7 +956,7 @@ onMounted(loadSessions)
 .source-dock-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
 }
 
 .source-dock-head {
@@ -965,14 +965,14 @@ onMounted(loadSessions)
 }
 
 .source-dock-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--bento-text);
 }
 
 .source-dock-sub {
   margin-top: 3px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--bento-mute);
 }
 
@@ -991,15 +991,15 @@ onMounted(loadSessions)
 }
 
 .source-dock-grid {
-  margin-top: 10px;
+  margin-top: 8px;
   align-items: flex-start;
 }
 
 .source-upload-btn,
 .source-switch,
 .source-analyze-btn {
-  min-height: 40px;
-  border-radius: 10px;
+  min-height: 38px;
+  border-radius: 9px;
   cursor: pointer;
   font-size: 13.5px;
   transition: border-color 180ms var(--bento-ease), background-color 180ms var(--bento-ease), color 180ms var(--bento-ease), opacity 180ms var(--bento-ease);
@@ -1083,15 +1083,15 @@ onMounted(loadSessions)
 }
 
 .source-dock-actions {
-  margin-top: 9px;
+  margin-top: 8px;
   align-items: stretch;
 }
 
 .source-question {
   min-width: 0;
   flex: 1 1 auto;
-  min-height: 40px;
-  padding: 8px 11px;
+  min-height: 38px;
+  padding: 7px 11px;
   border: 1px solid #d5deee;
   border-radius: 10px;
   outline: none;
@@ -1144,7 +1144,7 @@ onMounted(loadSessions)
 }
 
 .source-error {
-  margin-top: 7px;
+  margin-top: 6px;
   color: #b42318;
   font-size: 12.5px;
 }
@@ -1194,27 +1194,34 @@ onMounted(loadSessions)
 .asst-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 18px;
+  min-height: 0;
+  padding: 12px 18px 18px;
 }
 
 .asst-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   height: 100%;
-  gap: 10px;
+  gap: 8px;
+  padding: clamp(24px, 6vh, 58px) 12px 18px;
   text-align: center;
 }
 
 .empty-title {
-  font-size: 18px;
+  max-width: 32ch;
+  font-size: clamp(18px, 1.8vw, 22px);
   font-weight: 650;
+  line-height: 1.35;
   color: var(--bento-text);
+  text-wrap: balance;
 }
 
 .empty-sub {
-  font-size: 14px;
+  max-width: 46ch;
+  font-size: 13.5px;
+  line-height: 1.65;
   color: var(--bento-mute);
 }
 
@@ -1223,12 +1230,13 @@ onMounted(loadSessions)
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
-  margin-top: 10px;
-  max-width: 620px;
+  margin-top: 8px;
+  max-width: 680px;
 }
 
 .empty-q {
-  padding: 7px 14px;
+  min-height: 38px;
+  padding: 6px 13px;
   border: 1px solid var(--bento-border);
   border-radius: 999px;
   background: #ffffff;
@@ -1476,8 +1484,9 @@ onMounted(loadSessions)
 
 /* 输入区 */
 .asst-compose {
-  padding: 12px 18px 14px;
+  padding: 10px 18px 10px;
   border-top: 1px solid var(--bento-border);
+  background: rgba(255, 255, 255, .96);
 }
 
 .compose-box {
@@ -1494,9 +1503,9 @@ onMounted(loadSessions)
 .compose-input {
   display: block;
   width: 100%;
-  min-height: 52px;
-  max-height: 140px;
-  padding: 12px 14px 6px;
+  min-height: 44px;
+  max-height: 112px;
+  padding: 9px 14px 5px;
   border: none;
   outline: none;
   resize: none;
@@ -1512,7 +1521,7 @@ onMounted(loadSessions)
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 10px 10px;
+  padding: 4px 10px 7px;
 }
 
 .toggles {
@@ -1524,7 +1533,8 @@ onMounted(loadSessions)
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  min-height: 34px;
+  padding: 4px 11px;
   border: 1px solid var(--bento-border-strong);
   border-radius: 999px;
   background: #ffffff;
@@ -1556,7 +1566,9 @@ onMounted(loadSessions)
 }
 
 .send-btn {
-  padding: 7px 18px;
+  min-width: 78px;
+  min-height: 38px;
+  padding: 6px 16px;
   border: none;
   border-radius: 999px;
   background: #1951c3;
@@ -1573,8 +1585,8 @@ onMounted(loadSessions)
 }
 
 .compose-note {
-  margin-top: 7px;
-  font-size: 13px;
+  margin-top: 5px;
+  font-size: 12.5px;
   color: var(--bento-mute);
 }
 
