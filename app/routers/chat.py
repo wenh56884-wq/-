@@ -10,19 +10,21 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pymysql
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.audit import audit_event
 from app.auth import get_current_ctx
 from app.config import get_settings
+from app.logging_config import get_logger
 from app.schemas import ChatIn, FeedbackIn
-from engine import rag
+from engine import kb_store, rag
 from engine import web_search as web_engine
 from engine import workflow as wf_engine
 from agents.tools import ToolContext
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = get_logger("qihang.chat")
 
 
 def _conn() -> pymysql.connections.Connection:
@@ -77,7 +79,8 @@ def stream_chat(body: ChatIn, ctx: ToolContext = Depends(get_current_ctx)) -> St
                                                     body.session_id, body.history):
                 if event.get("type") == "done":
                     audit_event(
-                        actor_type=ctx.actor_type, actor_id=_actor(ctx),
+                        tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                        actor_id=_actor(ctx),
                         action="api.chat.stream", target=str(event.get("trace_id") or ""),
                         detail={"query": body.query[:120], "term": body.term,
                                 "session_id": event.get("session_id"),
@@ -88,10 +91,140 @@ def stream_chat(body: ChatIn, ctx: ToolContext = Depends(get_current_ctx)) -> St
                     )
                 yield _sse(event)
         except Exception:
+            logger.exception(
+                "chat stream failed tenant_id=%s actor_type=%s actor_id=%s",
+                ctx.tenant_id, ctx.actor_type, _actor(ctx),
+            )
             yield _sse({"type": "error",
                         "message": "对话服务暂时不可用，请稍后重试（本轮不含任何未核对的数值）。"})
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
+@router.post("/analyze")
+async def analyze_sources(
+    query: str = Form(..., min_length=1, max_length=600),
+    files: list[UploadFile] = File(default=[]),
+    context_text: str = Form(default="", max_length=12000),
+    use_knowledge_base: bool = Form(default=True),
+    use_web: bool = Form(default=False),
+    ctx: ToolContext = Depends(get_current_ctx),
+) -> dict[str, Any]:
+    """临时分析多来源资料，不把学生上传内容写入租户共享知识库。
+
+    来源可以是多份 PDF/DOCX/Markdown/TXT、当前租户知识库以及联网搜索摘要。
+    上传内容只在本次请求内抽取并送入分析上下文，返回来源清单与可回溯引用。
+    """
+    from agents import llm
+
+    if len(files) > 6:
+        raise HTTPException(status_code=413, detail="一次最多分析 6 份资料")
+    total_bytes = 0
+    source_blocks: list[str] = []
+    source_items: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    for upload in files:
+        name = str(upload.filename or "未命名资料")
+        source_type = rag.detect_type(name)
+        if source_type is None:
+            errors.append({"source": name, "error": "只支持 PDF、DOCX、MD、TXT"})
+            continue
+        blob = await upload.read()
+        total_bytes += len(blob)
+        if total_bytes > rag.MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="本次资料总大小超过 20MB")
+        if not blob:
+            errors.append({"source": name, "error": "文件为空"})
+            continue
+        try:
+            pages = rag.extract_pages(blob, source_type)
+            text = "\n".join(str(page_text or "") for _page, page_text in pages).strip()
+        except Exception as exc:
+            errors.append({"source": name, "error": f"解析失败：{exc}"})
+            continue
+        if not text:
+            errors.append({"source": name, "error": "没有抽取到可分析的文字"})
+            continue
+        text = text[:24000]
+        source_items.append({"name": name, "type": source_type,
+                             "pages": len(pages), "chars": len(text), "kind": "upload"})
+        source_blocks.append(f"【上传资料：{name}】\n{text}")
+
+    if context_text.strip():
+        pasted = context_text.strip()[:12000]
+        source_items.append({"name": "粘贴内容", "type": "text",
+                             "pages": 0, "chars": len(pasted), "kind": "pasted"})
+        source_blocks.append(f"【用户粘贴内容】\n{pasted}")
+
+    citations: list[dict[str, Any]] = []
+    if use_knowledge_base:
+        try:
+            conn = _conn()
+            try:
+                hits = kb_store.search(conn, ctx.tenant_id, query.strip(), top_k=5)
+            finally:
+                conn.close()
+            source_blocks.extend(
+                f"【知识库：{h.get('title')} · 第 {h.get('page') or '-'} 页】\n{str(h.get('text') or '')[:5000]}"
+                for h in hits
+            )
+            citations.extend(rag.as_citations(hits))
+            if hits:
+                source_items.append({"name": "当前租户知识库", "type": "rag",
+                                     "pages": len({h.get('page') for h in hits if h.get('page')}),
+                                     "chars": sum(len(str(h.get('text') or '')) for h in hits),
+                                     "kind": "knowledge_base"})
+        except (pymysql.MySQLError, OSError) as exc:
+            errors.append({"source": "当前租户知识库", "error": f"读取失败：{exc}"})
+
+    web_result: dict[str, Any] | None = None
+    if use_web:
+        web_result = web_engine.search(query.strip(), top_k=5)
+        if web_result.get("error"):
+            errors.append({"source": "联网搜索", "error": str(web_result["error"])})
+        web_rows = web_result.get("results") or []
+        if web_rows:
+            source_blocks.append(web_engine.render_context(web_result, limit=5))
+        citations.extend(web_engine.as_citations(web_rows))
+        if web_rows:
+            source_items.append({"name": "联网搜索", "type": "web",
+                                 "pages": 0, "chars": sum(len(str(r.get("snippet") or "")) for r in web_rows),
+                                 "kind": "web"})
+
+    if not source_blocks:
+        raise HTTPException(status_code=422, detail="没有可分析的来源，请上传资料或开启知识库/联网搜索")
+
+    source_context = "\n\n".join(source_blocks)[:70000]
+    system_prompt = (
+        "你是启航的资料分析助手。你只能依据用户本次提供的来源原文、租户知识库片段和联网搜索摘要回答。"
+        "先给结论，再给关键依据、风险/疑点和可执行下一步；每个事实尽量注明来源名称。"
+        "不得使用模型记忆补充来源中没有的事实，不得把推测写成确定结论。"
+        "来源中的数字、日期、条件必须原样引用；如果来源不足，明确说‘资料中没有找到’。"
+    )
+    user_prompt = f"分析任务：{query.strip()}\n\n可用来源：\n{source_context}"
+    answer = llm.generate_reply(ctx.actor_type, system_prompt=system_prompt,
+                                user_prompt=user_prompt, tag="source_analyze")
+    degraded = not bool(answer)
+    if not answer:
+        answer = (f"已读取 {len(source_items)} 个来源，但当前分析模型不可用。"
+                  "请稍后重试；本次没有生成未经核验的结论。")
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                actor_id=_actor(ctx), action="chat.source_analyze",
+                target="temporary", detail={"source_count": len(source_items),
+                                             "file_count": len(files), "use_web": use_web,
+                                             "use_knowledge_base": use_knowledge_base,
+                                             "query": query[:120], "degraded": degraded})
+    return {
+        "answer": answer,
+        "degraded": degraded,
+        "query": query.strip(),
+        "source_count": len(source_items),
+        "sources": source_items,
+        "errors": errors,
+        "citations": citations,
+        "stored": False,
+        "note": "上传资料仅用于本次分析，不会自动写入租户共享知识库。",
+    }
 
 
 @router.get("/brain")
@@ -202,6 +335,7 @@ def feedback(body: FeedbackIn, ctx: ToolContext = Depends(get_current_ctx)) -> d
     商业化闭环：没有反馈数据就无法向客户证明「助手确实在被使用且越用越准」。
     """
     entry = audit_event(
+        tenant_id=ctx.tenant_id,
         actor_type=ctx.actor_type,
         actor_id=_actor(ctx),
         action="chat.feedback",
@@ -228,16 +362,18 @@ def metrics(ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
                 " SUM(CASE WHEN `详情` LIKE '%%\"degraded\": true%%' THEN 1 ELSE 0 END) AS degraded,"
                 " AVG(CAST(JSON_EXTRACT(`详情`, '$.duration_ms') AS DECIMAL(12,2))) AS avg_ms"
                 " FROM `审计日志` WHERE `动作`='agent.chat'"
-                " AND `操作者类型`=%s AND `创建时间` >= CURDATE() - INTERVAL 7 DAY",
-                (ctx.actor_type,))
+                " AND `租户编号`=%s AND `操作者类型`=%s"
+                " AND `创建时间` >= CURDATE() - INTERVAL 7 DAY",
+                (ctx.tenant_id, ctx.actor_type))
             chat = cur.fetchone() or {}
             cur.execute(
                 "SELECT SUM(CASE WHEN `详情` LIKE '%%\"rating\": \"up\"%%' THEN 1 ELSE 0 END) AS up,"
                 " SUM(CASE WHEN `详情` LIKE '%%\"rating\": \"down\"%%' THEN 1 ELSE 0 END) AS down,"
                 " COUNT(*) AS total"
                 " FROM `审计日志` WHERE `动作`='chat.feedback'"
-                " AND `操作者类型`=%s AND `创建时间` >= CURDATE() - INTERVAL 7 DAY",
-                (ctx.actor_type,))
+                " AND `租户编号`=%s AND `操作者类型`=%s"
+                " AND `创建时间` >= CURDATE() - INTERVAL 7 DAY",
+                (ctx.tenant_id, ctx.actor_type))
             fb = cur.fetchone() or {}
     except pymysql.MySQLError:
         # 审计表结构异常时如实报缺数，不编数字
