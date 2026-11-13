@@ -70,18 +70,31 @@
 
     <section class="twin-panel bento-span-4" aria-labelledby="twin-title">
       <div class="twin-visual" aria-hidden="true">
-        <div class="twin-orbit orbit-one"></div>
-        <div class="twin-orbit orbit-two"></div>
-        <div class="twin-core">
-          <svg viewBox="0 0 64 64" role="presentation">
-            <circle cx="32" cy="21" r="11" />
-            <path d="M12 54c1.5-11 9-17 20-17s18.5 6 20 17" />
-            <path d="M8 32h8M48 32h8M32 4v7M32 53v7" />
-          </svg>
-        </div>
-        <span class="twin-node node-top">学业</span>
-        <span class="twin-node node-right">方向</span>
-        <span class="twin-node node-bottom">岗位</span>
+        <div class="twin-visual-top"><span>QH / DIGITAL TWIN</span><i></i></div>
+        <svg class="twin-sphere" viewBox="0 0 240 200" role="presentation">
+          <defs>
+            <radialGradient id="twinGlow" cx="48%" cy="42%" r="60%">
+              <stop offset="0" stop-color="#71d8ef" stop-opacity=".82" />
+              <stop offset=".42" stop-color="#4385ef" stop-opacity=".34" />
+              <stop offset="1" stop-color="#172b66" stop-opacity="0" />
+            </radialGradient>
+            <linearGradient id="twinStroke" x1="0" y1="0" x2="1" y2="1">
+              <stop stop-color="#8deaff" />
+              <stop offset="1" stop-color="#7c8fff" />
+            </linearGradient>
+          </defs>
+          <circle cx="120" cy="96" r="75" fill="url(#twinGlow)" />
+          <circle cx="120" cy="96" r="55" fill="none" stroke="url(#twinStroke)" stroke-opacity=".58" />
+          <ellipse cx="120" cy="96" rx="55" ry="21" fill="none" stroke="#8deaff" stroke-opacity=".72" />
+          <ellipse cx="120" cy="96" rx="25" ry="55" fill="none" stroke="#8deaff" stroke-opacity=".55" />
+          <path d="M69 80c28 19 74 19 102 0M69 112c28-19 74-19 102 0M120 41v110" fill="none" stroke="#b7c6ff" stroke-opacity=".38" />
+          <path d="M38 96h23m118 0h23M120 18v15m0 126v20" stroke="#7ce4ee" stroke-opacity=".82" />
+          <circle cx="120" cy="41" r="3.5" fill="#a5f3fc" />
+          <circle cx="69" cy="80" r="3" fill="#a5f3fc" />
+          <circle cx="171" cy="112" r="3" fill="#a5f3fc" />
+          <circle cx="120" cy="151" r="3.5" fill="#a5f3fc" />
+        </svg>
+        <div class="twin-visual-bottom"><strong>STUDENT MODEL</strong><span>学业 · 生涯 · 岗位</span></div>
       </div>
       <div class="twin-content">
         <div class="twin-heading">
@@ -2002,6 +2015,107 @@ onBeforeUnmount(() => {
   .twin-fact strong { font-size: 18px; }
   .twin-foot { align-items: flex-start; flex-direction: column; }
   .twin-ask { width: 100%; }
+}
+
+/* Digital-twin visual refresh: a compact dark identity core with a clearer data surface. */
+.twin-panel {
+  grid-template-columns: minmax(250px, 0.72fr) minmax(0, 2fr);
+  gap: 0;
+  align-items: stretch;
+  padding: 8px;
+  border-color: #d9e2f2;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 10px 32px rgba(35, 55, 92, 0.06);
+}
+
+.twin-visual {
+  display: flex;
+  min-height: 252px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 18px 20px 17px;
+  border-radius: 13px;
+  background:
+    radial-gradient(ellipse at 50% 49%, rgba(56, 109, 209, 0.32), transparent 48%),
+    linear-gradient(145deg, #101b37 0%, #172a52 55%, #15394c 100%);
+}
+
+.twin-visual::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image: linear-gradient(rgba(154, 191, 255, 0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(154, 191, 255, 0.055) 1px, transparent 1px);
+  background-size: 26px 26px;
+  content: '';
+  mask-image: linear-gradient(transparent, #000 22%, #000 80%, transparent);
+}
+
+.twin-visual-top,
+.twin-visual-bottom {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.twin-visual-top { color: #c0d4f4; font-size: 10px; font-weight: 750; letter-spacing: 0.16em; }
+.twin-visual-top i { width: 7px; height: 7px; border-radius: 50%; background: #63e3c1; box-shadow: 0 0 12px #63e3c1; }
+.twin-sphere { position: relative; z-index: 1; width: min(100%, 210px); margin: -2px 0; filter: drop-shadow(0 0 14px rgba(87, 201, 238, 0.22)); }
+.twin-visual-bottom { align-items: flex-end; color: #d3def1; }
+.twin-visual-bottom strong { font-size: 11px; letter-spacing: 0.12em; }
+.twin-visual-bottom span { color: #b4c6e2; font-size: 11px; }
+
+.twin-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 25px 27px 22px 30px;
+  background: radial-gradient(ellipse at 100% 0%, rgba(222, 235, 255, 0.42), transparent 42%), #fff;
+}
+
+.twin-heading h2 { font-size: 24px; }
+.twin-eyebrow { color: #5475b6; font-size: 10px; letter-spacing: 0.15em; }
+.twin-intro { color: #53627b; }
+.twin-live { color: #216b56; }
+.twin-facts { gap: 10px; margin-top: 22px; }
+.twin-fact { padding: 13px 14px 12px; border-color: #e7ebf2; border-radius: 11px; background: linear-gradient(160deg, #fff, #f9fbff); transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.twin-fact:hover { border-color: #cbd9f4; box-shadow: 0 8px 20px rgba(37, 71, 132, 0.07); transform: translateY(-1px); }
+.twin-fact > span, .twin-fact small { color: #5f6d85; }
+.twin-fact strong { margin: 7px 0 5px; color: #1e3156; font-weight: 720; }
+.twin-foot { color: #5e6c83; }
+.twin-ask { min-height: 42px; border-color: #c7d6f1; color: #315db1; font-weight: 650; }
+
+@media (max-width: 900px) {
+  .twin-panel { grid-template-columns: 210px minmax(0, 1fr); gap: 0; padding: 8px; }
+  .twin-visual { min-height: 240px; padding-right: 14px; padding-left: 14px; }
+  .twin-content { padding: 22px 20px 18px; }
+  .twin-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+}
+
+@media (max-width: 560px) {
+  .twin-panel { grid-template-columns: 1fr; gap: 0; padding: 6px; }
+  .twin-visual { min-height: 192px; padding: 14px 17px 13px; }
+  .twin-sphere { width: 172px; }
+  .twin-content { padding: 20px 13px 12px; }
+  .twin-heading { align-items: flex-start; gap: 8px; }
+  .twin-heading h2 { font-size: 21px; }
+  .twin-intro { font-size: 13px; }
+  .twin-live { padding: 5px 8px; font-size: 11px; }
+  .twin-facts { gap: 7px; margin-top: 15px; }
+  .twin-fact { padding: 10px; }
+  .twin-fact strong { font-size: 18px; }
+  .twin-foot { align-items: stretch; flex-direction: column; margin-top: 12px; }
+  .twin-ask { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .twin-fact { transition: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
