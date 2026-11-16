@@ -241,6 +241,48 @@
           <span v-if="guideTip" class="err">{{ guideTip }}</span>
         </div>
       </template>
+
+      <!-- 选课联动：引擎事实直引、零 LLM 调用；新生 onboarding 分支也可见 -->
+      <div v-if="guide.elective" class="elective-link-box">
+        <div class="elective-link-head">
+          <span class="elective-link-title">选课联动 · 技能缺口</span>
+          <el-tag
+            v-if="guide.elective.window"
+            size="small"
+            :type="guide.elective.window.state === 'open' ? 'success' : (guide.elective.window.state === 'before' ? 'warning' : 'info')"
+          >
+            {{ guide.elective.window.state === 'open' ? '选课窗口开放中' : (guide.elective.window.state === 'before' ? '选课窗口未开放' : '选课窗口已结束') }}
+          </el-tag>
+        </div>
+        <template v-if="guide.elective.available">
+          <div v-if="(guide.elective.recommendations || []).length" class="elective-chips">
+            <span v-for="(rec, i) in guide.elective.recommendations" :key="rec.name" class="elective-chip">
+              <span class="elective-idx">{{ i + 1 }}</span>
+              {{ rec.name }} · {{ rec.credit }}学分 · 得分 {{ rec.score }}
+            </span>
+          </div>
+          <div v-if="guide.elective.gened?.applicable && (guide.elective.gened?.uncovered || []).length" class="elective-gened">
+            <span class="elective-gened-label">{{ guide.elective.gened.required_cohort }}级通识必修模块尚未覆盖：</span>
+            <el-tag v-for="m in guide.elective.gened.uncovered" :key="m" type="danger" size="small">{{ m }}</el-tag>
+          </div>
+          <div v-if="guide.elective.credits" class="elective-credits">
+            毕业最低总学分 {{ guide.elective.credits.total_required }} · 已修 {{ guide.elective.credits.earned }} · 已选 {{ guide.elective.credits.elected }} · 剩余 {{ guide.elective.credits.remaining }} 学分
+          </div>
+          <div class="elective-link-cta">
+            <router-link to="/student/elective" class="guide-cta-btn">
+              让智能体规划选课<span class="cta-arrow" aria-hidden="true">↗</span>
+            </router-link>
+            <a
+              v-if="guide.elective.entry?.url"
+              :href="guide.elective.entry.url"
+              target="_blank"
+              rel="noopener"
+              class="elective-entry-link"
+            >教务系统选课入口 ↗</a>
+          </div>
+        </template>
+        <div v-else class="elective-note">{{ guide.elective.note }}</div>
+      </div>
     </el-card>
 
     <el-card ref="warningCard" v-loading="warningLoading" shadow="never" class="info-card bento-span-2">
@@ -1336,6 +1378,94 @@ onBeforeUnmount(() => {
 
 .week-text {
   min-width: 0;
+}
+
+/* 选课联动块：引擎事实直引，智能体规划入口在选课页 */
+.elective-link-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--bento-border, #dcdfe6);
+  border-radius: 12px;
+  background: var(--el-fill-color-light);
+}
+
+.elective-link-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.elective-link-title {
+  font-weight: 700;
+}
+
+.elective-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.elective-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.elective-idx {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.elective-gened {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.elective-gened-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.elective-credits {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 8px;
+}
+
+.elective-link-cta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.elective-entry-link {
+  font-size: 12px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.elective-note {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 /* 卡片底部两个落地 CTA */

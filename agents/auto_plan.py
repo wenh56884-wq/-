@@ -198,6 +198,12 @@ def question_bank_lookup(query: str = "", family: str = "", qtype: str = "") -> 
     """检索面试题库：按关键词/行业/题型找真题，每条带出处链接。用于回答「面试一般会问什么」。"""
 
 
+@tool
+def my_elective_advice(term: str = "", top_n: int = 8) -> str:
+    """查询**本人**的技能缺口选课推荐：目标岗位技能要求对比已修/已选课程，
+    算出缺口并推荐能补缺口的选修课。只能查自己。用于「选什么课/补什么课/技能缺口」。"""
+
+
 # 教师端可用全部；学生端**只给本人工具**——不给 student_profile / warning_list /
 # student_grades / student_forecast，免得模型顺着「帮我看看张三」去查别人
 # （越权会在工具层被拦，但根本不该给它选项）。
@@ -209,7 +215,8 @@ _TEACHER_TOOLS = (class_list, class_overview, warning_list, warning_thresholds,
                   exam_notices, exam_positions, question_bank_lookup,
                   kb_search, web_search, run_workflow)
 _STUDENT_TOOLS = (my_warning, my_recommendations, my_grades, my_forecast,
-                  my_career_forecast, my_notices, my_career_guide, competition_guide,
+                  my_career_forecast, my_elective_advice, my_notices, my_career_guide,
+                  competition_guide,
                   search_jobs, job_facets, my_interviews, my_assessment,
                   kg_major_skills, kg_skill_jobs, kg_path,
                   exam_notices, exam_positions, question_bank_lookup,

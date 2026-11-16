@@ -13,6 +13,7 @@ from agents.tools import write_audit
 
 def audit_event(
     *,
+    tenant_id: int = 0,
     actor_type: str,
     actor_id: int | None,
     action: str,
@@ -25,6 +26,7 @@ def audit_event(
     if duration_ms is not None:
         payload["duration_ms"] = round(float(duration_ms), 2)
     return write_audit(
+        tenant_id=int(tenant_id or 0),
         actor_type=actor_type,
         actor_id=int(actor_id or 0),
         action=action,

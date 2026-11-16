@@ -1279,12 +1279,24 @@ def my_career_guide(ctx: ToolContext, term: str | None = None) -> dict[str, Any]
     if features:
         direction = (features.get("interest") or {}).get("top_direction")
 
+    from engine import elective as elective_engine
+    try:
+        elective_facts = elective_engine.elective_advice_for_student(
+            ctx.tenant_id, int(ctx.student_id or 0), me["student_no"], term,
+            top_n=3, enroll_year=me.get("enroll_year"))
+    except Exception:
+        elective_facts = None
     guide = career_guide.build_guide(
         grade=grade, intent=intent, direction=direction, major=me.get("major"),
+        elective=elective_facts,
     )
+    if elective_facts is None:
+        guide["elective"] = {"available": False,
+                             "note": "选课联动暂不可用：选课事实取数失败，可稍后在选课推荐页重试。"}
     _audit_call(
         ctx, "career_guide", f"{me['student_no']}/{term}",
-        {"grade": grade, "intent": intent, "needs_intent": guide["needs_intent"]},
+        {"grade": grade, "intent": intent, "needs_intent": guide["needs_intent"],
+         "elective_available": bool((guide.get("elective") or {}).get("available"))},
     )
     return {
         **guide,
@@ -1558,6 +1570,8 @@ STUDENT_TOOLS: tuple[str, ...] = (
     "career_guide", "save_career_intent",
     # 成绩 / 预测 / 报考分析（本人视角，学号只来自登录态）
     "my_grades", "my_forecast", "my_career_forecast",
+    # 技能缺口选课推荐（本人视角，数值来自 engine.elective）
+    "my_elective_advice",
     # 软技能测评（本人最新一次画像）
     "my_assessment",
     # 通知 / 竞赛 / 规划
@@ -1928,6 +1942,49 @@ def my_career_forecast(ctx: ToolContext, goal: str = "") -> dict[str, Any]:
     result = career_nodes.forecast_career(ctx.tenant_id, ctx.student_id, goal or None)
     _audit_call(ctx, "my_career_forecast", f"student:{ctx.student_id}",
                 {"goal": str(goal or ""), "available": bool(result.get("available"))})
+    return dict(result)
+
+
+def my_elective_advice(ctx: ToolContext, term: str | None = None,
+                       top_n: int = 8) -> dict[str, Any]:
+    """本人技能缺口选课推荐（学生端）：目标岗位技能要求 vs 已修/已选课程覆盖，
+    确定性算出缺口并从选修课池排序候选课。数值全部来自 engine.elective；
+    个性化选课方案由选课规划智能体（agents.elective.advise）生成。只给学生本人。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_elective_advice", "self")
+    term = _resolve_term(ctx, term)
+    me = _resolve_self(ctx, "my_elective_advice")
+    from engine import elective as elective_engine
+
+    result = elective_engine.elective_advice_for_student(
+        ctx.tenant_id, ctx.student_id, me["student_no"], term,
+        top_n=max(1, min(int(top_n or 8), 20)), enroll_year=me.get("enroll_year"))
+    _audit_call(ctx, "my_elective_advice", f"{me['student_no']}/{term}",
+                {"top_n": int(top_n),
+                 "gaps": len(result.get("skill_gaps") or []),
+                 "recommendations": len(result.get("recommendations") or [])})
+    return dict(result)
+
+
+def elective_advise(ctx: ToolContext, message: str | None = None,
+                    term: str | None = None, top_n: int = 8) -> dict[str, Any]:
+    """选课规划智能体（大模型主导）：基于引擎事实生成个性化选课方案。
+    身份只从 ctx 取；数值由 engine.elective 供给、critic 回查，模型不可用降级模板。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "elective_advise", "self")
+    term = _resolve_term(ctx, term)
+    me = _resolve_self(ctx, "elective_advise")
+    from agents import elective as elective_agent   # 延迟导入：elective 经 career.nodes 反依赖 tools
+
+    result = elective_agent.advise(
+        ctx.tenant_id, ctx.student_id, me["student_no"], term,
+        message=message, top_n=max(1, min(int(top_n or 8), 20)),
+        enroll_year=me.get("enroll_year"))
+    _audit_call(ctx, "elective_advise", f"{me['student_no']}/{term}",
+                {"degraded": bool(result.get("degraded")),
+                 "retries": int((result.get("critic") or {}).get("retries") or 0)})
     return dict(result)
 
 

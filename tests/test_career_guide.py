@@ -109,5 +109,76 @@ def test_build_guide_is_deterministic():
     assert first["engine_version"] == career_guide.GUIDE_ENGINE_VERSION
 
 
+# ----------------------------------------------------------------
+# 6) 完整四年主线（供前端时间轴）：all_steps 不改变 steps 的剩余阶段语义
+# ----------------------------------------------------------------
+def test_all_steps_is_full_plan_while_steps_remains_remaining():
+    guide = career_guide.build_guide(grade="大三", intent="考公")
+    assert len(guide["steps"]) == 2
+    assert len(guide["all_steps"]) == 4
+    assert [step["阶段"][:2] for step in guide["all_steps"]] == ["大一", "大二", "大三", "大四"]
+    assert guide["all_steps"][2:] == guide["steps"]
+
+    no_intent = career_guide.build_guide(grade="大一")
+    assert no_intent["needs_intent"] is True
+    assert no_intent["all_steps"] == []
+
+
+# ----------------------------------------------------------------
+# 7) 选课联动：不传参逐键不变；传参行动追加末尾 + 摘要键齐
+# ----------------------------------------------------------------
+ELECTIVE_FACTS = {
+    "engine_version": "elective-v2",
+    "recommendations": [
+        {"name": "Java 程序设计", "direction": "后端", "credit": 3.0, "score": 0.65},
+    ],
+    "window": {"state": "closed",
+               "text": "选课窗口 10月22日10:30-10月25日24:00（本窗口已结束，以后续教务处通知为准）"},
+    "gened": {"applicable": False, "uncovered": []},
+    "credits": {"total_required": 160.0, "earned": 83.5, "elected": 2.0, "remaining": 74.5},
+    "policy": {"entry": {"url": "http://jwmis.cfec.edu.cn", "path": "一站式门户→教务管理系统→选课→自主选课→查询"},
+               "source": {"title": "关于2026-2027-1学期线下通识课程选课的通知"}},
+}
+
+
+def test_build_guide_without_elective_is_unchanged():
+    base = career_guide.build_guide(grade="大二", intent="就业",
+                                    direction="后端", major="软件工程")
+    assert "elective" not in base
+    assert all("选修「" not in a for step in base["steps"] for a in step["行动"])
+    assert base == career_guide.build_guide(grade="大二", intent="就业",
+                                            direction="后端", major="软件工程")
+
+
+def test_build_guide_elective_actions_appended_at_end():
+    base = career_guide.build_guide(grade="大二", intent="就业",
+                                    direction="后端", major="软件工程")
+    linked = career_guide.build_guide(grade="大二", intent="就业",
+                                      direction="后端", major="软件工程",
+                                      elective=ELECTIVE_FACTS)
+    base_actions = base["steps"][0]["行动"]
+    actions = linked["steps"][0]["行动"]
+    assert actions[:len(base_actions)] == base_actions, "原有行动顺序不能被挤占"
+    assert any("选修「Java 程序设计」" in a and "0.65" in a for a in actions[len(base_actions):])
+    assert not any("选课窗口内完成自主选课" in a for a in actions), "窗口 closed 不催选"
+    summary = linked["elective"]
+    assert summary["available"] is True
+    assert summary["recommendations"][0]["name"] == "Java 程序设计"
+    assert summary["credits"]["remaining"] == 74.5
+    assert summary["entry"]["url"] == "http://jwmis.cfec.edu.cn"
+    assert summary["engine_version"] == "elective-v2"
+    open_facts = {**ELECTIVE_FACTS,
+                  "window": {**ELECTIVE_FACTS["window"], "state": "open"}}
+    opened = career_guide.build_guide(grade="大二", intent="就业", elective=open_facts)
+    assert any("选课窗口内完成自主选课" in a for a in opened["steps"][0]["行动"])
+
+
+def test_build_guide_needs_intent_keeps_empty_steps_but_summary():
+    linked = career_guide.build_guide(grade="大一", intent=None, elective=ELECTIVE_FACTS)
+    assert linked["needs_intent"] is True
+    assert linked["steps"] == []
+    assert linked["elective"]["available"] is True
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))

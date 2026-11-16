@@ -82,7 +82,8 @@ def _guard(ctx: ToolContext, action: str, call):
         raise HTTPException(status_code=502, detail=f"模型调用失败：{exc}")
     finally:
         audit_event(
-            actor_type=ctx.actor_type, actor_id=ctx.student_id,
+            tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+            actor_id=ctx.student_id,
             action=f"career.{action}", target=str(ctx.student_id),
             duration_ms=(time.perf_counter() - started) * 1000,
         )
@@ -103,9 +104,10 @@ def list_templates(ctx: ToolContext = Depends(require_student)) -> dict[str, Any
 
 
 @router.get("/guide")
-def career_guide(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
-    """本人年级 + 目标 + 确定性规划路径；大一未选目标时返回 needs_intent。"""
-    return _guard(ctx, "career_guide", lambda: tools.my_career_guide(ctx))
+def career_guide(term: str | None = Query(None, max_length=20),
+                 ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """本人年级 + 目标 + 确定性规划路径 + 选课联动；大一未选目标时返回 needs_intent。"""
+    return _guard(ctx, "career_guide", lambda: tools.my_career_guide(ctx, term))
 
 
 @router.put("/intent")

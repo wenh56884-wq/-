@@ -81,6 +81,8 @@ _FOLLOWUP_BY_TOOL: dict[str, tuple[str, ...]] = {
     "warning_thresholds": ("这个班的预警名单有哪些人", "阈值调整要走哪个功能页面"),
     "my_warning": ("我的岗位推荐有哪些", "知识库里有没有帮扶相关的制度"),
     "my_recommendations": ("我最近有没有学业预警", "这些岗位要求的证书知识库里有吗"),
+    "my_elective_advice": ("我的岗位推荐有哪些", "掌握这些技能能胜任哪些岗位",
+                           "知识库里有没有选课管理办法"),
     "kb_search": ("换一种说法再查一次", "这个问题校园数据里能不能看"),
     "web_search": ("这个问题知识库里有没有规定", "回到校园数据里继续查"),
     "run_workflow": ("看看刚才跑出来的名单", "帮我跑一遍另一个工作流"),
@@ -335,6 +337,9 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
         return tools.my_warning(ctx, a.get("term") or None)
     if name == "my_recommendations":
         return tools.my_recommendations(ctx, a.get("term") or None)
+    if name == "my_elective_advice":
+        return tools.my_elective_advice(ctx, a.get("term") or None,
+                                        top_n=int(a.get("top_n") or 8))
     if name == "my_notices":
         return tools.my_notices(ctx, limit=int(a.get("limit") or 20))
     if name == "my_career_guide":
@@ -616,6 +621,63 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"进度 {it.get('cur_round')}/{it.get('max_round')}"
                 + (f"，总分 {it.get('total')}" if it.get("total") is not None else "") + "。"
             )
+    if "recommendations" in result and "target" in result:
+        target = result.get("target") or {}
+        if target.get("source"):
+            if target.get("title"):
+                parts.append(
+                    f"目标岗位：{target.get('title')}（{target.get('company') or '未知企业'}）。")
+            else:
+                parts.append("目标技能：按你的选修方向聚合的岗位高频技能要求。")
+        required = result.get("required") or []
+        covered = result.get("covered") or []
+        if required:
+            parts.append(f"技能覆盖 {len(covered)}/{len(required)}。")
+        gaps = result.get("skill_gaps") or []
+        if gaps:
+            parts.append("当前缺口：" + "、".join(str(g) for g in gaps) + "。")
+        for rec in (result.get("recommendations") or [])[:3]:
+            parts.append(
+                f"建议选修「{rec.get('name')}」（{rec.get('direction')}方向，"
+                f"{rec.get('credit')}学分，得分 {rec.get('score')}）：{rec.get('reason')}。")
+        if result.get("note"):
+            parts.append(str(result.get("note")))
+    if "headline" in result and "all_steps" in result:
+        # 生涯指南：标题/首阶段行动直引；选课联动块全部引自引擎事实
+        if not result.get("needs_intent"):
+            parts.append(str(result.get("headline")))
+            direction = result.get("direction") or {}
+            if direction.get("name"):
+                parts.append(f"当前方向：{direction['name']}。")
+            steps = result.get("steps") or []
+            if steps:
+                first = steps[0]
+                parts.append(f"{first.get('阶段')}：{first.get('目标')}。行动："
+                             + "；".join(str(a) for a in (first.get("行动") or [])) + "。")
+        linked = result.get("elective") or {}
+        if linked.get("available"):
+            for rec in (linked.get("recommendations") or [])[:3]:
+                parts.append(
+                    f"选课联动：建议选修「{rec.get('name')}」（{rec.get('direction')}方向，"
+                    f"{rec.get('credit')}学分，得分 {rec.get('score')}）。")
+            gened = linked.get("gened") or {}
+            if gened.get("applicable") and gened.get("uncovered"):
+                parts.append(f"{gened.get('required_cohort')}级毕业前必修选修模块尚未覆盖："
+                             + "、".join(str(m) for m in gened["uncovered"])
+                             + "（课池未含通识课程，以教务处通知为准）。")
+            credits = linked.get("credits") or {}
+            if credits:
+                parts.append(f"毕业最低总学分 {credits.get('total_required')}，"
+                             f"已修 {credits.get('earned')}，已选 {credits.get('elected')}，"
+                             f"剩余 {credits.get('remaining')} 学分。{credits.get('note')}")
+            window = linked.get("window") or {}
+            if window.get("text"):
+                parts.append(str(window["text"]))
+            entry = linked.get("entry") or {}
+            if entry.get("url"):
+                parts.append(f"选课入口：{entry.get('path')}（{entry['url']}）。")
+        elif linked.get("note"):
+            parts.append(str(linked["note"]))
     if result.get("has_assessment") is False and result.get("note"):
         parts.append(str(result.get("note")))
     elif "abilities" in result and "total_score" in result:

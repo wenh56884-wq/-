@@ -253,6 +253,7 @@ const MENUS = {
     { path: '/student/assistant', label: 'AI 助手', hint: '联网搜索 + 深度思考', icon: 'chat' },
     { path: '/student/grades', label: '成绩单', hint: '每学年课程成绩', icon: 'doc' },
     { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
+    { path: '/student/elective', label: '选课推荐', hint: '技能缺口 → 智能体选课', icon: 'target' },
     { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
     { path: '/student/career', label: '报考分析', hint: '按你的指标算竞争力', icon: 'target' },
     { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
@@ -304,6 +305,9 @@ const PAGE_AI = {
   ],
   'student-jobs': [
     { q: '有哪些岗位适合我？为什么？', note: '岗位推荐 + 推荐理由' }
+  ],
+  'student-elective': [
+    { q: '我选什么课能补技能缺口', note: '引擎算缺口，选课规划智能体给个性化方案' }
   ],
   'student-interview': [
     { q: '帮我跑一遍求职体检', note: '工作流：简历→差距→演练一站式体检' }

@@ -33,6 +33,20 @@ def _norm(text: str) -> str:
 
 # 课程名关键词 → 培养技能（确定性映射；未命中不连边，绝不编一条假技能）
 COURSE_SKILL_MAP: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # 人工智能 / 数据科学核心课：先覆盖工科演示专业，技能词只取图谱里真实存在的标签
+    ("人工智能", ("人工智能", "算法")),
+    ("模式识别", ("算法", "机器学习")),
+    ("计算机视觉", ("算法", "机器学习")),
+    ("智能系统", ("算法", "人工智能")),
+    ("机器学习", ("机器学习", "算法")),
+    ("深度学习", ("机器学习", "算法")),
+    ("自然语言处理", ("算法", "机器学习")),
+    ("算法", ("算法", "编程基础")),
+    ("数据挖掘", ("数据挖掘", "数据分析")),
+    ("数据可视化", ("数据可视化", "Excel")),
+    ("java", ("Java", "编程基础")),
+    ("web应用", ("HTML", "JavaScript", "前端")),
+    ("软件测试", ("软件测试",)),
     ("会计", ("会计核算", "财务报表")),
     ("审计", ("审计",)),
     ("税", ("税务处理",)),
@@ -67,12 +81,31 @@ COURSE_SKILL_MAP: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("健康服务", ("健康服务管理",)),
     ("播音", ("内容表达",)),
     ("数字媒体", ("数字内容制作",)),
-    ("法", ("法律合规",)),
+    ("法律", ("法律合规",)),
+    ("法学", ("法律合规",)),
+    ("经济法", ("法律合规",)),
     ("商法", ("法律合规",)),
     ("谈判", ("商务谈判",)),
     ("礼仪", ("商务礼仪",)),
     ("英语", ("英语",)),
 )
+
+
+def skills_for_course(name: str) -> tuple[str, ...]:
+    """课程名 → 培养技能（纯函数，按映射表逐条匹配，去重保序）。
+
+    只返回映射表里明确写出的技能；未命中返回空元组，由建图环节跳过这条边。
+    """
+    normalized = str(name or "").strip().lower()
+    if not normalized:
+        return ()
+    found: list[str] = []
+    for key, skills in COURSE_SKILL_MAP:
+        if key in normalized:
+            for skill in skills:
+                if skill not in found:
+                    found.append(skill)
+    return tuple(found)
 
 
 def _query(sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
@@ -129,14 +162,9 @@ def build_graph() -> nx.DiGraph:
 
     # 2) 课程 —培养-> 技能（映射表；未命中不连）
     for c in courses:
-        name = str(c.get("name") or "").strip().lower()
-        if not name:
-            continue
-        for key, skills in COURSE_SKILL_MAP:
-            if key in name:
-                for sk in skills:
-                    g.add_node(f"skill:{sk}", kind="skill", label=sk)
-                    g.add_edge(f"course:{c['name']}", f"skill:{sk}", kind="培养")
+        for sk in skills_for_course(str(c.get("name") or "")):
+            g.add_node(f"skill:{sk}", kind="skill", label=sk)
+            g.add_edge(f"course:{c['name']}", f"skill:{sk}", kind="培养")
 
     # 3) 岗位：方向判定 + 技能标签
     jobs = _query(

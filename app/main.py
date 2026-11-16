@@ -31,6 +31,7 @@ from app.logging_config import get_logger
 from app.routers import assessment as assessment_router
 from app.routers import career as career_router
 from app.routers import chat as chat_router
+from app.routers import elective as elective_router
 from app.routers import exam as exam_router
 from app.routers import forecast as forecast_router
 from app.routers import grades as grades_router
@@ -164,6 +165,7 @@ def create_app() -> FastAPI:
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
     app.include_router(career_router.router)
+    app.include_router(elective_router.router)
     app.include_router(forecast_router.router)
     app.include_router(grades_router.router)
     app.include_router(exam_router.router)

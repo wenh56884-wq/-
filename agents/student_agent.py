@@ -36,6 +36,9 @@ STUDENT_DATA_ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
     # 预测要排在成绩之前：问「预测一下我下学期的绩点」时，
     # 「绩点」会先被成绩路由吃掉，答成历史成绩而不是预测。
     ("my_forecast", ("预测", "下学期", "走势", "未来", "会怎样", "会不会挂")),
+    # 选课推荐要排在成绩之前：「选什么课补技能」问的是缺口选课，不是历史成绩。
+    ("my_elective_advice", ("选课", "选修", "技能缺口", "补什么课", "选什么课",
+                            "补技能", "选哪些课")),
     ("my_grades", ("成绩", "成绩单", "分数", "绩点", "均分", "考了多少")),
     # 软技能测评：「测评/软技能/能力画像」要排在成绩之后、报考分析之前，
     # 这些词不与成绩/报考分析重叠，命中即走本人画像而非知识库。
@@ -48,21 +51,28 @@ STUDENT_DATA_ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def personal_tool(intent: str) -> str | None:
+def personal_tool(intent: str, raw: str | None = None) -> str | None:
     """学生端数据意图路由：命中返回工具名，未命中返回 None。
 
     放在知识库分支之前调用，原因是知识库词表含「学分 / 实习 / 管理办法」等词，
     学生问「我的成绩怎么样」时会被误判成查制度文档。
+
+    raw：当前问句原文；复合规则与关键词只看当前问句，未命中再退回合并意图。
     """
+    text = str(raw).strip() if raw else intent
     # 复合命中：「考公/国考词 + 职位/岗位词」问的是职位明细（逐条数据），
     # 而不是报考分析路线聚合，先于 STUDENT_DATA_ROUTES 返回 exam_positions。
     # 例：「今年考公能考哪些职位」含「考公」+「职位」。
-    if any(a in intent for a in ("国考", "考公", "公务员", "招录", "招考")) and any(
-            b in intent for b in ("职位", "岗位")):
+    if any(a in text for a in ("国考", "考公", "公务员", "招录", "招考")) and any(
+            b in text for b in ("职位", "岗位")):
         return "exam_positions"
     for name, keywords in STUDENT_DATA_ROUTES:
-        if any(k in intent for k in keywords):
+        if any(k in text for k in keywords):
             return name
+    if raw and raw.strip() != intent:
+        for name, keywords in STUDENT_DATA_ROUTES:
+            if any(k in intent for k in keywords):
+                return name
     return None
 
 

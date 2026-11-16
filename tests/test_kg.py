@@ -13,6 +13,7 @@ from engine.kg import (
     graph_stats,
     query_jobs_by_skill,
     query_skills_by_major,
+    skills_for_course,
 )
 
 pytestmark = pytest.mark.kg
@@ -97,3 +98,13 @@ def test_explain_path_reports_gap():
 
 def test_explain_path_unknown_job():
     assert not explain_path(_mini_graph(), "会计学", 999)["found"]
+
+
+def test_skills_for_course_maps_ai_core_courses():
+    """工科核心课能落到真实技能；「算法」不得被「法」误判成法律合规。"""
+    assert skills_for_course("人工智能导论") == ("人工智能", "算法")
+    assert skills_for_course("计算机视觉") == ("算法", "机器学习")
+    assert skills_for_course("深度学习") == ("机器学习", "算法")
+    assert "法律合规" not in skills_for_course("数据结构与算法")
+    assert "法律合规" in skills_for_course("经济法")
+    assert skills_for_course("高等数学") == ()

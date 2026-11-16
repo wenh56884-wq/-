@@ -1,0 +1,58 @@
+{
+  "version": "elective-policy-2026-2027-1",
+  "source": {
+    "title": "关于2026-2027-1学期线下通识课程选课的通知",
+    "url": "http://www.cfec.edu.cn/jwc/article/100220067122781697",
+    "publisher": "教务处",
+    "published": "2026-10-21"
+  },
+  "window": {
+    "term": "2026-2027-1",
+    "start": "2026-10-22T10:30:00",
+    "end": "2026-10-26T00:00:00",
+    "start_text": "10月22日10:30",
+    "end_text": "10月25日24:00"
+  },
+  "rules": [
+    "如跟必修课时间冲突将显示不能选课。",
+    "若开课后再退课，将暂停1学期线下通识选修课选课资格。",
+    "选课采取先选先得、选满为止方式，容量选满将不能再选。",
+    "需选课人数达到20人及以上方能开课，不满20人将进行合并班级或取消排课。",
+    "本学期线下选修课将于第9周开课，请进入教务系统查询个人课表。"
+  ],
+  "equivalence": {
+    "cohorts": [2024, 2025],
+    "cohort_labels": [24, 25],
+    "text": "24级（含专升本）、25级同学选择并通过1门线下选修课等同于完成超星线上相应板块选修课修读要求，已通过1门线上相应板块课程可不必再选；学有余力再选者，在校期间成绩库将只保留一门最高分的对应板块课程。"
+  },
+  "gened": {
+    "cohort": 2026,
+    "modules": [
+      {"name": "大学生劳动教育", "keywords": ["劳动教育"], "exempt": null},
+      {"name": "文明与传承类课程", "keywords": ["文明与传承"], "exempt": null},
+      {"name": "社会发展与公民责任类课程", "keywords": ["社会发展与公民责任"], "exempt": null},
+      {"name": "艺术欣赏与审美体验", "keywords": ["艺术欣赏", "审美体验"], "exempt": "art"},
+      {"name": "AI素养教程", "keywords": ["AI素养", "人工智能素养"], "exempt": null},
+      {"name": "新财经素养教程", "keywords": ["新财经素养"], "exempt": "non_engineering"},
+      {"name": "新媒体电商素养课程", "keywords": ["新媒体电商素养"], "exempt": "art"},
+      {"name": "五史教育", "keywords": ["五史"], "exempt": null}
+    ],
+    "art_major_keywords": ["播音", "数艺", "数字媒体艺术", "艺术"],
+    "engineering_major_keywords": ["数技", "软件", "空信", "物联网", "智能", "数据", "人工智能", "区块链", "计算机", "信息"]
+  },
+  "credits": {
+    "total": 160,
+    "general": 48,
+    "major": 72,
+    "practice": 40,
+    "substitution_cap": 10,
+    "source": "知识库演示整理稿《学籍与学分管理规定》（学生手册学分制口径）"
+  },
+  "entry": {
+    "url": "http://jwmis.cfec.edu.cn",
+    "path": "一站式门户→教务管理系统→选课→自主选课→查询"
+  },
+  "min_students": 20,
+  "start_week": 9,
+  "withdraw_penalty_terms": 1
+}

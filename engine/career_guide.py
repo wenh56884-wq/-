@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, Mapping
 
 GUIDE_ENGINE_VERSION = "career-guide-v1"
 
@@ -203,12 +203,43 @@ def _headline(stage: str, grade: str | None, intent: str | None) -> str:
     return f"{label} · 先补齐年级与目标，再生成规划"
 
 
+def _elective_actions(elective: Mapping[str, Any]) -> list[str]:
+    """选课联动行动条：课名/学分/得分直引事实层；窗口开放才催选。"""
+    actions: list[str] = []
+    for rec in (elective.get("recommendations") or [])[:3]:
+        actions.append(f"选修「{rec.get('name')}」补技能缺口"
+                       f"（{rec.get('credit')}学分，得分 {rec.get('score')}，见选课推荐）")
+    window = elective.get("window") or {}
+    if window.get("state") == "open":
+        actions.append(f"在选课窗口内完成自主选课（{window.get('text')}）")
+    gened = elective.get("gened") or {}
+    if gened.get("applicable") and gened.get("uncovered"):
+        actions.append("对照教务处通知核对尚未覆盖的通识必修模块（课池未含通识课程）")
+    return actions
+
+
+def _elective_summary(elective: Mapping[str, Any]) -> dict[str, Any]:
+    """规划卡与聊天草稿用的选课联动摘要：全部直引事实层。"""
+    policy = elective.get("policy") or {}
+    return {
+        "available": True,
+        "recommendations": [dict(r) for r in (elective.get("recommendations") or [])[:3]],
+        "gened": dict(elective.get("gened") or {}),
+        "credits": dict(elective.get("credits") or {}),
+        "window": dict(elective.get("window") or {}),
+        "entry": dict(policy.get("entry") or {}),
+        "source": dict(policy.get("source") or {}),
+        "engine_version": str(elective.get("engine_version") or ""),
+    }
+
+
 def build_guide(
     *,
     grade: str | None,
     intent: Any = None,
     direction: Any = None,
     major: Any = None,
+    elective: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """生成一份确定性生涯规划。
 
@@ -222,8 +253,14 @@ def build_guide(
     needs_intent = stage == "freshman" and selected is None
     resolved_direction = resolve_direction(direction, selected)
     steps = [] if needs_intent else _steps_for(stage, selected)
+    # 完整四年主线供时间轴展示；未定方向时为空，steps 的「剩余阶段」语义保持不变
+    all_steps = [dict(step) for step in _PLANS.get(selected, [])] if selected else []
+    # 选课联动行动追加到首阶段末尾，不挤占前端「本周行动」取的前 3 条
+    if elective is not None and steps:
+        steps[0] = dict(steps[0], **{
+            "行动": list(steps[0].get("行动") or []) + _elective_actions(elective)})
 
-    return {
+    guide = {
         "grade": normalized_grade or "年级未知",
         "stage": stage,
         "intent": selected,
@@ -232,7 +269,11 @@ def build_guide(
         "direction": resolved_direction,
         "major": str(major or ""),
         "steps": steps,
+        "all_steps": all_steps,
         "options": [dict(option) for option in INTENT_OPTIONS],
         "note": "规划由确定性规则生成；目标可随时调整，调整后重新生成路径。",
         "engine_version": GUIDE_ENGINE_VERSION,
     }
+    if elective is not None:
+        guide["elective"] = _elective_summary(elective)
+    return guide

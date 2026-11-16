@@ -7,6 +7,7 @@ const ShellLayout = () => import('../layout/ShellLayout.vue')
 const Assessment = () => import('../views/Assessment.vue')
 const Assistant = () => import('../views/Assistant.vue')
 const CareerForecast = () => import('../views/CareerForecast.vue')
+const ElectiveAdvice = () => import('../views/ElectiveAdvice.vue')
 const ExamNotices = () => import('../views/ExamNotices.vue')
 const GradeReport = () => import('../views/GradeReport.vue')
 const InterviewRoom = () => import('../views/InterviewRoom.vue')
@@ -77,6 +78,8 @@ const routes = [
         meta: { title: 'AI 助手' } },
       { path: 'career', name: 'student-career', component: CareerForecast,
         meta: { title: '报考分析' } },
+      { path: 'elective', name: 'student-elective', component: ElectiveAdvice,
+        meta: { title: '选课推荐' } },
       { path: ':pathMatch(.*)*', name: 'student-not-found', component: NotFound,
         meta: { title: '页面不存在' } }
     ]

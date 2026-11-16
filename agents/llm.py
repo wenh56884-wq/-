@@ -107,7 +107,8 @@ def _temperature(actor_type: str) -> float:
     return 0.2 if actor_type == "teacher" else 0.3
 
 
-def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) -> str:
+def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
+            temperature: float | None = None) -> str:
     """按提供方顺序尝试一次对话；星火失败自动落 DeepSeek，返回纯文本正文。"""
     from app.audit import audit_event
 
@@ -115,18 +116,21 @@ def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) 
     if not order:
         raise RuntimeError("没有可用的 LLM Key")
     errors: list[str] = []
+    temp = _temperature(actor_type) if temperature is None else temperature
     for provider in order:
-        llm = _cached_llm(provider, _temperature(actor_type))
+        llm = _cached_llm(provider, temp)
         started = time.perf_counter()
         try:
             resp = llm.invoke(_messages(system_prompt, user_prompt))
         except Exception as exc:  # Key 无效/限流/超时：换下一家，不把堆栈抛给用户
             errors.append(f"{provider}: {type(exc).__name__}")
-            audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
+            audit_event(tenant_id=0, actor_type=actor_type, actor_id=0,
+                        action=f"llm.{tag}.failed",
                         target=provider, detail={"error": str(exc)[:200]})
             continue
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target=provider,
+        audit_event(tenant_id=0, actor_type=actor_type, actor_id=0,
+                    action=f"llm.{tag}", target=provider,
                     detail={"chars": len(content),
                             "cost_ms": round((time.perf_counter() - started) * 1000)})
         return str(content).strip()
@@ -134,7 +138,8 @@ def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str) 
 
 
 def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
-                   on_token: Callable[[str], None]) -> str:
+                   on_token: Callable[[str], None],
+                   temperature: float | None = None) -> str:
     """流式调用：每收到一块就回调 on_token。
 
     只有「一个字都还没吐」时才允许换提供方；已经输出半截，换家会拼出两段不同回答。
@@ -145,8 +150,9 @@ def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag
     if not order:
         raise RuntimeError("没有可用的 LLM Key")
     errors: list[str] = []
+    temp = _temperature(actor_type) if temperature is None else temperature
     for provider in order:
-        llm = _cached_llm(provider, _temperature(actor_type))
+        llm = _cached_llm(provider, temp)
         started = time.perf_counter()
         parts: list[str] = []
         try:
@@ -158,17 +164,19 @@ def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag
                 on_token(text)
         except Exception as exc:
             if parts:
-                audit_event(actor_type=actor_type, actor_id=0,
+                audit_event(tenant_id=0, actor_type=actor_type, actor_id=0,
                             action=f"llm.{tag}.failed", target=provider,
                             detail={"error": str(exc)[:200],
                                     "partial_chars": len("".join(parts))})
                 raise
             errors.append(f"{provider}: {type(exc).__name__}")
-            audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}.failed",
+            audit_event(tenant_id=0, actor_type=actor_type, actor_id=0,
+                        action=f"llm.{tag}.failed",
                         target=provider, detail={"error": str(exc)[:200]})
             continue
         content = "".join(parts)
-        audit_event(actor_type=actor_type, actor_id=0, action=f"llm.{tag}", target=provider,
+        audit_event(tenant_id=0, actor_type=actor_type, actor_id=0,
+                    action=f"llm.{tag}", target=provider,
                     detail={"chars": len(content), "stream": True,
                             "cost_ms": round((time.perf_counter() - started) * 1000)})
         return str(content).strip()
@@ -177,13 +185,18 @@ def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag
 
 def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
                    tag: str = "draft",
-                   on_token: Callable[[str], None] | None = None) -> str | None:
-    """生成一段回复；所有提供方都不可用时返回 None（上层回退模板，不报错给用户）。"""
+                   on_token: Callable[[str], None] | None = None,
+                   temperature: float | None = None) -> str | None:
+    """生成一段回复；所有提供方都不可用时返回 None（上层回退模板，不报错给用户）。
+
+    temperature 缺省按 actor_type 取默认值；career 等模块传显式温度保留各自语义。
+    """
     try:
         if on_token is None:
-            return _invoke(actor_type, system_prompt, user_prompt, tag=tag)
+            return _invoke(actor_type, system_prompt, user_prompt, tag=tag,
+                           temperature=temperature)
         return _invoke_stream(actor_type, system_prompt, user_prompt, tag=tag,
-                              on_token=on_token)
+                              on_token=on_token, temperature=temperature)
     except Exception:
         return None
 
