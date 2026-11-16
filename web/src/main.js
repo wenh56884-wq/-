@@ -8,5 +8,6 @@ import router from './router'
 import './styles.css'
 import './styles/bento.css'
 import './styles/readability.css'
+import './styles/motion.css'
 
 createApp(App).use(ElementPlus, { locale: zhCn }).use(router).mount('#app')

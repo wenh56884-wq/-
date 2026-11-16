@@ -1,5 +1,9 @@
 <template>
-  <router-view />
+  <router-view v-slot="{ Component }">
+    <Transition name="qh-page" mode="out-in">
+      <component :is="Component" />
+    </Transition>
+  </router-view>
   <!-- 宠物全局陪伴层：跨路由常驻，固定驻留在左下角、不移动，会主动说话；
        点击身体会蹦跳回应，点它头顶的 "AI" 角标 = 打开右侧助手抽屉。
        登录页不渲染：宠物固定在左下角会压住「开始使用」按钮挡住登录入口

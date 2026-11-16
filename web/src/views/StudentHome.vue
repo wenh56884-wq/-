@@ -1,5 +1,5 @@
 <template>
-  <div class="page bento-page">
+  <div ref="pageRoot" class="page bento-page">
     <FreshmanGuide
       :open="freshmanGuideOpen"
       :grade="guide.grade || '大一'"
@@ -7,48 +7,31 @@
       @skip="finishFreshmanGuide(false)"
     />
     <div class="bento-grid">
-    <!-- Hero：一句话结论 + 关键指标 + 主按钮。结论只组织引擎返回的数值，不做任何推断 -->
-    <section class="bento-card bento-span-4 page-hero">
-      <VideoBackdrop :scrim="0.5" object-position="50% 40%" />
-      <div class="ph-main">
-        <div class="ph-left">
-          <p class="ph-eyebrow">本学期结论 · {{ warning.term || term || '-' }}</p>
-          <h2 class="ph-title">{{ heroConclusion }}</h2>
-          <p class="ph-desc">
-            让启航智能体帮你看懂预警、匹配岗位、拆解能力差距；所有数值由确定性引擎实算并回查。
-          </p>
-          <div class="ph-actions">
-            <el-button type="primary" class="ph-btn" @click="goJobs">查看岗位</el-button>
-            <el-button class="ph-btn" @click="goWarning">查看预警</el-button>
-            <el-button class="ph-btn" @click="askAI('我这学期的学业预警情况怎么样？')">
-              问启航智能体
-            </el-button>
-          </div>
-        </div>
+    <!-- 航线页头：一句话结论 + 关键指标 + 主按钮。结论只组织引擎返回的数值，不做任何推断 -->
+    <RouteHero
+      class="bento-span-4 qh-reveal qh-hero"
+      :style="{ '--qh-index': 0 }"
+      tone="student"
+      :eyebrow="`本学期结论 · ${warning.term || term || '-'}`"
+      :title="heroConclusion"
+      desc="让启航智能体帮你看懂预警、匹配岗位、拆解能力差距；所有数值由确定性引擎实算并回查。"
+      :stats="[
+        { label: '预警等级', value: levelText(warning.level), tone: levelTone },
+        { label: '风险分', value: warning.risk_score ?? '—' },
+        { label: '已匹配岗位', value: items.length, suffix: '个' }
+      ]"
+    >
+      <template #actions>
+        <el-button type="primary" @click="goJobs">查看岗位</el-button>
+        <el-button @click="goWarning">查看预警</el-button>
+        <el-button @click="askAI('我这学期的学业预警情况怎么样？')">问启航智能体</el-button>
+      </template>
+    </RouteHero>
 
-        <div class="ph-stats">
-          <div class="ph-stat">
-            <span class="ph-stat-label">预警等级</span>
-            <b class="ph-stat-value" :class="'lv-' + (warning.level || 'unknown')">
-              {{ levelText(warning.level) }}
-            </b>
-          </div>
-          <div class="ph-stat">
-            <span class="ph-stat-label">风险分</span>
-            <b class="ph-stat-value"><count-number :value="warning.risk_score" /></b>
-          </div>
-          <div class="ph-stat">
-            <span class="ph-stat-label">已匹配岗位</span>
-            <b class="ph-stat-value">{{ items.length }}<small>个</small></b>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <el-alert class="trust-bar bento-span-4" type="success" :closable="false" show-icon
+    <el-alert class="trust-bar bento-span-4 qh-reveal" :style="{ '--qh-index': 1 }" type="success" :closable="false" show-icon
       title="所有数值由确定性引擎实算，未通过校验的数字不会展示" />
 
-    <div class="live-bar bento-span-4">
+    <div class="live-bar bento-span-4 qh-reveal" :style="{ '--qh-index': 2 }">
       <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
       <el-switch v-model="autoRefresh" size="small" active-text="30 秒自动刷新" />
       <el-button size="small" :loading="warningLoading || recLoading" @click="reloadAll">立即刷新</el-button>
@@ -68,7 +51,7 @@
       </button>
     </div>
 
-    <section class="twin-panel bento-span-4" aria-labelledby="twin-title">
+    <section class="twin-panel bento-span-4 qh-reveal" :style="{ '--qh-index': 3 }" aria-labelledby="twin-title">
       <div class="twin-visual" aria-hidden="true">
         <div class="twin-visual-top"><span>QH / DIGITAL TWIN</span><i></i></div>
         <svg class="twin-sphere" viewBox="0 0 240 200" role="presentation">
@@ -137,7 +120,8 @@
     </section>
 
     <el-card ref="guideCard" v-loading="guideLoading" shadow="never"
-      class="guide-card bento-span-2 bento-row-2"
+      class="guide-card bento-span-2 bento-row-2 qh-reveal"
+      :style="{ '--qh-index': 4 }"
       :class="{ 'guide-stretch': !(guide.needs_intent) && (guide.steps || []).length }">
       <template #header>
         <div class="guide-head">
@@ -285,7 +269,7 @@
       </div>
     </el-card>
 
-    <el-card ref="warningCard" v-loading="warningLoading" shadow="never" class="info-card bento-span-2">
+    <el-card ref="warningCard" v-loading="warningLoading" shadow="never" class="info-card bento-span-2 qh-reveal" :style="{ '--qh-index': 5 }">
       <div class="card-title">本人信息</div>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="学号">{{ warning.student_no || '-' }}</el-descriptions-item>
@@ -324,7 +308,7 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="quick-card bento-span-4">
+    <el-card shadow="never" class="quick-card bento-span-4 qh-reveal" :style="{ '--qh-index': 6 }">
       <template #header>
         <div class="card-title" style="margin: 0">快捷入口</div>
       </template>
@@ -340,7 +324,7 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="rec-card bento-span-4">
+    <el-card shadow="never" class="rec-card bento-span-4 qh-reveal" :style="{ '--qh-index': 7 }">
       <template #header>
         <div class="rec-head">
           <span class="card-title" style="margin: 0">岗位推荐</span>
@@ -540,10 +524,18 @@ import { ElMessage } from 'element-plus'
 
 import http from '../api/http'
 import router from '../router'
-import CountNumber from '../components/CountNumber.vue'
 import FreshmanGuide from '../components/FreshmanGuide.vue'
-import VideoBackdrop from '../components/VideoBackdrop.vue'
+import RouteHero from '../components/brand/RouteHero.vue'
 import { useClock } from '../composables/useSystemStatus'
+import { useReveal } from '../composables/useReveal'
+
+// 入场编排：只给卡片加 opacity/transform 渐显，不改任何数据与布局尺寸
+const pageRoot = ref(null)
+const { refresh } = useReveal(pageRoot)
+
+function queueReveal() {
+  nextTick(refresh)
+}
 
 const LEVEL_TEXT = { red: '红色预警', orange: '橙色预警', yellow: '黄色预警', none: '正常', unknown: '数据不足' }
 const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 'success', unknown: 'info' }
@@ -630,6 +622,14 @@ const heroConclusion = computed(() => {
   const reasons = info.reasons || []
   const why = reasons.length ? `触发原因：${reasons.slice(0, 2).join('、')}` : '暂无触发项'
   return `${who}本学期为${levelText(info.level)}，${why}；已匹配 ${jobCnt} 个岗位，优先补齐下方缺口`
+})
+
+// 航线页头的等级语义色：none/normal 走「正常」青绿，其他沿用红/橙/黄
+const levelTone = computed(() => {
+  const level = warning.value?.level
+  if (!level || level === 'unknown') return 'unknown'
+  if (level === 'none' || level === 'normal' || level === 'green') return 'good'
+  return level
 })
 
 // 本周行动：直接取规划第一步的前 3 条，缺数据就不渲染这一段（不造数）
@@ -792,6 +792,7 @@ async function loadGuide() {
     guideTip.value = err?.response?.data?.detail || '生涯规划加载失败'
   } finally {
     guideLoading.value = false
+    queueReveal()
   }
 }
 
@@ -881,6 +882,7 @@ async function reloadAll() {
   // 规划卡不参与 30 秒自动刷新：避免学生正在选择目标时被定时请求重置选项
   await Promise.all([loadWarning(), loadRecommendations()])
   lastLoadAt.value = new Date()
+  queueReveal()
 }
 
 watch(autoRefresh, (on) => {
@@ -889,6 +891,7 @@ watch(autoRefresh, (on) => {
 })
 
 onMounted(async () => {
+  queueReveal()
   const guideTask = loadGuide().then(maybeOpenFreshmanGuide)
   const pageTask = Promise.all([reloadAll(), loadNotices()])
   await Promise.all([guideTask, pageTask])
@@ -924,132 +927,6 @@ onBeforeUnmount(() => {
 .live-tip {
   margin-left: auto;
 }
-
-/* ---------- 顶部 Hero：暗色视频底 + 一句话结论 + 关键指标 + 主按钮 ---------- */
-.page-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 200px;
-  padding: 28px 30px;
-  /* 视频未就绪/离线时的兜底色，避免白底闪一下 */
-  background: #16181d;
-  border: 0;
-  color: #fff;
-}
-
-.page-hero:hover {
-  box-shadow: none;
-}
-
-.ph-main {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.ph-left {
-  flex: 1 1 380px;
-  min-width: 0;
-}
-
-.ph-eyebrow {
-  display: inline-flex;
-  margin: 0 0 10px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ph-title {
-  margin: 0;
-  font-size: clamp(17px, 1.5vw, 21px);
-  font-weight: 650;
-  line-height: 1.5;
-  color: #fff;
-}
-
-.ph-desc {
-  margin: 8px 0 0;
-  font-size: 14px;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.ph-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.ph-btn {
-  border-radius: var(--bento-radius-sm);
-}
-
-/* 暗色 Hero 上的次级按钮：透明玻璃 + 白字，主按钮仍是 Apple 蓝 */
-.page-hero .ph-btn:not(.el-button--primary) {
-  --el-button-bg-color: rgba(255, 255, 255, 0.12);
-  --el-button-border-color: rgba(255, 255, 255, 0.22);
-  --el-button-text-color: #ffffff;
-  --el-button-hover-bg-color: rgba(255, 255, 255, 0.2);
-  --el-button-hover-border-color: rgba(255, 255, 255, 0.32);
-  --el-button-hover-text-color: #ffffff;
-  --el-button-active-bg-color: rgba(255, 255, 255, 0.26);
-  --el-button-active-border-color: rgba(255, 255, 255, 0.32);
-  color: #ffffff;
-}
-
-.ph-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  flex: 0 0 auto;
-}
-
-.ph-stat {
-  min-width: 100px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.ph-stat-label {
-  font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.ph-stat-value {
-  font-size: 22px;
-  font-weight: 650;
-  line-height: 1.25;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.ph-stat-value small {
-  margin-left: 2px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-/* 暗底上语义色统一提亮，保证对比度 */
-.ph-stat-value.lv-red { color: #ff6961; }
-.ph-stat-value.lv-orange { color: #ff9f0a; }
-.ph-stat-value.lv-yellow { color: #ffd60a; }
-.ph-stat-value.lv-none { color: #0f9d8a; }
-.ph-stat-value.lv-unknown { color: rgba(255, 255, 255, 0.7); }
 
 /* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
 .qh-icon {
@@ -2280,6 +2157,84 @@ onBeforeUnmount(() => {
   .bell-btn,
   .icon-btn {
     transition: none;
+  }
+}
+/* ---------- 入场动效（仅 transform/opacity/filter，不改布局尺寸） ---------- */
+/* Hero 光斑：一道极淡的斜向高光缓慢扫过，本页两处无限点缀之一 */
+.qh-hero::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -60%;
+  left: -30%;
+  width: 40%;
+  height: 220%;
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
+  transform: translateX(-60%) rotate(12deg);
+  animation: hero-sweep 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes hero-sweep {
+  0%, 55% { opacity: 0; transform: translateX(-60%) rotate(12deg); }
+  70% { opacity: 1; }
+  90%, 100% { opacity: 0; transform: translateX(320%) rotate(12deg); }
+}
+
+/* Hero 关键数字：一次性浮入强调，不做数字滚动改写 */
+.qh-hero :deep(.route-stat) {
+  animation: stat-in 560ms var(--bento-ease, ease) backwards;
+}
+
+.qh-hero :deep(.route-stat:nth-child(2)) { animation-delay: 100ms; }
+.qh-hero :deep(.route-stat:nth-child(3)) { animation-delay: 200ms; }
+
+@keyframes stat-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 数字孪生星球：呼吸微光，本页两处无限点缀之二 */
+.twin-sphere {
+  animation: twin-breathe 7s ease-in-out infinite;
+}
+
+@keyframes twin-breathe {
+  0%, 100% { opacity: 0.88; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qh-hero::after,
+  .twin-sphere,
+  .qh-hero :deep(.route-stat) {
+    animation: none;
+  }
+
+  .quick-item,
+  .pick-card,
+  .guide-cta-btn,
+  .twin-fact {
+    transition: none;
+  }
+
+  .quick-item:hover,
+  .pick-card:hover,
+  .guide-cta-btn:hover,
+  .twin-fact:hover,
+  .rec-cell:hover {
+    transform: none;
+  }
+}
+
+/* 触屏设备关闭 hover 位移，避免点按后卡片卡在浮起态 */
+@media (pointer: coarse) {
+  .quick-item:hover,
+  .pick-card:hover,
+  .guide-cta-btn:hover,
+  .twin-fact:hover,
+  .rec-cell:hover {
+    transform: none;
   }
 }
 </style>

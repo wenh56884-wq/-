@@ -1,43 +1,28 @@
 <template>
-  <div class="page bento-page">
+  <div ref="pageRoot" class="page bento-page">
     <div class="bento-grid">
-    <!-- Hero：一句话结论 + 关键指标 + 主按钮。数值取自 class-overview / warnings 的分布 -->
-    <section class="bento-card bento-span-4 page-hero">
-      <VideoBackdrop :scrim="0.5" object-position="50% 40%" />
-      <div class="ph-main">
-        <div class="ph-left">
-          <p class="ph-eyebrow">本学期结论 · {{ overview.term || term || '-' }}</p>
-          <h2 class="ph-title">{{ heroConclusion }}</h2>
-          <p class="ph-desc">
-            班级概貌、预警名单与阈值同源同口径，未通过 Critic 回查的数字不会展示。
-          </p>
-          <div class="ph-actions">
-            <el-button type="primary" class="ph-btn" @click="goJobs">查看岗位</el-button>
-            <el-button class="ph-btn" @click="goWarning">查看预警</el-button>
-            <el-button class="ph-btn" @click="askAI('给我班级的整体学业情况')">
-              问 AI
-            </el-button>
-          </div>
-        </div>
+    <!-- 航线页头：一句话结论 + 关键指标 + 主按钮。数值取自 class-overview / warnings 的分布 -->
+    <RouteHero
+      class="bento-span-4 hero-slot qh-reveal qh-hero"
+      :style="{ '--qh-index': 0 }"
+      tone="teacher"
+      :eyebrow="`本学期结论 · ${overview.term || term || '-'}`"
+      :title="heroConclusion"
+      desc="班级概貌、预警名单与阈值同源同口径，未通过 Critic 回查的数字不会展示。"
+      :stats="[
+        { label: '红/橙/黄预警', value: warnTotal, suffix: '人', tone: 'red' },
+        { label: '班级均分', value: gpaText },
+        { label: '挂科率', value: fmtRate(overview.fail_rate) }
+      ]"
+    >
+      <template #actions>
+        <el-button type="primary" @click="goJobs">查看岗位</el-button>
+        <el-button @click="goWarning">查看预警</el-button>
+        <el-button @click="askAI('给我班级的整体学业情况')">问 AI</el-button>
+      </template>
+    </RouteHero>
 
-        <div class="ph-stats">
-          <div class="ph-stat">
-            <span class="ph-stat-label">红/橙/黄预警</span>
-            <b class="ph-stat-value lv-red">{{ warnTotal }}<small>人</small></b>
-          </div>
-          <div class="ph-stat">
-            <span class="ph-stat-label">班级均分</span>
-            <b class="ph-stat-value">{{ gpaText }}</b>
-          </div>
-          <div class="ph-stat">
-            <span class="ph-stat-label">挂科率</span>
-            <b class="ph-stat-value">{{ fmtRate(overview.fail_rate) }}</b>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="bento-card bento-span-4 filter-bar">
+    <section class="bento-card bento-span-4 filter-bar qh-reveal" :style="{ '--qh-index': 1 }">
       <el-form inline @submit.prevent>
         <el-form-item label="学院">
           <el-select
@@ -103,7 +88,7 @@
       </div>
     </section>
 
-    <article class="bento-card stat-card stat-red" role="button" tabindex="0"
+    <article class="bento-card stat-card stat-red qh-reveal" :style="{ '--qh-index': 2 }" role="button" tabindex="0"
       @click="goWarning" @keyup.enter="goWarning">
       <div class="stat-top">
         <span class="bento-icon qh-icon" aria-hidden="true">
@@ -115,7 +100,7 @@
       <div class="bento-stat"><count-number :value="dist.red" /></div>
     </article>
 
-    <article class="bento-card stat-card stat-orange" role="button" tabindex="0"
+    <article class="bento-card stat-card stat-orange qh-reveal" :style="{ '--qh-index': 3 }" role="button" tabindex="0"
       @click="goWarning" @keyup.enter="goWarning">
       <div class="stat-top">
         <span class="bento-icon qh-icon" aria-hidden="true">
@@ -127,7 +112,7 @@
       <div class="bento-stat"><count-number :value="dist.orange" /></div>
     </article>
 
-    <article class="bento-card stat-card stat-yellow" role="button" tabindex="0"
+    <article class="bento-card stat-card stat-yellow qh-reveal" :style="{ '--qh-index': 4 }" role="button" tabindex="0"
       @click="goWarning" @keyup.enter="goWarning">
       <div class="stat-top">
         <span class="bento-icon qh-icon" aria-hidden="true">
@@ -139,7 +124,7 @@
       <div class="bento-stat"><count-number :value="dist.yellow" /></div>
     </article>
 
-    <article class="bento-card stat-card stat-normal" role="button" tabindex="0"
+    <article class="bento-card stat-card stat-normal qh-reveal" :style="{ '--qh-index': 5 }" role="button" tabindex="0"
       @click="goOverview" @keyup.enter="goOverview">
       <div class="stat-top">
         <span class="bento-icon qh-icon" aria-hidden="true">
@@ -155,7 +140,8 @@
       </div>
     </article>
 
-    <section ref="overviewCard" class="bento-card bento-span-2 bento-row-2 overview-card"
+    <section ref="overviewCard" class="bento-card bento-span-2 bento-row-2 overview-card qh-reveal"
+      :style="{ '--qh-index': 6 }"
       v-loading="loading">
       <div class="hero-head">
         <div>
@@ -218,7 +204,7 @@
       </div>
     </section>
 
-    <section class="bento-card bento-span-2 chart-card" v-loading="loading">
+    <section class="bento-card bento-span-2 chart-card qh-reveal" :style="{ '--qh-index': 7 }" v-loading="loading">
       <div class="card-head">
         <h3 class="bento-title">预警等级分布</h3>
         <span class="bento-eyebrow">按当前班级</span>
@@ -226,14 +212,15 @@
       <div ref="barRef" class="chart-box"></div>
     </section>
 
-    <section class="bento-card bento-span-2 risk-card">
+    <section class="bento-card bento-span-2 risk-card qh-reveal" :style="{ '--qh-index': 8 }">
       <div class="card-head">
         <h3 class="bento-title">高风险 Top5</h3>
         <span class="bento-eyebrow">点击行看画像</span>
       </div>
       <el-empty v-if="!overview.top_risk_students?.length" description="暂无数据" />
       <ul v-else class="risk-list">
-        <li v-for="s in overview.top_risk_students" :key="s.student_no">
+        <li v-for="(s, i) in overview.top_risk_students" :key="s.student_no"
+          class="risk-row" :style="{ '--qh-index': Math.min(i, 11) }">
           <el-tag :type="levelType(s.level)" size="small">{{ s.student_no }}</el-tag>
           <span class="risk-name">{{ s.name || '—' }}</span>
           <span class="risk-score">{{ s.risk_score }}</span>
@@ -241,7 +228,7 @@
       </ul>
     </section>
 
-    <section class="bento-card bento-span-4 intent-card" v-loading="loading">
+    <section class="bento-card bento-span-4 intent-card qh-reveal" :style="{ '--qh-index': 10 }" v-loading="loading">
       <div class="intent-head">
         <span class="card-title" style="margin: 0">职业目标分布</span>
         <el-tag size="small" effect="plain">
@@ -251,10 +238,10 @@
       <el-empty v-if="!(overview.career_intent?.total)" description="暂无学生数据" />
       <div v-else class="intent-grid">
         <div
-          v-for="item in intentItems"
+          v-for="(item, i) in intentItems"
           :key="item.key"
           class="intent-item"
-          :style="{ '--intent-color': item.color }"
+          :style="{ '--intent-color': item.color, '--qh-index': Math.min(i, 11) }"
         >
           <div class="intent-label">{{ item.label }}</div>
           <div class="intent-value"><count-number :value="item.value" /></div>
@@ -263,7 +250,7 @@
       </div>
     </section>
 
-    <section ref="warningTableCard" class="bento-card bento-span-4 table-card">
+    <section ref="warningTableCard" class="bento-card bento-span-4 table-card qh-reveal" :style="{ '--qh-index': 11 }">
       <div class="card-title">
         预警名单（点击行看四维画像）
         <el-tag v-if="!loading" size="small" :type="(warnings.items || []).length ? 'danger' : 'success'"
@@ -427,8 +414,17 @@ import * as echarts from 'echarts'
 import http from '../api/http'
 import router from '../router'
 import CountNumber from '../components/CountNumber.vue'
-import VideoBackdrop from '../components/VideoBackdrop.vue'
+import RouteHero from '../components/brand/RouteHero.vue'
 import { useClock } from '../composables/useSystemStatus'
+import { useReveal } from '../composables/useReveal'
+
+// 入场编排：只给卡片加 opacity/transform 渐显；chart-box 高度固定，reveal 不影响 ECharts 初始化尺寸
+const pageRoot = ref(null)
+const { refresh } = useReveal(pageRoot)
+
+function queueReveal() {
+  nextTick(refresh)
+}
 
 const LEVEL_TEXT = { red: '红色', orange: '橙色', yellow: '黄色', none: '正常', unknown: '数据不足' }
 const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 'success', unknown: 'info' }
@@ -665,6 +661,7 @@ async function loadClass(reportError = true) {
     }
     renderBar()
   }
+  queueReveal()
 }
 
 async function loadAll() {
@@ -710,6 +707,8 @@ function renderBar() {
   const keys = ['red', 'orange', 'yellow', 'none', 'unknown']
   barChart.setOption(
     {
+      animationDuration: 800,
+      animationEasing: 'cubicOut',
       grid: { left: 48, right: 16, top: 24, bottom: 32 },
       xAxis: { type: 'category', data: labels, axisLabel: { color: '#4e5969' } },
       yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#e4e7ee' } } },
@@ -812,6 +811,8 @@ function renderRadar(data) {
   const keys = Object.keys(names)
   radarChart.setOption(
     {
+      animationDuration: 800,
+      animationEasing: 'cubicOut',
       tooltip: { trigger: 'item' },
       radar: {
         indicator: keys.map((key) => ({ name: names[key], max: 1 })),
@@ -884,6 +885,8 @@ function renderGap(data) {
   const rows = (data?.gaps || []).slice().reverse() // ECharts Y 轴自下而上，反转后顺序与接口一致
   gapChart.setOption(
     {
+      animationDuration: 800,
+      animationEasing: 'cubicOut',
       grid: { left: 80, right: 24, top: 28, bottom: 28 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       legend: { data: ['班级具备率', '岗位需求率'], textStyle: { color: '#4e5969' } },
@@ -935,6 +938,7 @@ watch(
 )
 
 onMounted(async () => {
+  queueReveal()
   await loadDirectory()
   await loadAll()
   window.addEventListener('resize', onResize)
@@ -991,132 +995,6 @@ onBeforeUnmount(() => {
   color: var(--qh-red);
   margin-left: 12px;
 }
-
-/* ---------- 顶部 Hero：暗色视频底 + 一句话结论 + 关键指标 + 主按钮 ---------- */
-.page-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 200px;
-  padding: 28px 30px;
-  /* 视频未就绪/离线时的兜底色，避免白底闪一下 */
-  background: #16181d;
-  border: 0;
-  color: #fff;
-}
-
-.page-hero:hover {
-  box-shadow: none;
-}
-
-.ph-main {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.ph-left {
-  flex: 1 1 380px;
-  min-width: 0;
-}
-
-.ph-eyebrow {
-  display: inline-flex;
-  margin: 0 0 10px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.ph-title {
-  margin: 0;
-  font-size: clamp(17px, 1.5vw, 21px);
-  font-weight: 650;
-  line-height: 1.5;
-  color: #fff;
-}
-
-.ph-desc {
-  margin: 8px 0 0;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.ph-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.ph-btn {
-  border-radius: var(--bento-radius-sm);
-}
-
-/* 暗色 Hero 上的次级按钮：透明玻璃 + 白字，主按钮仍是 Apple 蓝 */
-.page-hero .ph-btn:not(.el-button--primary) {
-  --el-button-bg-color: rgba(255, 255, 255, 0.12);
-  --el-button-border-color: rgba(255, 255, 255, 0.22);
-  --el-button-text-color: #ffffff;
-  --el-button-hover-bg-color: rgba(255, 255, 255, 0.2);
-  --el-button-hover-border-color: rgba(255, 255, 255, 0.32);
-  --el-button-hover-text-color: #ffffff;
-  --el-button-active-bg-color: rgba(255, 255, 255, 0.26);
-  --el-button-active-border-color: rgba(255, 255, 255, 0.32);
-  color: #ffffff;
-}
-
-.ph-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  flex: 0 0 auto;
-}
-
-.ph-stat {
-  min-width: 100px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.ph-stat-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.ph-stat-value {
-  font-size: 22px;
-  font-weight: 650;
-  line-height: 1.25;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.ph-stat-value small {
-  margin-left: 2px;
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-/* 暗底上语义色统一提亮，保证对比度 */
-.ph-stat-value.lv-red { color: #ff6961; }
-.ph-stat-value.lv-orange { color: #ff9f0a; }
-.ph-stat-value.lv-yellow { color: #ffd60a; }
-.ph-stat-value.lv-none { color: #0f9d8a; }
-.ph-stat-value.lv-unknown { color: rgba(255, 255, 255, 0.7); }
 
 /* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
 .qh-icon {
@@ -1628,5 +1506,81 @@ onBeforeUnmount(() => {
 
 .tag-item {
   margin-right: 6px;
+}
+/* ---------- 入场动效（仅 transform/opacity/filter，不改布局尺寸） ---------- */
+/* Hero 光斑：一道极淡的斜向高光缓慢扫过，本页唯一的无限点缀 */
+.qh-hero::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -60%;
+  left: -30%;
+  width: 40%;
+  height: 220%;
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
+  transform: translateX(-60%) rotate(12deg);
+  animation: hero-sweep 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes hero-sweep {
+  0%, 55% { opacity: 0; transform: translateX(-60%) rotate(12deg); }
+  70% { opacity: 1; }
+  90%, 100% { opacity: 0; transform: translateX(320%) rotate(12deg); }
+}
+
+/* Hero 关键数字：一次性浮入强调，不做数字滚动改写（CountNumber 保持原样） */
+.qh-hero :deep(.route-stat) {
+  animation: stat-in 560ms var(--bento-ease, ease) backwards;
+}
+
+.qh-hero :deep(.route-stat:nth-child(2)) { animation-delay: 100ms; }
+.qh-hero :deep(.route-stat:nth-child(3)) { animation-delay: 200ms; }
+
+@keyframes stat-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 高风险 Top5 / 职业目标格：逐行浮入；fill=backwards 结束后不锁 transform，hover 位移仍生效 */
+.risk-row,
+.intent-item {
+  animation: row-in 420ms var(--bento-ease, ease) backwards;
+  animation-delay: calc(var(--qh-index, 0) * 60ms);
+}
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qh-hero::after,
+  .qh-hero :deep(.route-stat),
+  .risk-row,
+  .intent-item {
+    animation: none;
+  }
+
+  .stat-card,
+  .intent-item,
+  .hero-link {
+    transition: none;
+  }
+
+  .stat-card:hover,
+  .intent-item:hover,
+  .hero-link:hover {
+    transform: none;
+  }
+}
+
+/* 触屏设备关闭 hover 位移，避免点按后卡片卡在浮起态 */
+@media (pointer: coarse) {
+  .stat-card:hover,
+  .intent-item:hover,
+  .hero-link:hover {
+    transform: none;
+  }
 }
 </style>

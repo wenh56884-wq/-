@@ -1,54 +1,66 @@
 <template>
-  <div class="login-shell">
-    <!-- 左：3D 生涯导航核心 + 品牌叠层 -->
-    <section class="field-side">
-      <VideoBackdrop class="login-video" :scrim="0" object-position="51% 8%" />
-      <div class="field-overlay">
-        <div class="brand-top">
-          <span class="brand-mark">启</span>
-          <span class="brand-kicker">QIHANG · 生涯领域控制台</span>
-        </div>
+  <div class="login-shell" :class="{ 'is-leaving': leaving }">
+    <!-- 左：两江启航叙事场景 -->
+    <section class="login-hero" aria-label="重庆财经学院启航系统介绍">
+      <LoginScene />
 
-        <div class="brand-copy">
-          <h1 class="brand-title">把学业风险<br />变成可执行的下一步</h1>
-          <p class="brand-sub">
-            教师看班级预警，学生看岗位差距。所有数字由确定性引擎算出，
-            AI 只负责把结论说成人话。
+      <div class="login-hero__inner">
+        <header class="brand-lockup">
+          <span class="brand-mark">启</span>
+          <div class="brand-lockup__text">
+            <span class="brand-name">启航</span>
+            <span class="brand-school">重庆财经学院 · 生涯与岗位匹配</span>
+          </div>
+        </header>
+
+        <div class="hero-copy">
+          <h1 class="hero-title">把山城的起伏，<br />走成你的上升曲线。</h1>
+          <p class="hero-sub">
+            教师看见班级的下一步，学生看见自己的下一站。
+            所有数字由确定性引擎算出，AI 只负责把结论说清楚。
           </p>
-          <div class="brand-chips">
+
+          <div class="hero-actions">
+            <button class="enter-btn" type="button" @click="focusLogin">
+              开始使用
+              <svg class="enter-arw" viewBox="0 0 12 10" fill="none" aria-hidden="true">
+                <path
+                  d="M0.8 5h10M7.1 1.4 10.9 5l-3.8 3.6"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <a
+              class="teacher-link"
+              href="/login?role=teacher"
+              @click.prevent="goRole('teacher')"
+            >
+              辅导员入口 →
+            </a>
+          </div>
+
+          <div class="hero-tags" aria-label="系统特性">
             <span>确定性引擎</span>
             <span>多智能体</span>
             <span>多租户隔离</span>
           </div>
-          <!-- 教师端入口链接：管理员把 /login?role=teacher 发给辅导员即可直达教师身份 -->
-          <a class="teacher-link" href="/login?role=teacher"
-             @click.prevent="goRole('teacher')">
-            辅导员入口 →
-          </a>
-
-          <!-- 落地门：先看到品牌介绍，点「开始使用」才放登录表单 -->
-          <button
-            type="button"
-            class="enter-btn"
-            :class="{ 'is-gone': stage !== 'welcome' }"
-            @click="enterLogin"
-          >
-            开始使用
-            <svg class="enter-arw" viewBox="0 0 12 10" fill="none" aria-hidden="true">
-              <path d="M0.8 5h10M7.1 1.4 10.9 5l-3.8 3.6" stroke="currentColor"
-                    stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
         </div>
+
+        <footer class="hero-foot">
+          <span>重庆财经学院 · 启航</span>
+          <span>学业预警 / 岗位匹配 / 生涯规划</span>
+        </footer>
       </div>
     </section>
 
-    <!-- 右：登录控制卡（点「开始使用」后才出现） -->
-    <section class="form-side" :class="{ 'is-live': stage === 'login' }" :aria-hidden="stage !== 'login'">
-      <div class="form-card">
+    <!-- 右：登录控制台 -->
+    <section ref="formPanelRef" class="login-panel" aria-label="登录">
+      <div class="login-card">
         <div class="panel-head">
           <div>
-            <p class="panel-eyebrow">WELCOME BACK</p>
             <h2 class="panel-title">登录启航</h2>
             <p class="panel-sub">选择身份，进入你的工作台</p>
           </div>
@@ -80,7 +92,7 @@
               type="password"
               show-password
               autocomplete="current-password"
-              placeholder="学生初始口令为学号"
+              :placeholder="`演示账号口令：${DEMO_PASSWORD}`"
               @keyup.enter="onLogin"
             />
           </el-form-item>
@@ -91,18 +103,15 @@
         </el-form>
 
         <div v-if="!publicDemoMode" class="demo-box">
-          <strong>演示账号（点一下自动填入）</strong>
-          <button type="button" class="demo-item"
-                  @click="fillDemo('teacher', 'T001', 'teacher@123')">
-            教师：T001 / teacher@123
+          <strong>演示账号（点一下自动填入，统一口令 {{ DEMO_PASSWORD }}）</strong>
+          <button type="button" class="demo-item" @click="fillDemo('teacher', 'T001', DEMO_PASSWORD)">
+            教师：T001 / {{ DEMO_PASSWORD }}
           </button>
-          <button type="button" class="demo-item"
-                  @click="fillDemo('student', 'AI20230001', 'AI20230001')">
-            学生（大四）：AI20230001 / AI20230001
+          <button type="button" class="demo-item" @click="fillDemo('student', 'AI20230001', DEMO_PASSWORD)">
+            学生（大四）：AI20230001 / {{ DEMO_PASSWORD }}
           </button>
-          <button type="button" class="demo-item"
-                  @click="fillDemo('student', 'AI20260001', 'AI20260001')">
-            学生（大一）：AI20260001 / AI20260001
+          <button type="button" class="demo-item" @click="fillDemo('student', 'AI20260001', DEMO_PASSWORD)">
+            学生（大一）：AI20260001 / {{ DEMO_PASSWORD }}
           </button>
         </div>
         <div v-else class="demo-box">
@@ -110,51 +119,72 @@
           <span>教师：T001</span>
           <span>学生：AI20260001（大一） · AI20250001（大二）</span>
           <span>AI20240004（大三） · AI20230001（大四）</span>
-          <span>共享口令请向演示发布者获取</span>
+          <span>临时公网共享口令：{{ DEMO_PASSWORD }}</span>
         </div>
+
         <p class="role-hint">
           {{ publicDemoMode ? '临时演示仅开放上述模拟账号。' : '辅导员入口：' }}
           <code v-if="!publicDemoMode">/login?role=teacher</code>
           <template v-if="!publicDemoMode">（链接直达教师身份，账号与口令照旧）</template>
         </p>
       </div>
+
+      <p class="panel-foot">数据由确定性引擎计算 · 身份由后端登录态注入</p>
+      <p class="login-live" role="status" aria-live="polite">{{ liveMessage }}</p>
     </section>
   </div>
 </template>
 
 <script setup>
+// Login：重庆财经学院「两江启航」登录页。
+// 左侧是 SVG 山水叙事场景 + 品牌航线，右侧是稳定的登录工作台；
+// 不再使用全屏视频/玻璃遮罩，首屏更轻，表单始终可见。
+
 import { nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 
 import http, { saveSession } from '../api/http'
-import VideoBackdrop from '../components/VideoBackdrop.vue'
+import LoginScene from '../components/brand/LoginScene.vue'
 
 const publicDemoMode = import.meta.env.VITE_PUBLIC_DEMO_MODE === 'true'
-const form = reactive({ role: 'teacher', account: 'T001', password: publicDemoMode ? '' : 'teacher@123' })
+// 本地演示账号统一口令；这是登录页公开的演示凭证，不是生产密钥。
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || '123456h'
+const form = reactive({
+  role: 'teacher',
+  account: 'T001',
+  password: publicDemoMode ? '' : DEMO_PASSWORD
+})
 const loading = ref(false)
+// 纯视觉状态：成功跳转瞬间整页轻 fade；liveMessage 供屏幕阅读器播报
+const leaving = ref(false)
+const liveMessage = ref('')
 const router = useRouter()
 const route = useRoute()
-
-/* 落地门：welcome 只展示品牌层，点「开始使用」才放登录表单 */
-const stage = ref('welcome')
 const accountRef = ref(null)
+const formPanelRef = ref(null)
 
-// 教师端入口链接（/login?role=teacher）：直达并跳到登录表单，免去再点一次
-function goRole(role) {
-  form.role = role
-  if (stage.value === 'welcome') enterLogin()
-}
 // URL 带 ?role=teacher|student 时跟随链接预选身份
 watch(
   () => route.query.role,
-  (val) => { if (val === 'teacher' || val === 'student') form.role = val },
+  (val) => {
+    if (val === 'teacher' || val === 'student') form.role = val
+  },
   { immediate: true }
 )
 
-function enterLogin() {
-  stage.value = 'login'
-  nextTick(() => accountRef.value?.focus())
+function focusLogin() {
+  if (window.innerWidth < 900) {
+    formPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  nextTick(() => {
+    accountRef.value?.focus?.({ preventScroll: window.innerWidth < 900 })
+  })
+}
+
+function goRole(role) {
+  form.role = role
+  focusLogin()
 }
 
 // 演示账号一键填充：省得手输学号时把 8 位写成 7 位
@@ -166,6 +196,7 @@ function fillDemo(role, account, password) {
 
 async function onLogin() {
   if (!form.account || !form.password) {
+    liveMessage.value = '请填写账号与口令'
     ElMessage.warning('请填写账号与口令')
     return
   }
@@ -181,7 +212,10 @@ async function onLogin() {
       tenant_id: data.tenant_id
     })
     const target = data.role === 'teacher' ? '/teacher' : '/student'
+    liveMessage.value = '登录成功，正在进入工作台'
     ElMessage.success(`登录成功：${form.role === 'teacher' ? '教师端' : '学生端'}`)
+    // 跳转不等待动画：fade 与路由切换并行，不阻塞导航
+    leaving.value = true
     router.push(typeof route.query.redirect === 'string' ? route.query.redirect : target)
   } finally {
     loading.value = false
@@ -191,393 +225,262 @@ async function onLogin() {
 
 <style scoped>
 .login-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(420px, 0.9fr);
+  min-height: 100vh;
+  min-height: 100svh;
+  background: #06171d;
+  transition: opacity 320ms var(--qh-ease);
+}
+
+/* 登录成功跳转瞬间的轻 fade：与路由切换并行，不阻塞导航 */
+.login-shell.is-leaving {
+  opacity: 0;
+}
+
+/* ---------- 左侧叙事场景 ---------- */
+.login-hero {
   position: relative;
-  display: flex;
   min-height: 100vh;
   min-height: 100svh;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 76% 12%, rgba(70, 201, 191, 0.12), transparent 30%),
-    var(--cf-bg);
-}
-
-/* 左：3D 生涯导航核心 */
-.field-side {
-  position: relative;
-  flex: 1 1 100%;
-  width: 100%;
-  min-width: 100%;
-  display: flex;
-  min-height: 100vh;
   isolation: isolate;
-  overflow: hidden;
-  background: #082d35;
 }
 
-.field-side::before,
-.field-side::after {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  pointer-events: none;
-  border-radius: 50%;
-  filter: blur(2px);
-  display: none;
-}
-
-.field-side::before {
-  width: 58vw;
-  height: 58vw;
-  left: -18vw;
-  top: -20vw;
-  background: radial-gradient(circle, rgba(70, 201, 191, 0.24), transparent 66%);
-  animation: login-orbit-glow 12s ease-in-out infinite alternate;
-}
-
-.field-side::after {
-  width: 44vw;
-  height: 44vw;
-  right: -18vw;
-  bottom: -22vw;
-  background: radial-gradient(circle, rgba(25, 81, 195, 0.16), transparent 68%);
-  animation: login-orbit-glow 15s ease-in-out -4s infinite alternate-reverse;
-}
-
-.field-side :deep(.career-field) {
+.login-hero__inner {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  border-radius: 0;
-  background:
-    radial-gradient(circle at 50% 48%, rgba(21, 89, 92, 0.72), transparent 28%),
-    linear-gradient(145deg, #082d35 0%, #0b3d43 52%, #142b45 100%);
-}
-
-.field-side :deep(.login-video) {
-  z-index: 0;
-  background: #000;
-}
-
-.field-side :deep(.login-video .vb-video) {
-  width: max(100vw, calc(100dvh * 1.6));
-  height: max(62.5vw, 100dvh);
-  left: 50%;
-  top: 50%;
-  right: auto;
-  bottom: auto;
-  transform: translate(-50%, -50%);
-  object-fit: cover;
-  object-position: 51% 8%;
-}
-
-.field-side :deep(.login-video .vb-scrim) {
-  background: transparent !important;
-}
-
-.field-side :deep(.career-field::before) {
-  background-image:
-    linear-gradient(rgba(143, 218, 210, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(143, 218, 210, 0.07) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 82%);
-}
-
-.field-side :deep(.career-field::after) {
-  inset: 22px;
-  border-color: rgba(143, 218, 210, 0.2);
-  border-radius: 18px;
-}
-
-.field-side :deep(.career-field__canvas) {
-  opacity: 0.9;
-}
-
-.field-side :deep(.career-field__topline),
-.field-side :deep(.career-field__footer) {
-  color: rgba(209, 242, 238, 0.62);
-}
-
-.field-side :deep(.career-field__brand) {
-  color: #d1f2ee;
-}
-
-.field-side :deep(.career-field__mode) {
-  border-left-color: rgba(143, 218, 210, 0.28);
-}
-
-.field-side :deep(.career-field__axis--x) {
-  background: linear-gradient(90deg, transparent, rgba(143, 218, 210, 0.3), transparent);
-}
-
-.field-side :deep(.career-field__axis--y) {
-  background: linear-gradient(180deg, transparent, rgba(143, 218, 210, 0.24), transparent);
-}
-
-.field-side :deep(.career-field__node) {
-  border-color: rgba(143, 218, 210, 0.24);
-  background: rgba(5, 34, 41, 0.48);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
-  color: #d1f2ee;
-}
-
-.field-side :deep(.career-field__node small) {
-  color: rgba(183, 225, 220, 0.6);
-}
-
-.field-side :deep(.career-field__fallback-ring) {
-  border-color: rgba(143, 218, 210, 0.24);
-}
-
-.field-side :deep(.career-field__fallback-ring--two) {
-  border-color: rgba(255, 134, 108, 0.42);
-}
-
-.field-overlay {
-  position: relative;
-  z-index: 3;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 24px;
-  padding: clamp(28px, 5vw, 68px);
-  width: 100%;
+  padding: clamp(28px, 4.6vw, 64px);
   pointer-events: none;
 }
 
-.brand-top {
-  display: flex;
+.brand-lockup {
+  display: inline-flex;
   align-items: center;
   gap: 12px;
+  align-self: flex-start;
+  animation: login-rise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s both;
 }
 
 .brand-mark {
   position: relative;
-  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
+  flex: 0 0 40px;
   border-radius: 12px;
   background: linear-gradient(145deg, #3b6ee5 0%, #1951c3 52%, #0f9d8a 120%);
   color: #fff;
   font-size: 19px;
   font-weight: 700;
   box-shadow:
-    0 8px 22px rgba(25, 81, 195, 0.42),
+    0 8px 22px rgba(25, 81, 195, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
-.brand-kicker {
-  font-family: var(--cf-font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: rgba(209, 242, 238, 0.76);
-}
-
-/* 标题做轻微渐变字：白 → 浅青，深色视频上更亮眼，也不影响可读性 */
-.brand-title {
-  margin: 0;
-  font-size: clamp(26px, 2.4vw, 36px);
-  line-height: 1.2;
-  font-weight: 700;
-  color: #f5fffd;
-  background: linear-gradient(118deg, #ffffff 0%, #eafffb 46%, #b9f3ea 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: none;
-  text-wrap: balance;
-  /* 视频里有亮区，给一行极淡的投影兜底行高对比 */
-  filter: drop-shadow(0 2px 18px rgba(2, 20, 28, 0.5));
-}
-
-.brand-sub {
-  margin: 14px 0 0;
-  max-width: 36ch;
-  font-size: 14px;
-  line-height: 1.7;
-  color: rgba(209, 242, 238, 0.72);
-}
-
-.brand-chips {
+.brand-lockup__text {
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brand-name {
+  color: #f4fffd;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.brand-school {
+  color: rgba(226, 244, 242, 0.62);
+  font-size: 11.5px;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 620px;
+  margin-top: auto;
+}
+
+.hero-title {
+  margin: 0;
+  color: #f4fffd;
+  font-size: clamp(30px, 3.2vw, 48px);
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  text-shadow: 0 2px 26px rgba(2, 14, 18, 0.32);
+  animation: login-title-in 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) 0.24s both;
+}
+
+.hero-sub {
+  margin: 16px 0 0;
+  max-width: 46ch;
+  color: rgba(226, 244, 242, 0.7);
+  font-size: 15px;
+  line-height: 1.75;
+  animation: login-rise 0.7s ease 0.44s both;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 24px;
+  pointer-events: auto;
+  animation: login-rise 0.7s ease 0.58s both;
 }
 
-.brand-chips span {
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(143, 218, 210, 0.3);
-  background: rgba(5, 34, 41, 0.34);
-  backdrop-filter: blur(10px) saturate(140%);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  font-family: var(--cf-font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(232, 255, 251, 0.9);
-  transition: border-color 220ms var(--qh-ease), background-color 220ms var(--qh-ease),
-    transform 220ms var(--qh-ease);
-}
-
-.brand-chips span:hover {
-  border-color: rgba(185, 243, 234, 0.5);
-  background: rgba(15, 157, 138, 0.22);
-  transform: translateY(-1px);
-}
-
-/* 落地门的「开始使用」：白底胶囊 + 箭头，视频之上要够亮才显眼 */
 .enter-btn {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  margin-top: 24px;
-  padding: 13px 22px 13px 26px;
+  padding: 12px 20px 12px 24px;
   border: 0;
   border-radius: 999px;
-  background: #ffffff;
-  color: var(--cf-ink, #0d2b30);
+  background: #f4fffd;
+  color: #0b2830;
   font-family: var(--cf-font-sans, inherit);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  pointer-events: auto;
-  box-shadow: 0 10px 30px rgba(1, 23, 31, 0.32);
+  box-shadow: 0 12px 30px rgba(2, 14, 18, 0.3);
   transition:
-    background-color 300ms var(--qh-ease),
-    box-shadow 300ms var(--qh-ease),
-    transform 300ms var(--qh-ease),
-    opacity 240ms ease,
-    visibility 0s;
+    transform 240ms var(--qh-ease),
+    box-shadow 240ms var(--qh-ease),
+    background-color 240ms var(--qh-ease);
 }
 
 .enter-btn:hover {
-  background: #f2fffc;
-  box-shadow: 0 14px 38px rgba(1, 23, 31, 0.38);
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 38px rgba(2, 14, 18, 0.36);
 }
 
 .enter-btn:active {
-  transform: scale(0.98);
+  transform: translateY(0) scale(0.98);
 }
 
 .enter-arw {
   width: 13px;
   height: 11px;
-  flex: 0 0 auto;
   display: block;
-  transition: transform 300ms var(--qh-ease);
+  transition: transform 240ms var(--qh-ease);
 }
 
 .enter-btn:hover .enter-arw {
   transform: translateX(3px);
 }
 
-/* 点下去之后整颗按钮退场，让位给登录卡（同样只淡出，不位移） */
-.enter-btn.is-gone {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity 180ms ease,
-    visibility 0s linear 180ms;
-}
-
-@keyframes login-orbit-glow {
-  from { transform: translate3d(-2%, -1%, 0) scale(0.96); opacity: 0.72; }
-  to { transform: translate3d(3%, 2%, 0) scale(1.04); opacity: 1; }
-}
-
-/* 右：登录控制卡 */
-.form-side {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  width: 100%;
-  max-width: none;
-  display: flex;
-  justify-content: center;
+.teacher-link {
+  display: inline-flex;
   align-items: center;
-  padding: 32px;
-  background: transparent;
-  pointer-events: none;
-  /* 落地门：默认收起，点「开始使用」后淡入。
-     只做透明度 —— 位移和缩放会读成「弹窗跳出」，跟整页的静态气质冲突。
-     visibility 负责把整块从 Tab 序和读屏里摘掉。 */
-  opacity: 0;
-  visibility: hidden;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf8f4;
+  font-size: 13.5px;
+  font-weight: 550;
+  text-decoration: none;
   transition:
-    opacity 240ms ease,
-    visibility 0s linear 240ms;
+    border-color 200ms var(--qh-ease),
+    background-color 200ms var(--qh-ease),
+    color 200ms var(--qh-ease);
 }
 
-.form-side.is-live {
-  background:
-    radial-gradient(ellipse at 18% 18%, rgba(99, 102, 241, 0.28), transparent 44%),
-    radial-gradient(ellipse at 82% 78%, rgba(20, 184, 166, 0.2), transparent 42%),
-    linear-gradient(135deg, rgba(15, 23, 42, 0.56), rgba(30, 41, 80, 0.34));
-  backdrop-filter: blur(8px) saturate(120%);
-  -webkit-backdrop-filter: blur(8px) saturate(120%);
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity 240ms ease,
-    visibility 0s;
+.teacher-link:hover {
+  border-color: rgba(216, 180, 90, 0.62);
+  background: rgba(216, 180, 90, 0.12);
+  color: #f1d58f;
 }
 
-.form-card {
-  position: relative;
-  width: min(440px, calc(100vw - 48px));
-  padding: 30px 32px;
-  background:
-    radial-gradient(ellipse at 100% 0%, rgba(199, 210, 254, 0.5), transparent 48%),
-    radial-gradient(ellipse at 0% 100%, rgba(204, 251, 241, 0.36), transparent 44%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.97), rgba(246, 249, 255, 0.94));
-  border: 1px solid rgba(255, 255, 255, 0.84);
-  border-radius: 26px;
-  box-shadow:
-    0 36px 100px rgba(8, 18, 48, 0.34),
-    0 10px 30px rgba(39, 70, 158, 0.14),
-    0 0 0 1px rgba(255, 255, 255, 0.74) inset;
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+  animation: login-rise 0.7s ease 0.7s both;
+}
+
+.hero-tags span {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(236, 248, 244, 0.66);
+  font-family: var(--cf-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.hero-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(226, 244, 242, 0.42);
+  font-family: var(--cf-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  animation: login-rise 0.8s ease 0.82s both;
+}
+
+/* ---------- 右侧登录工作台 ---------- */
+.login-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  pointer-events: auto;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 48px 40px;
+  background:
+    radial-gradient(520px 300px at 100% 0%, rgba(111, 201, 193, 0.1), transparent 64%),
+    linear-gradient(180deg, #f7fafa 0%, #f1f5f5 100%);
+  border-left: 1px solid rgba(216, 180, 90, 0.16);
 }
 
-/* 卡片顶部一道靛蓝→青的渐变发丝线：整块玻璃立起来的关键一笔 */
-.form-card::before {
+.login-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 30px 32px 26px;
+  border: 1px solid #e1e7e8;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(8, 24, 28, 0.04),
+    0 24px 60px rgba(8, 24, 28, 0.1);
+  animation: login-card-in 0.75s cubic-bezier(0.22, 0.61, 0.36, 1) 0.32s both;
+}
+
+/* 卡顶 1px 品牌航线：把左侧场景的线收进表单 */
+.login-card::before {
   content: '';
   position: absolute;
   top: 0;
-  right: 0;
-  left: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #60a5fa 0%, #4f46e5 42%, #8b5cf6 72%, #2dd4bf 100%);
-}
-
-.form-card::after {
-  content: '';
-  position: absolute;
-  top: -120px;
-  right: -110px;
-  width: 240px;
-  height: 240px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(129, 140, 248, 0.2), transparent 70%);
-  pointer-events: none;
-}
-
-.form-card > * {
-  position: relative;
-  z-index: 1;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(111, 201, 193, 0), #d8b45a 52%, rgba(111, 201, 193, 0));
 }
 
 .panel-head {
@@ -585,28 +488,23 @@ async function onLogin() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-}
-
-.panel-eyebrow {
-  margin: 0 0 4px;
-  font-family: var(--cf-font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  color: #4f46e5;
+  margin-bottom: 18px;
 }
 
 .panel-title {
   margin: 0;
+  color: var(--cf-ink);
   font-size: 26px;
   font-weight: 700;
   line-height: 1.2;
-  color: var(--cf-ink);
+  letter-spacing: -0.02em;
 }
 
 .panel-sub {
   margin: 6px 0 0;
-  font-size: 13px;
   color: var(--cf-mid);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .panel-badge {
@@ -616,7 +514,7 @@ async function onLogin() {
   padding: 6px 10px;
   border-radius: 999px;
   background: var(--cf-teal-soft);
-  color: var(--cf-teal);
+  color: #0b7d70;
   font-family: var(--cf-font-mono);
   font-size: 11px;
   font-weight: 600;
@@ -646,18 +544,20 @@ async function onLogin() {
 
 .role-switch :deep(.el-radio-button__inner) {
   width: 100%;
-  border-radius: var(--qh-radius-lg);
+  border-radius: 10px;
   border: 1px solid var(--cf-line);
   box-shadow: none;
-  transition: all 220ms ease;
+  transition: all 200ms ease;
 }
 
 .login-btn {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   height: 46px;
-  margin-top: 4px;
+  margin-top: 6px;
   border: 0;
-  border-radius: var(--qh-radius-lg);
+  border-radius: 10px;
   font-size: 15px;
   font-weight: 600;
   color: #fff;
@@ -669,33 +569,49 @@ async function onLogin() {
   --el-button-active-bg-color: transparent;
   background-image: linear-gradient(135deg, #2d61dd 0%, #1951c3 52%, #14419c 100%);
   box-shadow:
-    0 10px 24px rgba(79, 70, 229, 0.28),
+    0 10px 24px rgba(25, 81, 195, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transition:
-    transform 300ms var(--qh-ease),
-    box-shadow 300ms var(--qh-ease),
-    background-image 300ms var(--qh-ease);
+    transform 240ms var(--qh-ease),
+    box-shadow 240ms var(--qh-ease),
+    background-image 240ms var(--qh-ease);
+}
+
+/* hover 微光：低亮度白色高光层，只动 opacity */
+.login-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 62%);
+  opacity: 0;
+  transition: opacity 240ms var(--qh-ease);
+  pointer-events: none;
 }
 
 .login-btn:hover {
   background-image: linear-gradient(135deg, #3b6ee5 0%, #1f5ad0 52%, #14419c 100%);
   box-shadow:
-    0 14px 30px rgba(79, 70, 229, 0.34),
+    0 14px 30px rgba(25, 81, 195, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.26);
   transform: translateY(-1px);
 }
 
+.login-btn:hover::after {
+  opacity: 1;
+}
+
 .login-btn:active {
-  transform: translateY(0) scale(0.99);
+  transform: translateY(0) scale(0.98);
 }
 
 .demo-box {
   display: grid;
   gap: 5px;
+  margin-top: 16px;
   padding: 12px 14px;
-  border: 1px solid var(--cf-line);
-  border-radius: var(--qh-radius-lg);
-  background: linear-gradient(135deg, rgba(238, 242, 255, 0.9), rgba(236, 253, 250, 0.78));
+  border: 1px solid #dce7e5;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f4faf9, #f7fbfb);
   font-family: var(--cf-font-mono);
   font-size: 12px;
   color: var(--cf-mid);
@@ -708,198 +624,287 @@ async function onLogin() {
 }
 
 .demo-item {
+  position: relative;
+  overflow: hidden;
   padding: 0;
   border: 0;
+  border-radius: 6px;
   background: none;
   font: inherit;
   font-size: 12px;
   color: var(--cf-coral);
   text-align: left;
   cursor: pointer;
+  transition: transform 200ms var(--qh-ease);
+}
+
+/* hover 扫光：一次性低亮度靛蓝高光扫过 */
+.demo-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 34%, rgba(25, 81, 195, 0.12) 50%, transparent 66%);
+  transform: translateX(-110%);
+  pointer-events: none;
 }
 
 .demo-item:hover {
   text-decoration: underline;
+  transform: translateY(-1px);
 }
 
-/* 响应式：移动端堆叠，3D 核心降为矮横幅，登录卡在下方 */
+.demo-item:hover::after {
+  animation: demo-sweep 0.7s var(--qh-ease);
+}
+
+.demo-item:focus-visible {
+  outline: 2px solid rgba(25, 81, 195, 0.55);
+  outline-offset: 2px;
+}
+
+@keyframes demo-sweep {
+  to {
+    transform: translateX(110%);
+  }
+}
+
+.role-hint {
+  margin: 12px 0 0;
+  color: var(--cf-mid);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.role-hint code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--cf-bg-deep);
+  color: var(--cf-coral);
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+}
+
+.panel-foot {
+  margin: 0;
+  color: var(--cf-faint);
+  font-family: var(--cf-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  animation: login-rise 0.8s ease 0.56s both;
+}
+
+/* 屏幕阅读器专用播报区：视觉隐藏但可被 aria-live 读出 */
+.login-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- 入场编排 keyframes（只动 transform/opacity/clip-path） ---------- */
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes login-title-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes login-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- 响应式：窄屏先保住场景，再落到表单 ---------- */
+@media (max-width: 1200px) {
+  .login-panel {
+    padding: 36px 24px;
+  }
+}
+
 @media (max-width: 1023px) {
   .login-shell {
-    min-height: 100dvh;
-    overflow-x: hidden;
-    overflow-y: auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .field-side {
-    min-height: 100svh;
+  .login-hero {
+    min-height: 540px;
   }
 
-  .field-side::before {
-    width: 90vw;
-    height: 90vw;
-    left: -24vw;
-    top: -42vw;
+  .login-hero__inner {
+    padding: 30px 26px;
   }
 
-  .field-side::after {
-    width: 70vw;
-    height: 70vw;
-    right: -28vw;
-    bottom: -48vw;
+  .hero-title {
+    font-size: clamp(28px, 5.2vw, 36px);
   }
 
-  .field-overlay {
-    padding: 20px 20px 18px;
-    gap: 14px;
+  .hero-sub {
+    max-width: 52ch;
   }
 
-  .brand-title {
-    font-size: 22px;
+  .login-panel {
+    min-height: 0;
+    padding: 30px 20px 40px;
+    border-left: 0;
+    border-top: 1px solid rgba(216, 180, 90, 0.16);
   }
 
-  .brand-sub {
-    font-size: 13px;
-  }
-
-  .field-side :deep(.career-field__node) {
-    background: rgba(5, 34, 41, 0.58);
-  }
-
-  .form-side {
-    position: fixed;
-    inset: 0;
-    align-items: flex-start;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-    padding: max(16px, env(safe-area-inset-top)) 16px
-      max(16px, env(safe-area-inset-bottom));
-  }
-
-  /* 手机登录改为独立、可滚动的表单页，不再把表单叠在整屏品牌落地页上。 */
-  .login-shell:has(.form-side.is-live) .field-side {
-    visibility: hidden;
-  }
-
-  .form-side.is-live {
-    background:
-      radial-gradient(ellipse at 12% 10%, rgba(99, 102, 241, 0.18), transparent 42%),
-      radial-gradient(ellipse at 92% 92%, rgba(20, 184, 166, 0.16), transparent 40%),
-      linear-gradient(145deg, #eef2ff 0%, #f5f7ff 48%, #ecfdf9 100%);
-  }
-
-  .form-card {
-    width: min(440px, calc(100vw - 40px));
-    flex: 0 0 auto;
-    margin: auto 0;
-    padding: 24px 22px max(24px, env(safe-area-inset-bottom));
-  }
-
-  .login-form :deep(.el-input__wrapper),
-  .login-form :deep(.el-input__inner) {
-    font-size: 16px;
-  }
-
-  .login-btn,
-  .role-switch :deep(.el-radio-button__inner) {
-    min-height: 48px;
-  }
-
-  .field-overlay {
-    padding: 20px;
-  }
-
-  .brand-copy {
-    max-width: 260px;
-    margin-top: 80px;
-  }
-
-  /* 压暗文案但不动 .brand-copy 整块 —— 里面的「开始使用」按钮不能跟着变淡
-    （父级 opacity 会成组生效，子元素无法超出） */
-  .brand-title,
-  .brand-sub,
-  .brand-chips {
-    opacity: 0.72;
+  .login-card {
+    width: min(520px, 100%);
   }
 }
 
-@media (max-width: 480px) {
-  .form-side {
-    padding-right: 12px;
-    padding-left: 12px;
+@media (max-width: 600px) {
+  .login-hero {
+    min-height: 470px;
   }
 
-  .form-card {
-    width: 100%;
-    padding: 22px 18px max(22px, env(safe-area-inset-bottom));
+  .login-hero__inner {
+    padding: 22px 18px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    font-size: 17px;
+  }
+
+  .brand-name {
+    font-size: 17px;
+  }
+
+  .brand-school {
+    font-size: 10.5px;
+  }
+
+  .hero-title {
+    font-size: 27px;
+  }
+
+  .hero-sub {
+    margin-top: 12px;
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    margin-top: 18px;
+  }
+
+  .hero-tags {
+    margin-top: 16px;
+  }
+
+  .hero-foot {
+    margin-top: 18px;
+  }
+
+  .hero-foot span:last-child {
+    display: none;
+  }
+
+  .login-panel {
+    padding: 22px 12px 30px;
+  }
+
+  .login-card {
+    padding: 24px 20px 22px;
+    border-radius: 16px;
+  }
+
+  .panel-title {
+    font-size: 23px;
   }
 
   .panel-badge {
-    padding: 6px 8px;
+    padding: 5px 8px;
     font-size: 10px;
   }
 
   .demo-box,
   .demo-item {
-    font-size: 13px;
+    font-size: 12.5px;
     line-height: 1.6;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .field-side::before,
-  .field-side::after {
+@media (pointer: coarse) {
+  /* 触屏不做 hover 抬升/扫光，避免粘滞 hover 态 */
+  .demo-item:hover {
+    transform: none;
+  }
+
+  .demo-item:hover::after {
     animation: none;
   }
 
-  .form-side,
-  .form-side.is-live,
-  .enter-btn,
-  .enter-arw {
-    transition: none;
+  .enter-btn:hover,
+  .login-btn:hover {
+    transform: none;
   }
 }
 
-/* 教师端入口链接：品牌侧，珊瑚红圆角胶囊，hover 轻微提亮 */
-.teacher-link {
-  display: inline-block;
-  margin-top: 18px;
-  padding: 6px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--cf-line);
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--cf-coral);
-  font-size: 13.5px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: color 160ms var(--qh-ease), border-color 160ms var(--qh-ease),
-    background-color 160ms var(--qh-ease);
-}
-
-.teacher-link:hover {
-  background: var(--cf-coral-soft);
-  border-color: var(--cf-coral);
-}
-
-/* 教师入口提示：等宽小字，方便复制链接 */
-.role-hint {
-  margin-top: 10px;
-  font-size: 12.5px;
-  color: var(--cf-mid);
-}
-
-.role-hint code {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 12px;
-  background: var(--cf-bg-deep);
-  color: var(--cf-coral);
-  border-radius: 6px;
-  padding: 2px 6px;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .teacher-link {
+  .login-shell,
+  .enter-btn,
+  .enter-arw,
+  .teacher-link,
+  .login-btn,
+  .login-btn::after,
+  .demo-item {
     transition: none;
+  }
+
+  .brand-lockup,
+  .hero-title,
+  .hero-sub,
+  .hero-actions,
+  .hero-tags,
+  .hero-foot,
+  .login-card,
+  .panel-foot,
+  .demo-item::after {
+    animation: none;
+  }
+
+  .demo-item::after {
+    display: none;
+  }
+
+  .enter-btn:hover,
+  .login-btn:hover,
+  .demo-item:hover {
+    transform: none;
   }
 }
 </style>

@@ -10,7 +10,13 @@
         </span>
       </router-link>
 
-      <nav class="side-nav">
+      <nav ref="sideNav" class="side-nav">
+        <span
+          class="side-indicator"
+          :class="{ 'is-on': indicatorOn }"
+          :style="{ transform: `translateY(${indicatorY}px)` }"
+          aria-hidden="true"
+        />
         <router-link
           v-for="item in menus"
           :key="item.path"
@@ -119,9 +125,9 @@
           <p class="page-sub">{{ currentHint }}</p>
         </div>
         <router-view v-slot="{ Component }">
-          <transition name="page-fade" mode="out-in">
+          <Transition name="qh-page" mode="out-in">
             <component :is="Component" />
-          </transition>
+          </Transition>
         </router-view>
       </main>
     </div>
@@ -196,7 +202,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { clearSession, currentRole } from '../api/http'
@@ -338,6 +344,37 @@ const isMobile = ref(false)
 const scrolled = ref(false)
 let media = null
 
+// 侧栏 active 指示条：只测量位置、用 transform 滑动，不参与菜单/路由逻辑
+const sideNav = ref(null)
+const indicatorY = ref(0)
+const indicatorOn = ref(false)
+
+function syncIndicator() {
+  const nav = sideNav.value
+  const active = nav?.querySelector('.side-item.is-active')
+  if (!active) {
+    indicatorOn.value = false
+    return
+  }
+  indicatorY.value = active.offsetTop + active.offsetHeight / 2 - 12
+  indicatorOn.value = true
+}
+
+watch(
+  () => route.path,
+  async () => {
+    await nextTick()
+    syncIndicator()
+  }
+)
+
+watch(isMobile, async (mobile) => {
+  if (!mobile) {
+    await nextTick()
+    syncIndicator()
+  }
+})
+
 // 取「最长匹配」而非「第一个匹配」：否则 /teacher/exams 会被 /teacher 抢先命中，
 // 页头就永远停在「班级总览」。
 const currentItem = computed(() => {
@@ -410,6 +447,7 @@ onMounted(() => {
   media.addEventListener('change', syncViewport)
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
+  nextTick(syncIndicator)
 })
 
 onBeforeUnmount(() => {
@@ -444,10 +482,31 @@ onBeforeUnmount(() => {
 }
 
 .side-nav {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin-top: 14px;
+}
+
+/* active 指示条：固定高度，只靠 translateY 在菜单间平滑滑动 */
+.side-indicator {
+  position: absolute;
+  left: -8px;
+  top: 0;
+  width: 3px;
+  height: 24px;
+  border-radius: 999px;
+  background: #bfdbfe;
+  opacity: 0;
+  transition:
+    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 200ms ease;
+  pointer-events: none;
+}
+
+.side-indicator.is-on {
+  opacity: 1;
 }
 
 .side-item {
@@ -499,7 +558,11 @@ onBeforeUnmount(() => {
 }
 
 .topbar.is-scrolled {
-  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+  background: rgba(248, 250, 252, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
 }
 
 .topbar-inner {
@@ -1228,8 +1291,13 @@ onBeforeUnmount(() => {
   .side-item,
   .ai-rail-item,
   .nav-drawer,
-  .topbar {
-    transition: none;
+  .topbar,
+  .side-indicator {
+    transition: none !important;
+  }
+
+  .side-item:hover {
+    transform: none !important;
   }
 }
 

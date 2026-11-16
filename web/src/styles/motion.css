@@ -1,0 +1,250 @@
+/* web/src/styles/motion.css
+   职责：全站动效基座——reveal 入场、卡片/按钮微交互、路由过渡、环境微动画。
+   只动画 transform/opacity（box-shadow 仅静态过渡）；零依赖，纯 CSS。
+   prefers-reduced-motion 全量降级；pointer: coarse 关闭 hover 位移。 */
+
+/* ---------- 环境氛围：极淡底部 mesh 光晕，fixed 附着，不干扰可读性 ---------- */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(720px 380px at 50% 108%, rgba(25, 81, 195, 0.05), transparent 70%),
+    radial-gradient(520px 300px at 100% 62%, rgba(15, 157, 138, 0.045), transparent 72%);
+}
+
+/* ---------- reveal 系统：配合 useReveal()，进入视口后加 .is-revealed ---------- */
+.qh-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--qh-index, 0) * 90ms);
+}
+
+.qh-reveal.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- 卡片微交互：hover 轻抬升（沿用现有阴影 token，静态过渡） ---------- */
+.bento-card:not(.hero-card):hover,
+.el-card:hover {
+  transform: translateY(-3px);
+}
+
+/* 保留既有豁免：Hero / 页首横幅 / 卡中卡不抬升 */
+.hero-card:hover,
+.page-hero:hover,
+.bento-card .el-card:hover {
+  transform: none;
+}
+
+/* 重容器收敛渲染范围：布局/样式/绘制不外溢，降低全站重绘成本 */
+.bento-card {
+  contain: layout style paint;
+}
+
+/* ---------- 按钮触感：按下回缩 + 主按钮 hover 微光（伪元素 opacity） ---------- */
+.el-button:active {
+  transform: scale(0.98);
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  position: relative;
+  overflow: hidden;
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.16) 50%, transparent 68%);
+  opacity: 0;
+  transition: opacity 0.3s var(--qh-ease, ease);
+  pointer-events: none;
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover::after {
+  opacity: 1;
+}
+
+.el-button--primary.is-disabled::after {
+  content: none;
+}
+
+/* ---------- 表格行 hover 平滑染色 ---------- */
+.el-table .el-table__row > td.el-table__cell {
+  transition: background-color 0.18s var(--qh-ease, ease);
+}
+
+/* ---------- 标签 / 提示条入场 fade ---------- */
+@keyframes qh-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.el-tag,
+.el-alert {
+  animation: qh-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---------- 骨架屏扫光：伪元素 translateX，不动 background-position ---------- */
+@keyframes qh-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.el-skeleton__item {
+  position: relative;
+  overflow: hidden;
+}
+
+.el-skeleton__item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  transform: translateX(-100%);
+  animation: qh-sweep 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ---------- 环境微动画工具类：全部 infinite、低幅度 ---------- */
+@keyframes qh-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes qh-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.qh-float {
+  animation: qh-float 6s ease-in-out infinite;
+}
+
+.qh-breathe {
+  animation: qh-breathe 4s ease-in-out infinite;
+}
+
+.qh-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.qh-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.35) 50%, transparent 62%);
+  transform: translateX(-100%);
+  animation: qh-sweep 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ---------- 路由过渡：出场 0.18s、入场 0.32s，fade + translateY ---------- */
+.qh-page-enter-active {
+  transition:
+    opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qh-page-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.qh-page-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.qh-page-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* ---------- 键盘焦点：统一主色聚焦环 ---------- */
+:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+/* ---------- 触屏设备：关闭 hover 位移类效果 ---------- */
+@media (pointer: coarse) {
+  .bento-card:not(.hero-card):hover,
+  .el-card:hover,
+  .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .bento-card:not(.hero-card):hover,
+  .el-card:hover {
+    transform: none;
+  }
+}
+
+/* ---------- 减少动态效果：全量降级，reveal 直接可见 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  .qh-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .qh-float,
+  .qh-breathe {
+    animation: none !important;
+  }
+
+  .qh-shimmer::after,
+  .el-skeleton__item::after {
+    content: none;
+  }
+
+  .bento-card:hover,
+  .el-card:hover,
+  .el-button:active,
+  .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+    transform: none !important;
+  }
+}
