@@ -291,12 +291,14 @@ async function onLogin() {
   height: 40px;
   flex: 0 0 40px;
   border-radius: 12px;
-  background: linear-gradient(145deg, #3b6ee5 0%, #1951c3 52%, #0f9d8a 120%);
+  /* 科技渐变 + 青色光晕：复用全局 token，深色叙事区里的品牌锚点 */
+  background: var(--tech-gradient, linear-gradient(135deg, #1951c3 0%, #2b7ae0 50%, #00c2ff 100%));
   color: #fff;
   font-size: 19px;
   font-weight: 700;
   box-shadow:
     0 8px 22px rgba(25, 81, 195, 0.4),
+    0 0 20px -6px rgba(0, 194, 255, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
@@ -481,9 +483,11 @@ async function onLogin() {
   border: 1px solid #e1e7e8;
   border-radius: 20px;
   background: #ffffff;
+  /* 浅色卡 + 极淡青蓝发光：不改白底，只把边界提亮 */
   box-shadow:
     0 1px 2px rgba(8, 24, 28, 0.04),
-    0 24px 60px rgba(8, 24, 28, 0.1);
+    0 24px 60px rgba(8, 24, 28, 0.1),
+    0 0 28px -14px rgba(0, 194, 255, 0.28);
   animation: login-card-in 0.75s cubic-bezier(0.22, 0.61, 0.36, 1) 0.32s both;
 }
 
@@ -495,7 +499,8 @@ async function onLogin() {
   left: 24px;
   right: 24px;
   height: 1px;
-  background: linear-gradient(90deg, rgba(111, 201, 193, 0), #d8b45a 52%, rgba(111, 201, 193, 0));
+  /* 发丝线升级为科技渐变：两端消隐，中段靛蓝→青 */
+  background: linear-gradient(90deg, transparent, rgba(25, 81, 195, 0.55) 32%, rgba(0, 194, 255, 0.8) 52%, rgba(25, 81, 195, 0.55) 72%, transparent);
 }
 
 .panel-head {
@@ -582,9 +587,11 @@ async function onLogin() {
   --el-button-hover-bg-color: transparent;
   --el-button-hover-border-color: transparent;
   --el-button-active-bg-color: transparent;
-  background-image: linear-gradient(135deg, #2d61dd 0%, #1951c3 52%, #14419c 100%);
+  /* 主按钮走全局科技渐变 token + 青色发光 */
+  background-image: var(--tech-gradient, linear-gradient(135deg, #1951c3 0%, #2b7ae0 50%, #00c2ff 100%));
   box-shadow:
-    0 10px 24px rgba(25, 81, 195, 0.24),
+    0 10px 24px rgba(25, 81, 195, 0.28),
+    0 0 20px -8px rgba(0, 194, 255, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transition:
     transform 240ms var(--qh-ease),
@@ -604,9 +611,10 @@ async function onLogin() {
 }
 
 .login-btn:hover {
-  background-image: linear-gradient(135deg, #3b6ee5 0%, #1f5ad0 52%, #14419c 100%);
+  background-image: linear-gradient(135deg, #2b6ee0 0%, #2b8ae8 50%, #22d0ff 100%);
   box-shadow:
-    0 14px 30px rgba(25, 81, 195, 0.3),
+    0 14px 30px rgba(25, 81, 195, 0.36),
+    0 0 26px -8px rgba(0, 194, 255, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.26);
   transform: translateY(-1px);
 }
@@ -658,7 +666,7 @@ async function onLogin() {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 34%, rgba(25, 81, 195, 0.12) 50%, transparent 66%);
+  background: linear-gradient(105deg, transparent 32%, rgba(25, 81, 195, 0.12) 46%, rgba(0, 194, 255, 0.18) 54%, transparent 68%);
   transform: translateX(-110%);
   pointer-events: none;
 }
