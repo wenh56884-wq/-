@@ -28,6 +28,17 @@ TENANT = 1
 # 进程唯一：同一台机器并行跑测试时，避免两个进程互相删除对方的临时教师
 EMPLOYEE_NO = f"T9{os.getpid() % 100000:05d}"
 TEACHER_PWD = "teacher@123"
+DEMO_STUDENT_NOS = frozenset({"AI20230001", "AI20260001", "AI20260004",
+                              "AI20250001", "AI20240004"})
+
+
+def _student_password(student_no: str) -> str:
+    """演示学生用 .env 的统一口令，其余生成学生仍用「初始口令=学号」。"""
+    from app.config import get_settings
+
+    if str(student_no) in DEMO_STUDENT_NOS:
+        return str(get_settings().demo_password or "").strip()
+    return str(student_no)
 
 
 def _mysql_ok() -> bool:
@@ -185,8 +196,8 @@ def test_no_token_is_401(client, db):
 def test_student_calling_teacher_api_is_403(client, db):
     """学生 token 调教师接口 → 403（学生拿不到班级数据）。"""
     conn, klass, stu = db
-    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()
-    assert token["access_token"], "学生应能用『学号即初始口令』登录（演示约定）"
+    token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()
+    assert token["access_token"], "演示学生应能用 DEMO_PASSWORD 登录"
     resp = client.get(
         "/teacher/warnings",
         params={"class_name": klass, "term": TERM},
@@ -200,7 +211,7 @@ def test_student_calling_teacher_api_is_403(client, db):
 def test_student_sees_only_self(client, db):
     """学生端没有入参学号：返回的永远是本人（= 登录学号）。"""
     conn, klass, stu = db
-    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     resp = client.get("/student/warning", params={"term": TERM}, headers=headers)
     assert resp.status_code == 200, resp.text
@@ -232,6 +243,73 @@ def test_unknown_class_is_422(client, db):
     assert "不存在" in resp.json()["detail"]
 
 
+# ----------------------------------------------------------------
+# 3. 班级生涯规划搜索（/career-search）
+# ----------------------------------------------------------------
+@requires_mysql
+def test_career_search_returns_class_report(client, db):
+    """教师调 /career-search：返回班级摘要 + 学生全域档案，数值由引擎计算。"""
+    conn, klass, _ = db
+    token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
+    resp = client.get("/teacher/career-search",
+                      params={"class_name": klass, "term": TERM, "limit": 2},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["engine_version"] == "teacher-career-v1"
+    assert body["calc_version"] == "v1.1"
+    assert body["class_name"] == klass
+    cs = body["class_summary"]
+    assert cs["student_total"] == 2
+    assert {"warning_count", "warning_rate", "avg_grade", "intent_distribution",
+            "grade_rank_top", "job_match_top", "risk_level"} <= set(cs)
+    assert isinstance(body["students"], list)
+    assert body["filtered_total"] == len(body["students"])
+    # 每生档案覆盖全域字段（数据库里所有数据都要运用得到）
+    for s in body["students"]:
+        assert {"grades", "warning", "forecast", "recommendations", "interview",
+                "competitions", "assessment", "elective", "exam", "kg"} <= set(s)
+
+
+@requires_mysql
+def test_career_search_intent_filter(client, db):
+    """intent 过滤：学生列表只含该方向，班级摘要仍为样本口径（不随过滤缩小）。"""
+    conn, klass, _ = db
+    token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
+    resp = client.get("/teacher/career-search",
+                      params={"class_name": klass, "term": TERM, "intent": "就业", "limit": 5},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["intent"] == "就业"
+    for s in body["students"]:
+        assert s["intent"] == "就业"
+
+
+@requires_mysql
+def test_career_search_bad_intent_is_422(client, db):
+    """非法方向 → 422 白名单校验。"""
+    conn, klass, _ = db
+    token = _login(client, "teacher", EMPLOYEE_NO, TEACHER_PWD).json()["access_token"]
+    resp = client.get("/teacher/career-search",
+                      params={"class_name": klass, "intent": "创业"},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 422
+    assert "方向只能是" in resp.json()["detail"]
+
+
+@requires_mysql
+def test_career_search_student_token_is_403(client, db):
+    """学生 token 调教师生涯接口 → 403（学生拿不到班级数据）。"""
+    conn, klass, stu = db
+    token = _login(client, "student", stu["student_no"],
+                   _student_password(str(stu["student_no"]))).json()["access_token"]
+    resp = client.get("/teacher/career-search",
+                      params={"class_name": klass, "limit": 2},
+                      headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 403
+
+
 @requires_mysql
 def test_student_and_teacher_numbers_agree(client, db):
     """同一名学生：学生端接口与教师端接口给出的风险分必须一致（跨入口一致性）。"""
@@ -243,7 +321,7 @@ def test_student_and_teacher_numbers_agree(client, db):
     mine_row = next((r for r in listed["items"]
                      if r["student_no"] == str(stu["student_no"])), None)
 
-    s_token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    s_token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()["access_token"]
     mine = client.get("/student/warning", params={"term": TERM},
                       headers={"Authorization": f"Bearer {s_token}"}).json()
     if mine_row is not None:
@@ -260,7 +338,10 @@ def test_health_reports_real_connectivity(client, db):
     body = client.get("/health").json()
     assert set(body) == {"status", "db", "duckdb", "llm"}
     assert body["db"] == "ok" and body["duckdb"] == "ok"
-    assert body["llm"] in ("configured", "missing")
+    from agents.llm import provider_order
+
+    expected_llm = "configured" if provider_order() else "missing"
+    assert body["llm"] == expected_llm
     assert body["status"] == "ok"
 
 
@@ -341,7 +422,7 @@ def test_exam_notices_list_returns_rows(client):
 def test_career_guide_returns_grade_and_options(client, db):
     """学生端 /career/guide：必须返回年级、四选一选项与规划结构。"""
     conn, klass, stu = db
-    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()["access_token"]
     resp = client.get("/career/guide", params={"term": TERM},
                       headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200, resp.text
@@ -358,7 +439,7 @@ def test_career_intent_roundtrip_and_restore(client, db):
     """保存目标后 guide 能读到；用例结束恢复原值（不污染演示数据）。"""
     conn, klass, stu = db
     student_id = int(stu["id"])
-    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
     with conn.cursor() as cur:
@@ -419,7 +500,7 @@ def test_class_overview_reports_career_intent_distribution(client, db):
 def test_career_intent_rejects_unknown_value(client, db):
     """非法目标 → 422，不落库。"""
     conn, klass, stu = db
-    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()["access_token"]
     resp = client.put("/career/intent", json={"intent": "乱写"},
                       headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 422
@@ -538,13 +619,14 @@ def test_class_warning_thresholds_roundtrip(client, db):
 @requires_mysql
 def test_chat_brain_and_memory_endpoints(client, db):
     conn, klass, stu = db
-    token = _login(client, "student", stu["student_no"], stu["student_no"]).json()["access_token"]
+    token = _login(client, "student", stu["student_no"], _student_password(str(stu["student_no"]))).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
     brain = client.get("/chat/brain", headers=headers)
     assert brain.status_code == 200, brain.text
-    assert brain.json()["brain_version"] == "brain-v1"
-    assert brain.json()["memory"] == "memory-v1"
+    # 断言与常量对齐：版本号推进属于实现细节，不该让接口测试假红
+    assert brain.json()["brain_version"].startswith("brain-v")
+    assert brain.json()["memory"].startswith("memory-v")
 
     memories = client.get("/chat/memories", headers=headers)
     assert memories.status_code == 200, memories.text

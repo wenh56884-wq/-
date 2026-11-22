@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# 可选：Spark 特征工程与慢速对拍测试（需要 Java 17）
+pyspark==4.0.4

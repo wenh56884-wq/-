@@ -96,7 +96,7 @@ def submit_for_approval(ctx: ToolContext, def_id: int, def_name: str,
     finally:
         conn.close()
 
-    audit_event(actor_type=ctx.actor_type,
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
                 actor_id=ctx.teacher_id or ctx.student_id or 0,
                 action="workflow.submit_pending", target=str(def_id),
                 detail={"run_id": run_id, "name": def_name})
@@ -149,10 +149,74 @@ def list_pending(ctx: ToolContext, limit: int = 20) -> dict[str, Any]:
                 "name": r.get("student_name") or r.get("teacher_name") or "未知",
             },
             "inputs": _json(r.get("inputs"), {}),
+            # 审批人必须先看到「通过后会跑哪几步」：工具名 + 中文名，直接来自执行快照。
+            # 没有这个明细的审批就是盲签——只对着一个名字点通过。
+            "steps": _step_brief(snapshot or current),
             # 快照与定义不一致 = 提交后有人改过流程，审批前要让人看出来
             "definition_changed": bool(snapshot) and snapshot != current,
             "step_count": len(snapshot or current),
             "submitted_at": r.get("submitted_at").isoformat() if r.get("submitted_at") else None,
+        })
+    return {"total": len(items), "items": items,
+            "approval_version": wf_engine.APPROVAL_VERSION}
+
+
+def _step_brief(steps: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """步骤快照 → 展示用明细（顺序即执行顺序）。"""
+    out: list[dict[str, str]] = []
+    for st in steps or []:
+        tool = str(st.get("tool") or "")
+        out.append({
+            "id": str(st.get("id") or tool),
+            "tool": tool,
+            "label": wf_engine.ALLOWED_TOOLS.get(tool, tool),
+            "title": str(st.get("title") or wf_engine.ALLOWED_TOOLS.get(tool, tool)),
+            "on_error": str(st.get("on_error") or "stop"),
+        })
+    return out
+
+
+def list_history(ctx: ToolContext, limit: int = 20) -> dict[str, Any]:
+    """本租户最近已处理的审批（教师回查：批了谁、批了什么、结果如何）。"""
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT a.`运行编号` AS run_id, a.`动作` AS action, a.`意见` AS comment,"
+                " a.`审批时间` AS decided_at, a.`审批人编号` AS approver_id,"
+                " r.`状态` AS status, r.`错误` AS error, r.`耗时毫秒` AS elapsed_ms,"
+                " r.`触发角色` AS actor_type, r.`触发人编号` AS actor_id,"
+                " d.`编号` AS def_id, d.`名称` AS name,"
+                " s.`姓名` AS student_name, t.`姓名` AS teacher_name, ap.`姓名` AS approver_name"
+                " FROM `工作流审批` a"
+                " JOIN `工作流运行` r ON r.`编号`=a.`运行编号`"
+                " JOIN `工作流定义` d ON d.`编号`=r.`定义编号` AND d.`租户编号`=%s"
+                " LEFT JOIN `学生` s ON r.`触发角色`='student' AND s.`编号`=r.`触发人编号`"
+                " LEFT JOIN `教师` t ON r.`触发角色`='teacher' AND t.`编号`=r.`触发人编号`"
+                " LEFT JOIN `教师` ap ON ap.`编号`=a.`审批人编号`"
+                " ORDER BY a.`审批时间` DESC LIMIT %s",
+                (ctx.tenant_id, max(1, min(int(limit), 100))))
+            rows = list(cur.fetchall())
+    finally:
+        conn.close()
+
+    items = []
+    for r in rows:
+        items.append({
+            "run_id": int(r["run_id"]),
+            "def_id": int(r["def_id"]),
+            "name": r["name"],
+            "action": str(r["action"]),
+            "comment": r.get("comment"),
+            "approver_name": r.get("approver_name") or "未知",
+            "decided_at": r.get("decided_at").isoformat() if r.get("decided_at") else None,
+            "status": str(r["status"]),
+            "error": r.get("error"),
+            "elapsed_ms": int(r.get("elapsed_ms") or 0),
+            "submitted_by": {
+                "actor_type": r.get("actor_type"),
+                "name": r.get("student_name") or r.get("teacher_name") or "未知",
+            },
         })
     return {"total": len(items), "items": items,
             "approval_version": wf_engine.APPROVAL_VERSION}
@@ -294,7 +358,8 @@ def decide(ctx: ToolContext, run_id: int, action: str,
     except Exception:                                  # 落库失败也不能把异常吞成 500 之外的怪象
         raise ApprovalError("审批已生效，但执行结果写回失败，请刷新后核对。") from None
 
-    audit_event(actor_type=ctx.actor_type, actor_id=ctx.teacher_id or 0,
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                actor_id=ctx.teacher_id or 0,
                 action=f"workflow.{action}", target=str(run_id),
                 detail={"def_id": def_id, "name": name, "status": result["status"],
                         "steps": len(result.get("steps") or []),

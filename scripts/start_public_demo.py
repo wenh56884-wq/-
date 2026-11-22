@@ -1,6 +1,6 @@
 # 职责：一键启动本地隔离的公网演示服务与 Cloudflare 临时隧道。
 # 依赖：Python 标准库、Node.js/npm、cloudflared、项目虚拟环境及数据库。
-# 说明：每次启动随机生成演示口令与 JWT 密钥，只允许指定的合成演示账号。
+# 说明：公网演示口令取 DEMO_PASSWORD（当前统一 123456h），JWT 密钥仍随机生成。
 
 from __future__ import annotations
 
@@ -18,6 +18,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.config import get_settings  # noqa: E402
 DEMO_ACCOUNTS = (
     "teacher:T001,student:AI20260001,student:AI20250001,"
     "student:AI20240004,student:AI20230001"
@@ -49,7 +53,8 @@ def _start_local_stack() -> tuple[list[subprocess.Popen[bytes]], bool, bool]:
 
     env = os.environ.copy()
     # 不让父 shell 偶然残留的公网演示开关污染本地账号认证。
-    for key in ("PUBLIC_DEMO_MODE", "PUBLIC_DEMO_PASSWORD", "PUBLIC_DEMO_ACCOUNTS"):
+    for key in ("PUBLIC_DEMO_MODE", "PUBLIC_DEMO_PASSWORD", "PUBLIC_DEMO_ACCOUNTS",
+                "PUBLIC_DEMO_ALLOW_WEAK_PASSWORD"):
         env.pop(key, None)
     env["APP_PORT"] = "8000"
 
@@ -91,7 +96,7 @@ def _start_local_stack() -> tuple[list[subprocess.Popen[bytes]], bool, bool]:
     return processes, backend_ready, frontend_ready
 
 
-def _run_frontend_build() -> None:
+def _run_frontend_build(password: str) -> None:
     """用公网登录页配置构建前端；缺少 Node 依赖时明确报错。"""
     npm = shutil.which("npm.cmd") or shutil.which("npm")
     if not npm:
@@ -101,6 +106,7 @@ def _run_frontend_build() -> None:
 
     env = os.environ.copy()
     env["VITE_PUBLIC_DEMO_MODE"] = "true"
+    env["VITE_DEMO_PASSWORD"] = password
     print("[1/4] 正在构建公网演示版前端…", flush=True)
     subprocess.run([npm, "run", "build"], cwd=WEB, env=env, check=True)
 
@@ -170,7 +176,11 @@ def main() -> int:
             print("未找到 cloudflared，请先安装 Cloudflare Tunnel。", file=sys.stderr)
             return 1
 
-    password = secrets.token_urlsafe(32)
+    settings = get_settings()
+    password = str(settings.demo_password or "").strip()
+    if not password:
+        print("DEMO_PASSWORD 未配置：请先在 .env 设置公网演示统一口令", file=sys.stderr)
+        return 1
     jwt_secret = secrets.token_urlsafe(48)
     port = _available_port()
     env = os.environ.copy()
@@ -179,6 +189,7 @@ def main() -> int:
             "PUBLIC_DEMO_MODE": "true",
             "PUBLIC_DEMO_PASSWORD": password,
             "PUBLIC_DEMO_ACCOUNTS": DEMO_ACCOUNTS,
+            "PUBLIC_DEMO_ALLOW_WEAK_PASSWORD": "true",
             "JWT_SECRET": jwt_secret,
             "APP_PORT": str(port),
         }
@@ -195,7 +206,7 @@ def main() -> int:
             f"前端 {'复用' if frontend_reused else '新启动'}）",
             flush=True,
         )
-        _run_frontend_build()
+        _run_frontend_build(password)
         print("\n[2/4] 正在启动仅绑定本机的演示服务…", flush=True)
         web_process = subprocess.Popen(
             [

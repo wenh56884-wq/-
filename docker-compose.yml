@@ -1,0 +1,67 @@
+# 启航系统 · 单机生产编排
+# 一台云服务器 = MySQL 8 + FastAPI 应用（前端由应用同源托管）
+# 启动：docker compose up -d --build
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: qihang-mysql
+    restart: always
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # 演示机内存有限：缓冲池压到 256M，避免 MySQL 把整机内存吃满
+      - --innodb-buffer-pool-size=256M
+      - --max-connections=200
+      - --skip-name-resolve
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-qihang_root_2026}
+      MYSQL_DATABASE: qihang
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    networks:
+      - qihang
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qihang-app:latest
+    container_name: qihang-app
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    environment:
+      # 容器网络内按服务名解析，覆盖 .env.production 里的占位值
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "80:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    networks:
+      - qihang
+
+volumes:
+  mysql-data:
+    name: qihang-mysql-data
+
+networks:
+  qihang:
+    name: qihang-net

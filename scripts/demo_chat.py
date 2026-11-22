@@ -17,6 +17,8 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
+from app.config import get_settings  # noqa: E402
+
 BASE = os.getenv("QH_BASE", "http://127.0.0.1:8001").rstrip("/")
 STEP = 0
 
@@ -83,8 +85,12 @@ def _student_account() -> str:
 
 def main() -> int:
     account = _student_account()
+    demo_password = str(get_settings().demo_password or "").strip()
+    demo_accounts = {"AI20230001", "AI20260001", "AI20260004",
+                     "AI20250001", "AI20240004"}
+    password = demo_password if account in demo_accounts and demo_password else account
     code, body = _call("POST", "/auth/login",
-                       body={"role": "student", "account": account, "password": account})
+                       body={"role": "student", "account": account, "password": password})
     if code != 200:
         raise SystemExit(f"登录失败：{code} {body}")
     token = body["access_token"]

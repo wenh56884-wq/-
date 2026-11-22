@@ -40,7 +40,7 @@ RANK_MARKERS = lambda: tuple(intents.section("rank_markers"))  # noqa: E731
 # 纯班级级统计工具：提问点名到某个具体学生时，这些工具要让位给个人工具。
 # class_grades_rank **不在这里**：它同时提供个人名次，点名到人时该不该让位
 # 要按「有没有名次信号词」单独判断（见 plan_teacher），不能一刀切让位。
-_CLASS_LEVEL_TOOLS = ("career_gap",)
+_CLASS_LEVEL_TOOLS = ("career_gap", "teacher_career_search", "class_campus_insight")
 
 
 def extract_level(query: str) -> str | None:
@@ -202,8 +202,9 @@ def plan_teacher(ctx: ToolContext, intent: str, query: str,
     if class_signal and not named_student and tool_name == "student_grades":
         tool_name = "class_grades_rank"
 
-    # 需要「查谁」的工具：成绩单 / 学业预测与画像一样，都得先把学号抠出来
-    if tool_name in ("student_profile", "student_grades", "student_forecast"):
+    # 需要「查谁」的工具：成绩单 / 学业预测 / 逐生行为洞察与画像一样，都得先把学号抠出来
+    if tool_name in ("student_profile", "student_grades", "student_forecast",
+                     "student_campus_insight"):
         student_no = resolve_student_no(ctx, query)
         if not student_no:
             # 没点名任何人：兜底到该学期有成绩的第一个学生（与旧口径一致）

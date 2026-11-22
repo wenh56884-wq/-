@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from collections.abc import Iterator
 from queue import Queue
@@ -18,6 +19,7 @@ from typing import Any, Callable, Mapping, Sequence, TypedDict
 from langgraph.graph import END, StateGraph
 
 from agents import llm as llm_client
+from agents import campus_insight as campus_agent
 from agents import intents as intents_cfg
 from agents import student_agent
 from agents import teacher_agent
@@ -35,6 +37,9 @@ from app.audit import audit_event
 from engine import rag as rag_engine
 
 GRAPH_VERSION = "graph-v5"
+
+# 教师端预警名单的固定免责声明：不参与数值核对，但每次输出都必须带上。
+WARNING_REVIEW_NOTE = "预警清单由教师复核后跟进；引擎只做风险提示，不替代人工判断。"
 
 # AGENT_LLM_DRAFT=0 可关闭「大模型润色」，退回机械直引（演示/对比用）
 def _llm_draft_enabled() -> bool:
@@ -86,6 +91,14 @@ _FOLLOWUP_BY_TOOL: dict[str, tuple[str, ...]] = {
     "kb_search": ("换一种说法再查一次", "这个问题校园数据里能不能看"),
     "web_search": ("这个问题知识库里有没有规定", "回到校园数据里继续查"),
     "run_workflow": ("看看刚才跑出来的名单", "帮我跑一遍另一个工作流"),
+    "navigate": ("这个页面能帮我做什么", "换个板块看看"),
+    "student_campus_insight": ("这个学生的成绩怎么样", "这个班整体的投入画像如何"),
+    "class_roster": ("看看其中某个学生的校园行为洞察", "这个班的整体情况怎么样"),
+    "class_campus_insight": ("看看班里某个学生的行为明细（直接说姓名或学号）",
+                             "这个班的预警名单有哪些人"),
+    "mark_notices_read": ("现在还有哪些没读的通知", "有什么竞赛可以参加"),
+    "cert_guide": ("普通话在哪报名", "我该先考四级还是软考"),
+    "save_career_intent": ("按这个目标我的竞争力怎么样", "给我推荐能补技能的选修课"),
 }
 _FOLLOWUP_DEFAULT: tuple[str, ...] = ("换个说法再问一次", "看看别的班级或学生的情况")
 
@@ -137,6 +150,84 @@ def _is_chitchat(query: str) -> bool:
     return any(key in text for key in _CHITCHAT_KEYS()) and len(text) <= 20
 
 
+# ----------------------------------------------------------------
+# 页面导航：「打开校园洞察」这类操作请求 → 确定性定位到前端路由
+# 只认强动词（打开/进入/跳转…）或「弱动词 + 页面/板块」，
+# 避免「我想去考公」这类数据问法被导航劫走。hint 里不许出现数字。
+# ----------------------------------------------------------------
+_NAV_PAGES: dict[str, tuple[tuple[str, str, tuple[str, ...], str], ...]] = {
+    "teacher": (
+        ("/teacher", "班级总览", ("班级总览", "总览页", "工作台", "教师首页", "首页"),
+         "这里能看任教班级的整体情况、预警分布与关键指标。"),
+        ("/teacher/students", "学生档案", ("学生档案", "档案页", "学生列表页"),
+         "这里能按姓名或学号查任意学生的四维画像与成绩趋势。"),
+        ("/teacher/career", "生涯规划", ("生涯规划", "职业规划页", "生涯档案页"),
+         "这里能看全班生涯档案，也能按考公、考研、考编、就业方向过滤。"),
+        ("/teacher/campus", "校园洞察", ("校园洞察", "校园行为", "行为洞察"),
+         "这里能看全班投入画像，也能按姓名或学号定位到每个学生的行为明细。"),
+        ("/teacher/grades", "成绩单", ("成绩单", "成绩页", "成绩分析页"),
+         "这里能看班级成绩排名与每个学生的成绩单。"),
+        ("/teacher/jobs", "岗位库", ("岗位库", "岗位页", "岗位搜索页"),
+         "这里能按关键词、城市、学历搜索岗位库。"),
+        ("/teacher/exams", "招考信息", ("招考信息", "招考页", "招考公告页"),
+         "这里能检索真实招考公告与国考职位表，都带原文来源。"),
+        ("/teacher/approvals", "工作流审批", ("工作流审批", "审批页", "审批"),
+         "这里能审批智能体发起的多步工作流。"),
+        ("/teacher/kg", "知识图谱", ("知识图谱", "图谱页"),
+         "这里能查专业、课程、技能、岗位之间的关联路径。"),
+        ("/teacher/assistant", "AI 助手", ("ai 助手", "ai助手", "助手页", "智能助手"),
+         "这里能用大白话调度全系统能力，问数据、跑流程都可以。"),
+        ("/teacher/agent-quality", "智能体质量", ("智能体质量", "质量页", "质量看板"),
+         "这里能看智能体回答的数值回查与降级统计。"),
+    ),
+    "student": (
+        ("/student", "我的画像", ("我的画像", "画像首页", "学生首页", "首页"),
+         "这里汇总你的预警、岗位推荐与生涯规划入口。"),
+        ("/student/grades", "成绩单", ("成绩单", "成绩页"),
+         "这里能看你各学期的均分、学分与挂科情况。"),
+        ("/student/jobs", "岗位库", ("岗位库", "岗位页", "岗位搜索页"),
+         "这里能按关键词、城市、学历搜索岗位库。"),
+        ("/student/interview", "模拟面试", ("模拟面试", "面试页", "面试间"),
+         "这里能和 AI 面试官逐轮演练，结束后有总分与点评。"),
+        ("/student/exams", "招考信息", ("招考信息", "招考页", "招考公告页"),
+         "这里能检索真实招考公告与国考职位表，都带原文来源。"),
+        ("/student/kg", "知识图谱", ("知识图谱", "图谱页"),
+         "这里能查专业、课程、技能、岗位之间的关联路径。"),
+        ("/student/forecast", "学业预测", ("学业预测", "预测页"),
+         "这里能看你下学期的均分预测、挂科风险与预警走向。"),
+        ("/student/campus", "校园洞察", ("校园洞察", "校园行为", "行为洞察"),
+         "这里能看你的图书馆、消费、活动、出勤与学习投入画像。"),
+        ("/student/assessment", "职业测评", ("职业测评", "测评页", "软技能测评"),
+         "这里完成量表测评后生成五维复合能力画像。"),
+        ("/student/career", "报考分析", ("报考分析", "报考页", "竞争力分析"),
+         "这里能看考公、考研、考编的硬门槛、综合分与提分杠杆。"),
+        ("/student/elective", "选课推荐", ("选课推荐", "选课页", "选修推荐"),
+         "这里按技能缺口推荐能补短板的选修课。"),
+        ("/student/assistant", "AI 助手", ("ai 助手", "ai助手", "助手页", "智能助手"),
+         "这里能用大白话查本人数据、问制度、跑流程。"),
+    ),
+}
+_NAV_STRONG = ("打开", "进入", "跳转", "带我去", "切换到", "前往", "进到")
+_NAV_WEAK = ("去", "到", "看看", "想看", "要看", "看下", "看一下", "逛逛")
+_NAV_SUFFIX = ("页面", "页", "板块", "界面")
+
+
+def _navigate_target(ctx: ToolContext, query: str) -> dict[str, str] | None:
+    """操作型问法 → 页面定位 payload；不是导航意图返回 None（不劫持数据问法）。"""
+    text = str(query or "").strip().lower()
+    if not text or len(text) > 40:
+        return None
+    strong = any(v in text for v in _NAV_STRONG)
+    weak_with_suffix = (any(v in text for v in _NAV_WEAK)
+                        and any(s in text for s in _NAV_SUFFIX))
+    if not (strong or weak_with_suffix):
+        return None
+    for route, title, keywords, hint in _NAV_PAGES.get(ctx.actor_type, ()):
+        if any(k in text for k in keywords):
+            return {"route": route, "title": title, "hint": hint}
+    return None
+
+
 # 联网检索词里的动作词：用户说的是「联网查一下 XXX」，搜索引擎要的是「XXX」。
 # 带着「联网」去搜，容易被召回一堆「什么是联网搜索」之类的页面。
 _WEB_NOISE = ("联网", "上网", "网上", "帮我", "给我", "我想", "请问",
@@ -154,6 +245,29 @@ def _web_query(text: str) -> str:
     return out if len(out) >= 2 else raw
 
 
+# 显式联网信号：句子里出现这些词，说明用户点名要搜外部网页，
+# 即使同时命中领域名词（「联网查…公开招聘信息」含「招聘信息」）也不让位。
+_WEB_EXPLICIT = ("联网", "上网", "网上", "网页", "互联网", "外网",
+                 "百度", "必应", "搜狗", "谷歌")
+
+
+def _web_defers_to_domain(intent: str) -> bool:
+    """通用动作词撞上领域名词时，领域工具优先于联网搜索。
+
+    「搜一下重庆的岗位」是岗位检索（search_jobs），不是让搜索引擎搜网页；
+    而「联网查一下最新的公开招聘信息」带着显式联网信号，必须仍归 web_search
+    （「公开招聘信息」含 exam_notices 词表里的「招聘信息」，不能因此让位）。
+    只看数据面工具的词表（岗位/招考），不看概览/画像这类页面级意图。
+    """
+    if any(k in intent for k in _WEB_EXPLICIT):
+        return False
+    keywords = dict(intents_cfg.tool_keywords())
+    for name in ("search_jobs", "exam_positions", "exam_notices"):
+        if any(k in intent for k in (keywords.get(name) or ())):
+            return True
+    return False
+
+
 def plan_node(state: AgentState) -> dict[str, Any]:
     """按提问关键词挑工具；学生端强制映射到本人工具，忽略一切学号提取结果。"""
     ctx: ToolContext = state["ctx"]
@@ -162,6 +276,11 @@ def plan_node(state: AgentState) -> dict[str, Any]:
 
     if _is_chitchat(query):
         return {"plan": {"tool": "chitchat", "args": {}}, "tool_name": "chitchat"}
+
+    # 操作型问法（打开/进入某页面）：确定性导航，不取数、不进模型
+    nav = _navigate_target(ctx, query)
+    if nav:
+        return {"plan": {"tool": "navigate", "args": nav}, "tool_name": "navigate"}
 
     # 外部事实：知识库优先于联网（有内部制度就先查内部，别去网上找）
     intent = _intent_text(state, query)
@@ -194,6 +313,13 @@ def plan_node(state: AgentState) -> dict[str, Any]:
                              "args": student_agent.tool_args(personal, query)},
                     "tool_name": personal}
 
+        # 校园行为洞察（本人数据补充路由）：词表在 intents.student_tools，
+        # 命中知识库制度词时让位（「考勤管理规定」仍走 kb_search，不查个人数据）。
+        campus = _student_campus_tool(intent)
+        if campus:
+            return {"plan": {"tool": campus, "args": _campus_term_args(query)},
+                    "tool_name": campus}
+
         # 学生端数据追问：「里面/其中/还有硕士的吗」这类短追问指上一轮的数据面
         #（「里面有哪些是本科就可以考的」= 职位表按学历过滤），沿用同一数据工具。
         # 追问残词不可信（「我知道我和要求」当关键词只会查空）→ 不带检索词，
@@ -204,6 +330,13 @@ def plan_node(state: AgentState) -> dict[str, Any]:
             args.pop("query", None)
             return {"plan": {"tool": last_tool, "args": args},
                     "tool_name": last_tool}
+
+    # 教师端校园行为前置路由：「全班考勤怎么样」含知识库词「考勤」，
+    # 但问的是行为数据不是制度——先于知识库分支判定，机构词问法仍让位 kb。
+    if ctx.actor_type == "teacher":
+        campus_plan = _teacher_campus_tool(ctx, intent, query)
+        if campus_plan:
+            return campus_plan
 
     if any(k in intent for k in _KB_KEYS()):
         return {"plan": {"tool": "kb_search", "args": {"query": search_query}},
@@ -217,7 +350,7 @@ def plan_node(state: AgentState) -> dict[str, Any]:
     if any(k in intent for k in _WF_KEYS()):
         return {"plan": {"tool": "run_workflow", "args": {"name": _workflow_name(query)}},
                 "tool_name": "run_workflow"}
-    if any(k in intent for k in _WEB_KEYS()):
+    if any(k in intent for k in _WEB_KEYS()) and not _web_defers_to_domain(intent):
         return {"plan": {"tool": "web_search", "args": {"query": _web_query(search_query)}},
                 "tool_name": "web_search"}
 
@@ -235,6 +368,63 @@ def _extract_class_name(query: str) -> str | None:
 
     match = re.search(r"\b([A-Za-z]{2,4}\d{3,4})\b", query)
     return match.group(1) if match else None
+
+
+# 机构词：问「制度/规定/办法」才让位知识库；「考勤/图书馆」本身是行为数据词，
+# 学生问「我的考勤怎么样」、教师问「全班出勤情况」都应查行为洞察而非制度文档。
+_KB_INSTITUTION_MARKERS = ("规定", "制度", "管理办法", "流程", "手册", "细则",
+                           "政策", "条例", "sop", "faq")
+
+
+def _student_campus_tool(intent: str) -> str | None:
+    """学生端校园行为洞察意图：命中返回工具名，未命中返回 None。
+
+    「考勤 / 证书」这类词同时出现在制度问法里（考勤管理规定 / 资格证书管理办法），
+    意图串含机构词（规定/管理办法…）就不走个人数据，留给后面的 kb_search 分支；
+    纯行为问法（我的考勤怎么样）不再被知识库词表里的「考勤」误抢。
+    """
+    if any(k in intent for k in _KB_INSTITUTION_MARKERS):
+        return None
+    for name, keywords in intents_cfg.student_tool_keywords():
+        if any(k in intent for k in keywords):
+            return name
+    return None
+
+
+def _teacher_campus_tool(ctx: ToolContext, intent: str,
+                         query: str) -> dict[str, Any] | None:
+    """教师端校园行为前置路由：点名到学生 → 逐生洞察；点名到班 → 班级洞察。
+
+    只在行为词命中且无机构词时接管；其余问法原样走后续路由，不改变既有口径。
+    """
+    if any(k in intent for k in _KB_INSTITUTION_MARKERS):
+        return None
+    kws = dict(intents_cfg.tool_keywords())
+    behavior = tuple(kws.get("class_campus_insight") or ()) + \
+        tuple(kws.get("student_campus_insight") or ())
+    if not any(k in intent for k in behavior):
+        return None
+    term_args = _campus_term_args(query)
+    named = teacher_agent.resolve_student_no(ctx, query)
+    if named:
+        return {"plan": {"tool": "student_campus_insight",
+                         "args": {"student_no": named, **term_args}},
+                "tool_name": "student_campus_insight"}
+    class_name = _extract_class_name(query) or _extract_class_name(intent)
+    class_signal = bool(class_name) or any(
+        k in intent for k in ("全班", "班级", "班里", "班上", "这个班", "我们班", "本班"))
+    if class_signal:
+        return {"plan": {"tool": "class_campus_insight",
+                         "args": {"class_name": class_name or _default_class(ctx),
+                                  **term_args}},
+                "tool_name": "class_campus_insight"}
+    return None
+
+
+def _campus_term_args(query: str) -> dict[str, Any]:
+    """从问句抠显式学期号（如 2025-2026-1）；抠不到留空，由工具回落最新学期。"""
+    match = re.search(r"\d{4}-\d{4}-[12]", str(query or ""))
+    return {"term": match.group(0)} if match else {}
 
 
 def _last_user_text(state: AgentState) -> str:
@@ -320,6 +510,17 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
         return tools.student_profile(ctx, a.get("student_no", ""), a.get("term", ""))
     if name == "career_gap":
         return tools.career_gap(ctx, a.get("class_name", ""), a.get("term", ""))
+    if name == "teacher_career_search":
+        return tools.teacher_career_search(ctx, a.get("class_name", ""),
+                                           a.get("term", ""), a.get("intent"),
+                                           int(a.get("limit") or 20))
+    if name == "class_campus_insight":
+        return tools.class_campus_insight(ctx, **(a or {}))
+    if name == "student_campus_insight":
+        return tools.student_campus_insight(ctx, str(a.get("student_no") or ""),
+                                            str(a.get("term") or ""))
+    if name == "class_roster":
+        return tools.class_roster(ctx, str(a.get("class_name") or ""))
     if name == "student_grades":
         return tools.student_grades(ctx, a.get("student_no", ""))
     if name == "class_grades_rank":
@@ -340,13 +541,21 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
     if name == "my_elective_advice":
         return tools.my_elective_advice(ctx, a.get("term") or None,
                                         top_n=int(a.get("top_n") or 8))
+    if name == "my_campus_insight":
+        return tools.my_campus_insight(ctx, **(a or {}))
     if name == "my_notices":
         return tools.my_notices(ctx, limit=int(a.get("limit") or 20))
+    if name == "mark_notices_read":
+        return tools.mark_notices_read(ctx)
+    if name == "save_career_intent":
+        return tools.save_career_intent(ctx, str(a.get("intent") or ""))
     if name == "my_career_guide":
         return tools.my_career_guide(ctx, a.get("term") or None)
     if name == "competition_guide":
         return tools.competition_guide(ctx, str(a.get("track") or "就业"),
                                        str(a.get("direction") or ""))
+    if name == "cert_guide":
+        return tools.cert_guide(ctx, limit=int(a.get("limit") or 6))
     if name == "search_jobs":
         return tools.search_jobs(ctx, a.get("query") or "", limit=int(a.get("limit") or 20))
     if name == "job_facets":
@@ -390,7 +599,12 @@ def _dispatch(ctx: ToolContext, name: str, args: Mapping[str, Any]) -> dict[str,
 
 
 def tool_node(state: AgentState) -> dict[str, Any]:
-    """调工具层的对应工具；越权按「无权限」处理，不抛给上层。"""
+    """调工具层的对应工具；越权按「无权限」处理，不抛给上层。
+
+    PermissionError / ValueError 分开呈现；其余运行时异常宽兜底成
+    「服务暂不可用」话术，并把工具名与异常类型写进审计——不让单个
+    工具故障拖垮整轮对话，排障时也能直接定位到是哪个工具出的错。
+    """
     ctx: ToolContext = state["ctx"]
     plan = state.get("plan") or {}
     name = str(plan.get("tool") or "")
@@ -398,6 +612,10 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     if name == "chitchat":
         # 纯对话：不碰任何数据
         return {"tool_result": {"mode": "chitchat"}, "tool_name": "chitchat"}
+    if name == "navigate":
+        # 页面定位：不碰任何数据，payload 原样透传给前端渲染「前往」按钮
+        return {"tool_result": {"mode": "navigate", "navigate": dict(args)},
+                "tool_name": "navigate"}
     try:
         result = _dispatch(ctx, name, args)
     except PermissionError as exc:
@@ -405,6 +623,18 @@ def tool_node(state: AgentState) -> dict[str, Any]:
     except ValueError as exc:
         # 参数错（班级不存在等）与越权分开呈现，不吓唬用户
         return {"tool_result": {"error": str(exc), "error_kind": "bad_request"},
+                "tool_name": name}
+    except Exception as exc:
+        # 宽兜底：工具内部异常（断库/坏数据等）原样话术不含内部细节；
+        # 审计记工具名+异常类型，不再靠顶层 api.chat.failed 反推定位
+        audit_event(
+            tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+            actor_id=ctx.student_id or ctx.teacher_id or 0,
+            action="agent.tool.failed", target=name,
+            detail={"error": str(exc)[:200], "error_type": type(exc).__name__},
+        )
+        return {"tool_result": {"error": "数据服务暂时不可用，请稍后再试",
+                                "error_kind": "unavailable"},
                 "tool_name": name}
     return {"tool_result": dict(result), "tool_name": name}
 
@@ -417,9 +647,12 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
     if not result:
         return "未查到相关数据。"
     if "error" in result:
-        # 越权与参数错（班级写错等）分开说话，不把输错名字说成越权
+        # 越权、参数错（班级写错等）、服务故障三种分开说话，
+        # 不把技术故障说成越权，也不把输错名字说成服务不可用
         if result.get("error_kind") == "bad_request":
             return f"这个数据查不了：{result.get('error')}"
+        if result.get("error_kind") == "unavailable":
+            return "这个数据暂时查不了，可能是数据服务忙，请稍后再试。"
         return f"该数据你没有访问权限：{result.get('error')}"
     parts: list[str] = []
     # 成绩排名结果同时带 classes / headcount，形状与 class_overview 撞车：
@@ -503,8 +736,38 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
                 f"累计 {policy.get('max_warning_count')} 次原则上作退学处理；"
                 "风险分仅用于排序参考。"
             )
-    if "items" in result:
-        parts.append(f"预警名单共命中 {result.get('count')} 人。")
+    if str(result.get("engine_version") or "").startswith("cert-") and "items" in result:
+        # 考证推荐：日期/理由/差距全部直引引擎输出，不换算不补充；
+        # 标「预计」的批次必须保留「预计」字样，不把推算说成官方日期
+        who = "、".join(str(x) for x in (result.get("grade"), result.get("major")) if x)
+        parts.append(
+            f"按你的情况（{who or '档案信息不全'}，目标 "
+            f"{result.get('intent') or '未设定'}）推荐考证："
+        )
+        for it in (result.get("items") or [])[:4]:
+            reasons = "；".join(it.get("match_reasons") or [])[:160]
+            gap = "；".join(it.get("gaps") or [])[:120]
+            parts.append(
+                f"{it.get('name')}（{it.get('level')}，主办方 {it.get('org')}，"
+                f"考试 {it.get('exam_text')}）：{it.get('status_note')}。"
+                f"为什么推荐它：{reasons}。差什么：{gap}。"
+                f"能获得：{str(it.get('benefits') or '')[:80]}。"
+                f"报名：{str(it.get('how_to_apply') or '')[:100]}"
+                f"（官网 {it.get('apply_url')}）。"
+            )
+        parts.append(str(result.get("note") or ""))
+    elif "items" in result:
+        # 名单是全班的（含「正常」档），直接说「共命中 N 人」会被读成「N 人被预警」。
+        # 有分布就报分布，把真正需要关注的人数说清楚。
+        dist = result.get("distribution") or {}
+        if dist:
+            parts.append(
+                f"预警名单覆盖 {result.get('count')} 人："
+                f"红色 {int(dist.get('red') or 0)} 人、橙色 {int(dist.get('orange') or 0)} 人、"
+                f"黄色 {int(dist.get('yellow') or 0)} 人、正常 {int(dist.get('none') or 0)} 人。"
+            )
+        else:
+            parts.append(f"预警名单共命中 {result.get('count')} 人。")
         for item in (result.get("items") or [])[:3]:
             parts.append(
                 f"{item.get('name')}（{item.get('student_no')}）风险分 {item.get('risk_score')}，"
@@ -694,6 +957,54 @@ def _template_draft(result: Mapping[str, Any], feedback: str = "") -> str:
         )
         parts.append("五维复合能力：" + "、".join(
             f"{_a_labels.get(k, k)} {v}" for k, v in abilities.items()) + "。")
+    if "roster" in result and "total" in result:
+        # 全班名册：只直引人数与姓名，学号明细留给页面定位器
+        names = "、".join(str(r.get("name") or r.get("student_no") or "")
+                          for r in (result.get("roster") or [])[:15])
+        parts.append(f"班级 {result.get('class_name')} 名册共 {result.get('total')} 人：{names}。")
+        if len(result.get("roster") or []) > 15:
+            parts.append("其余学生可在校园洞察页按姓名或学号搜索定位，逐个查看行为洞察。")
+        if result.get("note"):
+            parts.append(str(result.get("note")))
+    if result.get("marked") is True and "last_notice_id" in result:
+        parts.append("已把竞赛通知的已读水位推到最新，之后发布的新通知才会再提醒你。")
+    if "saved" in result and "intent" in result and "options" in result:
+        parts.append(f"已把职业目标保存为「{result.get('intent')}」，"
+                     "生涯规划与选课推荐会按这个方向联动。")
+    if "study_style" in result and "library" in result:
+        # 校园行为洞察（个人）：复用表达层纯函数模板，数值全部直引引擎
+        parts.append(campus_agent._template_student(result))
+    if "class_summary" in result and "study_style_distribution" in (result.get("class_summary") or {}):
+        # 校园行为洞察（班级）：按 study_style_distribution 与 teacher_career 的
+        # class_summary 区分，必须先认出来，否则会落进生涯规划分支输出 None
+        parts.append(campus_agent._template_class(result))
+    elif "class_summary" in result and isinstance(result.get("students"), list):
+        # 班级生涯规划：班级摘要直引，学生档案按方向过滤后计数（数值全部来自引擎）
+        cs = result.get("class_summary") or {}
+        parts.append(
+            f"班级 {result.get('class_name')} 在 {result.get('term') or '当前学期'}："
+            f"共 {cs.get('student_total')} 人，预警 {cs.get('warning_count')} 人"
+            f"（占比 {cs.get('warning_rate')}），班级均分 {cs.get('avg_grade')}，"
+            f"整体风险 {cs.get('risk_level')}。"
+        )
+        dist = dict(cs.get("intent_distribution") or {})
+        if dist:
+            parts.append("方向分布：" + "、".join(f"{k} {v} 人" for k, v in dist.items()) + "。")
+        top = cs.get("grade_rank_top") or []
+        if top:
+            parts.append("成绩前列：" + "、".join(
+                f"{s.get('name')}（{s.get('gpa')}，第 {s.get('rank')} 名）"
+                for s in top[:3]) + "。")
+        jobs = cs.get("job_match_top") or []
+        if jobs:
+            parts.append("班级高匹配岗位：" + "、".join(
+                f"{j.get('title')}（{j.get('company')}，匹配分 {j.get('final_score')}）"
+                for j in jobs[:3]) + "。")
+        if result.get("intent"):
+            parts.append(f"按「{result.get('intent')}」方向过滤后学生档案 "
+                         f"{result.get('filtered_total')} 人。")
+        else:
+            parts.append(f"学生档案共 {result.get('filtered_total')} 人（全班）。")
     if not parts:
         parts.append("已获取结构化结果，详见对应列表。")
     draft = "\n".join(parts)
@@ -1073,6 +1384,11 @@ def draft_node(state: AgentState,
         )
         draft = _llm_chitchat(state, on_token) or fallback_text
         mode = "chitchat"
+    elif (result or {}).get("mode") == "navigate":
+        nav = result.get("navigate") or {}
+        draft = (f"已为你定位到「{nav.get('title') or '目标'}」页面。"
+                 f"{nav.get('hint') or ''}点击下方「前往」按钮即可打开。")
+        mode = "navigate"
     elif str(state.get("tool_name") or "") == "run_workflow":
         draft = _workflow_draft(result)
         mode = "workflow"
@@ -1151,14 +1467,21 @@ def critic_node(state: AgentState) -> dict[str, Any]:
 def fallback_node(state: AgentState) -> dict[str, Any]:
     """超限降级：知识库/联网退回原文直引；其它场景输出不含数字的模板话术。"""
     result = state.get("tool_result") or {}
-    if str(state.get("tool_name") or "") in _EXTERNAL_TOOLS:
+    tool = str(state.get("tool_name") or "")
+    if tool in _EXTERNAL_TOOLS:
         return {"answer": _external_draft(state, result), "degraded": True}
     answer = render_fallback(result)
+    if tool == "warning_list":
+        answer = f"{answer}\n\n{WARNING_REVIEW_NOTE}"
     return {"answer": answer, "degraded": True}
 
 
 def accept_node(state: AgentState) -> dict[str, Any]:
-    return {"answer": str(state.get("draft") or ""), "degraded": False}
+    answer = str(state.get("draft") or "")
+    # 预警名单是给教师做人工跟进的线索，不是自动处置结论
+    if str(state.get("tool_name") or "") == "warning_list" and WARNING_REVIEW_NOTE not in answer:
+        answer = f"{answer}\n\n{WARNING_REVIEW_NOTE}"
+    return {"answer": answer, "degraded": False}
 
 
 def _suggested_followups(state: AgentState) -> list[str]:
@@ -1245,6 +1568,52 @@ def _initial_state(ctx: ToolContext, query: str, term: str | None,
     }
 
 
+# ----------------------------------------------------------------
+# 导出引导：用户说「下载/导出」时直接给确定性答案
+# ----------------------------------------------------------------
+# 为什么不让模型自由发挥：模型不知道页面有下载入口时会编出「系统不支持下载」，
+# 这类否定式幻觉比答错数字更伤演示效果。这里用固定话术短路，绕过 LLM。
+_EXPORT_MARKERS: tuple[str, ...] = (
+    "下载", "导出", "存成", "存为", "保存成", "保存为", "生成表格", "生成文档",
+    "export", "excel", "xlsx", "csv", "表格文件", "文档一份",
+)
+
+
+def _export_guide(ctx: ToolContext, query: str) -> dict[str, Any] | None:
+    """命中「下载/导出」意图时返回引导话术；未命中返回 None 走原流程。"""
+    text = str(query or "").lower()
+    if not any(marker in text for marker in _EXPORT_MARKERS):
+        return None
+
+    if ctx.actor_type == "teacher":
+        answer = (
+            "可以下载，入口在对应页面的筛选栏上，导出范围跟你当前选中的班级、学期、"
+            "预警等级完全一致：\n"
+            "· 学生档案 →「下载名单」：学号、姓名、学院、专业、班级、年级、预警等级、"
+            "风险分、预警归因、数据覆盖率、GPA、挂科数、出勤率、班级排名百分位；\n"
+            "· 成绩单 →「全班成绩」：Excel 里分「成绩明细」和「个人汇总」两个表；"
+            "「下载成绩单」则导出当前选中的那一名学生。\n"
+            "三种格式都支持：Excel（.xlsx）、CSV（.csv）、JSON（.json）。"
+            "如果是要把名单交给别人，建议用 Excel，直接能打开、能筛选。"
+        )
+        followups = ("AI2301 这学期预警名单有哪些人", "这个班的成绩分布怎么样")
+    else:
+        answer = (
+            "可以下载你自己的成绩单：进「成绩单」页面，在右上角点「下载成绩单」，"
+            "可选 Excel（.xlsx）、CSV（.csv）、JSON（.json）三种格式，"
+            "导出的内容和页面显示的是同一份数据，包含每门课的学期、课程、学分、分数、是否重修。"
+        )
+        followups = ("我这学期成绩怎么样", "我下学期会不会挂科")
+
+    return {
+        "answer": answer,
+        "degraded": False,
+        "tool_name": "export_guide",
+        "citations": [],
+        "suggested_followups": list(followups),
+    }
+
+
 def run_chat(
     ctx: ToolContext,
     query: str,
@@ -1263,9 +1632,35 @@ def run_chat(
     history 是前端回传的最近几轮对话，只作为 LLM 上下文，不参与任何鉴权。
     """
     trace_id = uuid.uuid4().hex[:12]
+    pipeline_started = time.perf_counter()
     state = _initial_state(ctx, query, term, history, last_tool, trace_id)
     if draft_fn is not None:
         state["draft_fn"] = draft_fn
+
+    # 「下载/导出」走确定性引导，不进模型：模型不知道页面已有导出按钮时
+    # 会答「系统不支持下载」，这种否定式幻觉会直接把功能说没。
+    if tool_result is None and draft_fn is None:
+        guided = _export_guide(ctx, query)
+        if guided is not None:
+            audit_event(
+                tenant_id=ctx.tenant_id,
+                actor_type=ctx.actor_type,
+                actor_id=ctx.student_id or ctx.teacher_id or 0,
+                action="agent.chat",
+                target=trace_id,
+                detail={"query": str(query)[:120], "tool": "export_guide",
+                        "planner": "graph", "kind": "export_guide"},
+            )
+            return {
+                **guided,
+                "trace_id": trace_id,
+                "attempts": 1,
+                "verdict": {"passed": True, "kind": "export_guide"},
+                "planner": "graph",
+                "draft_mode": "guide",
+                "graph_version": GRAPH_VERSION,
+                "critic_version": CRITIC_VERSION,
+            }
 
     # 多意图/任务型问法走自主大脑（规划→多工具→观察→汇总），失败自动回退旧管线
     if tool_result is None and draft_fn is None and _is_brain_candidate(query, history):
@@ -1274,6 +1669,9 @@ def run_chat(
                                        history=state.get("history"),
                                        session_id=session_id)
         if brain_result is not None:
+            brain_result.setdefault("graph_version", GRAPH_VERSION)
+            brain_result.setdefault("critic_version", CRITIC_VERSION)
+            brain_result.setdefault("draft_mode", "brain")
             audit_event(
                 tenant_id=ctx.tenant_id,
                 actor_type=ctx.actor_type,
@@ -1291,6 +1689,7 @@ def run_chat(
                     "brain_version": brain_result.get("brain_version"),
                     "graph_version": GRAPH_VERSION,
                     "critic_version": CRITIC_VERSION,
+                    "duration_ms": round((time.perf_counter() - pipeline_started) * 1000, 2),
                 },
             )
             return brain_result
@@ -1338,8 +1737,10 @@ def run_chat(
             "planner": str(state.get("planner") or "graph"),
             "graph_version": GRAPH_VERSION,
             "critic_version": CRITIC_VERSION,
+            "duration_ms": round((time.perf_counter() - pipeline_started) * 1000, 2),
         },
     )
+    result_meta = state.get("tool_result") or {}
     return {
         "answer": answer,
         "trace_id": trace_id,
@@ -1348,10 +1749,18 @@ def run_chat(
         "verdict": state.get("verdict") or {},
         "attempts": int(state.get("attempts") or 0),
         "tool_name": str(state.get("tool_name") or ""),
+        "draft_mode": str(state.get("draft_mode") or ""),
+        "planner": str(state.get("planner") or "graph"),
+        "graph_version": GRAPH_VERSION,
+        "critic_version": CRITIC_VERSION,
+        "engine_version": str(result_meta.get("engine_version") or ""),
+        "calc_version": str(result_meta.get("calc_version") or ""),
         # 引用清单（知识库给页码、联网给 URL）：前端据此渲染可点开的出处
-        "citations": list((state.get("tool_result") or {}).get("citations") or []),
+        "citations": list(result_meta.get("citations") or []),
         # 引导式追问：前端渲染成可点的问题 chips
         "suggested_followups": _suggested_followups(state),
+        # 页面导航 payload（route/title/hint）：前端渲染「前往」按钮
+        "navigate": result_meta.get("navigate") or None,
     }
 
 
@@ -1380,6 +1789,7 @@ def run_chat_stream(
     超过 MAX_RETRY 走降级模板，done.answer 永远是唯一最终的、已核验的答案。
     """
     trace_id = uuid.uuid4().hex[:12]
+    pipeline_started = time.perf_counter()
     state = _initial_state(ctx, query, term, history, last_tool, trace_id)
     if draft_fn is not None:
         state["draft_fn"] = draft_fn
@@ -1440,6 +1850,7 @@ def run_chat_stream(
                         "brain_version": brain_result.get("brain_version"),
                         "graph_version": GRAPH_VERSION,
                         "critic_version": CRITIC_VERSION,
+                        "duration_ms": round((time.perf_counter() - pipeline_started) * 1000, 2),
                     },
                 )
                 yield {
@@ -1453,7 +1864,11 @@ def run_chat_stream(
                     "citations": brain_result.get("citations") or [],
                     "suggested_followups": brain_result.get("suggested_followups") or [],
                     "steps": brain_result.get("steps") or [],
+                    "verdict": brain_result.get("verdict") or {},
+                    "draft_mode": "brain",
                     "planner": "brain",
+                    "graph_version": GRAPH_VERSION,
+                    "critic_version": CRITIC_VERSION,
                     "agent_mode": "brain",
                 }
                 return
@@ -1544,8 +1959,10 @@ def run_chat_stream(
                 "planner": str(state.get("planner") or "graph"),
                 "graph_version": GRAPH_VERSION,
                 "critic_version": CRITIC_VERSION,
+                "duration_ms": round((time.perf_counter() - pipeline_started) * 1000, 2),
             },
         )
+        result_meta = state.get("tool_result") or {}
         yield {
             "type": "done",
             "answer": answer,
@@ -1554,8 +1971,16 @@ def run_chat_stream(
             "degraded": degraded,
             "attempts": int(state.get("attempts") or 0),
             "tool": str(state.get("tool_name") or ""),
-            "citations": list((state.get("tool_result") or {}).get("citations") or []),
+            "verdict": state.get("verdict") or {},
+            "draft_mode": str(state.get("draft_mode") or ""),
+            "planner": str(state.get("planner") or "graph"),
+            "graph_version": GRAPH_VERSION,
+            "critic_version": CRITIC_VERSION,
+            "engine_version": str(result_meta.get("engine_version") or ""),
+            "calc_version": str(result_meta.get("calc_version") or ""),
+            "citations": list(result_meta.get("citations") or []),
             "suggested_followups": _suggested_followups(state),
+            "navigate": result_meta.get("navigate") or None,
         }
     except Exception as exc:  # 断库/工具异常等：给安全话术，不外泄堆栈
         audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,

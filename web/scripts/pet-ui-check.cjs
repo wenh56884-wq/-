@@ -10,7 +10,7 @@
 //      $env:NODE_PATH = Join-Path $n 'node_modules'; node web/scripts/pet-ui-check.cjs
 //   2) 前置：dev server（npm run dev，默认 5173）或 FastAPI 单服务（用 --base 指定）。
 //      浏览器走系统 Edge（--channel=msedge），不额外下载 Chromium。
-//   3) 登录用 README 公开的演示账号 AI20260001（口令同学号）。
+//   3) 登录用 README 公开的演示账号 AI20260001（统一口令 123456h）。
 //   4) 退出码：0 全通过；1 有失败项。
 // 用法：node web/scripts/pet-ui-check.cjs [--base http://localhost:5173]
 

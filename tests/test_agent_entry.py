@@ -17,6 +17,7 @@ import pytest
 
 from agents import auto_plan
 from agents import graph as agent_graph
+from agents import teacher_agent as agent_teacher
 from agents import tools as agent_tools
 from agents.tools import ToolContext
 from app.config import get_settings
@@ -367,6 +368,32 @@ def test_v3_dispatch_and_routing(monkeypatch):
     assert plan["tool_name"] == "exam_positions"
 
 
+def test_student_data_followup_continues_last_data_tool():
+    """数据面追问：「里面/还有」指上一轮的数据面 → 沿用同一数据工具。
+
+    用户实测场景：上一轮在问职位表，追问「那里面还有硕士的吗」应继续查
+    exam_positions 且让 education 过滤生效；追问残词不得变成垃圾关键词。
+    """
+    state = {"ctx": _student(), "query": "那里面还有硕士学历的吗",
+             "last_tool": "exam_positions",
+             "history": [{"role": "user", "text": "国考职位表里有哪些岗位"},
+                          {"role": "assistant", "text": "命中 2 个职位"}]}
+    plan = agent_graph.plan_node(state)
+    assert plan["tool_name"] == "exam_positions"
+    args = (plan.get("plan") or {}).get("args") or {}
+    assert args.get("education") == "硕士研究生"
+    assert "keyword" not in args
+
+
+def test_student_data_followup_does_not_hijack_new_topic():
+    """上一轮查过职位表，但新问题换成了成绩 → 正常路由，不被追问延续劫持。"""
+    state = {"ctx": _student(), "query": "那我的成绩怎么样",
+             "last_tool": "exam_positions",
+             "history": [{"role": "user", "text": "国考职位表里有哪些岗位"}]}
+    plan = agent_graph.plan_node(state)
+    assert plan["tool_name"] == "my_grades"
+
+
 @DB_OK
 def test_exam_positions_real_and_empty():
     r = agent_tools.exam_positions(_student(), place="重庆", education="本科", limit=3)
@@ -536,10 +563,10 @@ def test_web_search_provider_picks_bocha(monkeypatch):
 # ----------------------------------------------------------------
 # 7. 注册表守卫（反向）：能分发的工具必须有归属
 # ----------------------------------------------------------------
-# 这几类工具不进「数据工具注册表」：外部检索、工作流、闲聊、阈值配置，
+# 这几类工具不进「数据工具注册表」：外部检索、工作流、闲聊、阈值配置、页面导航，
 # 它们不对应某个板块的数据取数，归属由各自模块管。
 _NON_DATA_TOOLS = {"kb_search", "web_search", "run_workflow", "chitchat",
-                   "warning_thresholds"}
+                   "warning_thresholds", "navigate"}
 
 
 def test_every_dispatchable_tool_is_registered():
@@ -648,3 +675,347 @@ def test_draft_my_assessment_no_result_shows_note():
     draft = agent_graph._template_draft(result)
     assert "还没有做过软技能测评" in draft
     assert "总分" not in draft
+
+
+# ----------------------------------------------------------------
+# 教师端班级生涯规划（teacher_career_search）三件套
+# ----------------------------------------------------------------
+def test_teacher_career_search_registered_everywhere():
+    """三处同步：tools 注册表 / auto_plan / EXECUTABLE，且不进学生端。"""
+    assert "teacher_career_search" in agent_tools.TEACHER_TOOLS
+    assert "teacher_career_search" not in agent_tools.STUDENT_TOOLS
+    assert "teacher_career_search" in {t.name for t in auto_plan._TEACHER_TOOLS}
+    assert "teacher_career_search" not in {t.name for t in auto_plan._STUDENT_TOOLS}
+    assert "teacher_career_search" in auto_plan.EXECUTABLE
+    assert "teacher_career_search" in agent_teacher._CLASS_LEVEL_TOOLS
+
+
+def test_teacher_career_search_dispatch_reachable(monkeypatch):
+    """teacher_career_search 能被 tool_node 分发，且 class_name/term/intent/limit 正确透传。"""
+    seen: dict = {}
+
+    def fake(ctx, class_name, term="", intent=None, limit=20):
+        seen["called"] = True
+        seen["args"] = (class_name, term, intent, limit)
+        return {"tool": "teacher_career_search"}
+
+    monkeypatch.setattr(agent_tools, "teacher_career_search", fake, raising=True)
+    agent_graph._dispatch(_teacher(), "teacher_career_search",
+                          {"class_name": "AI2201", "term": "2025-2026-1",
+                           "intent": "就业", "limit": 10})
+    assert seen.get("called") is True
+    assert seen["args"] == ("AI2201", "2025-2026-1", "就业", 10)
+
+
+def test_teacher_career_search_routing():
+    """教师问班级生涯规划要命中 teacher_career_search，不被班级概貌/差距抢走。"""
+    assert _plan(_teacher(), "全班的生涯规划档案") == "teacher_career_search"
+    assert _plan(_teacher(), "看看这个班的职业规划") == "teacher_career_search"
+    assert _plan(_teacher(), "按班级规划查看全班档案") == "teacher_career_search"
+
+
+def test_draft_teacher_career_search_reads_engine_values():
+    """班级生涯模板稿原样直引引擎数值，不出现 None、不换算、不补 0。"""
+    result = {
+        "engine_version": "teacher-career-v1", "calc_version": "v1.1",
+        "class_name": "AI2201", "term": "2025-2026-1", "intent": "就业",
+        "class_summary": {
+            "student_total": 30, "warning_count": 6, "warning_rate": 0.2,
+            "avg_grade": 82.5, "risk_level": "中",
+            "intent_distribution": {"就业": 18, "考公": 8, "考研": 4, "考编": 0, "未选": 0},
+            "grade_rank_top": [{"student_no": "A1", "name": "张三", "gpa": 92.0, "rank": 1}],
+            "job_match_top": [{"job_id": 7, "title": "数据开发", "company": "某公司",
+                               "final_score": 88.0, "recommended_by": 3}],
+        },
+        "students": [{"student_no": "A1"}], "student_total": 30, "filtered_total": 18,
+    }
+    draft = agent_graph._template_draft(result)
+    assert "None" not in draft
+    assert "共 30 人" in draft and "预警 6 人" in draft
+    assert "班级均分 82.5" in draft and "整体风险 中" in draft
+    assert "张三" in draft and "数据开发" in draft
+    assert "过滤后学生档案 18 人" in draft
+
+
+# ----------------------------------------------------------------
+# 校园行为洞察（my_campus_insight / class_campus_insight）三件套
+# ----------------------------------------------------------------
+def test_campus_insight_registered_everywhere():
+    """六处同步：tools 注册表 / auto_plan 双端 / EXECUTABLE / 班级级让位名单。"""
+    assert "my_campus_insight" in agent_tools.STUDENT_TOOLS
+    assert "my_campus_insight" not in agent_tools.TEACHER_TOOLS
+    assert "class_campus_insight" in agent_tools.TEACHER_TOOLS
+    assert "class_campus_insight" not in agent_tools.STUDENT_TOOLS
+    assert "my_campus_insight" in {t.name for t in auto_plan._STUDENT_TOOLS}
+    assert "my_campus_insight" not in {t.name for t in auto_plan._TEACHER_TOOLS}
+    assert "class_campus_insight" in {t.name for t in auto_plan._TEACHER_TOOLS}
+    assert "class_campus_insight" not in {t.name for t in auto_plan._STUDENT_TOOLS}
+    assert {"my_campus_insight", "class_campus_insight"} <= auto_plan.EXECUTABLE
+    assert "class_campus_insight" in agent_teacher._CLASS_LEVEL_TOOLS
+
+
+def test_campus_insight_dispatch_reachable(monkeypatch):
+    """两个工具名都能被 tool_node 分发，且 term/class_name/limit 正确透传。"""
+    seen: dict = {}
+
+    def fake_my(ctx, term=None):
+        seen["my"] = (ctx, term)
+        return {"tool": "my_campus_insight"}
+
+    def fake_class(ctx, class_name, term="", limit=30):
+        seen["class"] = (class_name, term, limit)
+        return {"tool": "class_campus_insight"}
+
+    monkeypatch.setattr(agent_tools, "my_campus_insight", fake_my, raising=True)
+    monkeypatch.setattr(agent_tools, "class_campus_insight", fake_class, raising=True)
+    agent_graph._dispatch(_student(), "my_campus_insight", {"term": "2025-2026-1"})
+    agent_graph._dispatch(_teacher(), "class_campus_insight",
+                          {"class_name": "AI2201", "term": "2025-2026-1", "limit": 10})
+    assert seen["my"][1] == "2025-2026-1"
+    assert seen["class"] == ("AI2201", "2025-2026-1", 10)
+
+
+def test_campus_insight_student_routing():
+    """学生问校园行为要命中 my_campus_insight，不被既有路由/知识库抢走。"""
+    assert _plan(_student(), "我的校园行为洞察") == "my_campus_insight"
+    assert _plan(_student(), "我这学期到馆多少次") == "my_campus_insight"
+    assert _plan(_student(), "我的一卡通消费规律吗") == "my_campus_insight"
+    assert _plan(_student(), "我的出勤情况怎么样") == "my_campus_insight"
+    # 既有路由回归：不被新词抢走
+    assert _plan(_student(), "我的成绩怎么样") == "my_grades"
+    assert _plan(_student(), "有什么竞赛可以参加") == "competition_guide"
+    assert _plan(_student(), "我的预警情况") == "my_warning"
+    # 制度问法仍走知识库（「考勤/证书」与 kb 词表撞车，由守卫让位）
+    assert _plan(_student(), "考勤管理规定是什么") == "kb_search"
+    assert _plan(_student(), "资格证书管理办法") == "kb_search"
+
+
+def test_campus_insight_term_args():
+    """显式学期号要从问句抠进 args；没写学期就留空由工具回落。"""
+    plan = agent_graph.plan_node(
+        {"ctx": _student(), "query": "2025-2026-1 学期我的图书馆借阅情况", "history": []})
+    assert plan["tool_name"] == "my_campus_insight"
+    assert plan["plan"]["args"] == {"term": "2025-2026-1"}
+    plan2 = agent_graph.plan_node(
+        {"ctx": _student(), "query": "我的图书馆借阅情况", "history": []})
+    assert plan2["tool_name"] == "my_campus_insight"
+    assert plan2["plan"]["args"] == {}
+
+
+def test_class_campus_insight_teacher_routing():
+    """教师问班级行为洞察要命中 class_campus_insight，「班级画像」不被个人画像抢走。"""
+    assert _plan(_teacher(), "AI2201 的班级行为洞察") == "class_campus_insight"
+    assert _plan(_teacher(), "看看班级画像里的低投入学生") == "class_campus_insight"
+    # 既有路由回归
+    assert _plan(_teacher(), "这个学生的画像") == "student_profile"
+    assert _plan(_teacher(), "全班的生涯规划档案") == "teacher_career_search"
+
+
+def test_draft_campus_insight_reads_engine_values():
+    """个人/班级洞察模板稿原样直引引擎数值，不出现 None，且能过 critic。"""
+    from agents.critic import verify
+    from engine import campus_insight as ci
+
+    facts = ci.build_student_insight(
+        student_no="S1", name="张三", class_name="AI2201", term="2025-2026-1",
+        library=[{"term": "2025-2026-1", "visits": 9, "borrows": 3}],
+        consumption=[{"term": "2025-2026-1", "count": 80, "active_days": 50}],
+        activity_counts=[], activity_recent=[],
+        attendance=[{"term": "2025-2026-1", "expected": 100, "absent": 5, "rate": 0.95}],
+        job_view_counts=[], job_top_cities=[{"city": "重庆", "cnt": 5}],
+        job_top_industries=[], extra=None, snapshots=[])
+    draft = agent_graph._template_draft(facts)
+    assert "None" not in draft
+    assert "0.53" in draft and "9" in draft and "95%" in draft and "重庆" in draft
+    assert verify(draft, facts).passed
+
+    cls = ci.build_class_insight(tenant_id=1, class_name="AI2201",
+                                 term="2025-2026-1", students=[facts])
+    cdraft = agent_graph._template_draft(cls)
+    assert "None" not in cdraft
+    assert "共 1 人" in cdraft and "稳健型 1 人" in cdraft
+    assert "低投入 1 人" in cdraft and "张三" in cdraft
+    assert verify(cdraft, cls).passed
+    # 班级洞察不能落进 teacher_career 的 class_summary 分支
+    assert "班级均分" not in cdraft and "整体风险" not in cdraft
+
+
+# ----------------------------------------------------------------
+# 全班覆盖：逐生行为洞察 / 全班名册（三件套）
+# ----------------------------------------------------------------
+def test_per_student_campus_registered_everywhere():
+    assert "student_campus_insight" in agent_tools.TEACHER_TOOLS
+    assert "student_campus_insight" not in agent_tools.STUDENT_TOOLS
+    assert "class_roster" in agent_tools.TEACHER_TOOLS
+    assert "class_roster" not in agent_tools.STUDENT_TOOLS
+    tnames = {t.name for t in auto_plan._TEACHER_TOOLS}
+    snames = {t.name for t in auto_plan._STUDENT_TOOLS}
+    assert {"student_campus_insight", "class_roster"} <= tnames
+    assert not ({"student_campus_insight", "class_roster"} & snames)
+    assert {"student_campus_insight", "class_roster"} <= auto_plan.EXECUTABLE
+
+
+def test_per_student_campus_dispatch_reachable(monkeypatch):
+    seen: dict = {}
+
+    def fake_stu(ctx, student_no, term=""):
+        seen["stu"] = (student_no, term)
+        return {"tool": "student_campus_insight"}
+
+    def fake_roster(ctx, class_name):
+        seen["roster"] = class_name
+        return {"tool": "class_roster"}
+
+    monkeypatch.setattr(agent_tools, "student_campus_insight", fake_stu, raising=True)
+    monkeypatch.setattr(agent_tools, "class_roster", fake_roster, raising=True)
+    agent_graph._dispatch(_teacher(), "student_campus_insight",
+                          {"student_no": "AI20230001", "term": "2025-2026-1"})
+    agent_graph._dispatch(_teacher(), "class_roster", {"class_name": "AI2201"})
+    assert seen["stu"] == ("AI20230001", "2025-2026-1")
+    assert seen["roster"] == "AI2201"
+
+
+def test_teacher_named_student_behavior_routes_to_per_student():
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT `学号`,`租户编号` FROM `学生` ORDER BY `学号` LIMIT 1")
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    ctx = ToolContext(actor_type="teacher", tenant_id=int(row["租户编号"]), teacher_id=1)
+    plan = agent_graph.plan_node(
+        {"ctx": ctx, "query": f"{row['学号']} 的借阅情况", "history": []})
+    assert plan["tool_name"] == "student_campus_insight"
+    assert plan["plan"]["args"]["student_no"] == row["学号"]
+
+
+def test_teacher_class_behavior_beats_kb_word():
+    """「全班考勤怎么样」问的是行为数据，不被知识库词「考勤」抢走；制度问法仍走 kb。"""
+    assert _plan(_teacher(), "全班考勤怎么样") == "class_campus_insight"
+    assert _plan(_teacher(), "AI2201 的出勤情况") == "class_campus_insight"
+    assert _plan(_teacher(), "考勤管理规定是什么") == "kb_search"
+
+
+def test_class_roster_routing():
+    assert _plan(_teacher(), "AI2201 班里有哪些学生") == "class_roster"
+    assert _plan(_teacher(), "看看班级名册") == "class_roster"
+    # 预警名单不被名册抢走
+    assert _plan(_teacher(), "这个班的预警名单") == "warning_list"
+
+
+def test_draft_class_roster_reads_engine_values():
+    from agents.critic import verify
+    result = {"class_name": "AI2201", "total": 2,
+              "roster": [{"student_no": "AI20230001", "name": "张三", "major": "软件工程"},
+                         {"student_no": "AI20230002", "name": "李四", "major": "软件工程"}],
+              "tools_version": agent_tools.TOOLS_VERSION}
+    draft = agent_graph._template_draft(result)
+    assert "None" not in draft
+    assert "共 2 人" in draft and "张三" in draft and "李四" in draft
+    assert verify(draft, result).passed
+
+
+# ----------------------------------------------------------------
+# 学生端操作型能力：通知已读 / 保存职业目标 / 岗位搜索（三件套）
+# ----------------------------------------------------------------
+def test_student_write_tools_registered_everywhere():
+    for name in ("mark_notices_read", "save_career_intent"):
+        assert name in agent_tools.STUDENT_TOOLS
+        assert name not in agent_tools.TEACHER_TOOLS
+        assert name in {t.name for t in auto_plan._STUDENT_TOOLS}
+        assert name not in {t.name for t in auto_plan._TEACHER_TOOLS}
+        assert name in auto_plan.EXECUTABLE
+
+
+def test_student_write_tools_dispatch_reachable(monkeypatch):
+    seen: dict = {}
+
+    def fake_mark(ctx):
+        seen["mark"] = True
+        return {"marked": True, "last_notice_id": 12, "student_no": "S1"}
+
+    def fake_save(ctx, intent):
+        seen["intent"] = intent
+        return {"saved": True, "intent": intent, "options": []}
+
+    monkeypatch.setattr(agent_tools, "mark_notices_read", fake_mark, raising=True)
+    monkeypatch.setattr(agent_tools, "save_career_intent", fake_save, raising=True)
+    agent_graph._dispatch(_student(), "mark_notices_read", {})
+    agent_graph._dispatch(_student(), "save_career_intent", {"intent": "考研"})
+    assert seen["mark"] is True and seen["intent"] == "考研"
+
+
+def test_student_mark_read_and_save_intent_routing():
+    assert _plan(_student(), "把通知全部标记已读") == "mark_notices_read"
+    plan = agent_graph.plan_node(
+        {"ctx": _student(), "query": "把我的职业目标定为考公", "history": []})
+    assert plan["tool_name"] == "save_career_intent"
+    assert plan["plan"]["args"]["intent"] == "考公"
+    # 竞争力问法不被当成保存操作
+    assert _plan(_student(), "我考公有多大把握") == "my_career_forecast"
+
+
+def test_draft_write_tools_no_numbers():
+    from agents.critic import verify
+    marked = {"student_no": "AI20230001", "last_notice_id": 12, "marked": True}
+    d1 = agent_graph._template_draft(marked)
+    assert "已读水位" in d1 and verify(d1, marked).passed
+    saved = {"intent": "考公", "saved": True,
+             "options": [{"value": "考公", "label": "考公"}]}
+    d2 = agent_graph._template_draft(saved)
+    assert "考公" in d2 and verify(d2, saved).passed
+
+
+def test_student_plain_attendance_routes_to_campus():
+    """纯行为问法不再被知识库词「考勤」误抢；制度问法仍走知识库。"""
+    assert _plan(_student(), "我的考勤怎么样") == "my_campus_insight"
+    assert _plan(_student(), "考勤管理规定是什么") == "kb_search"
+
+
+def test_student_job_search_routing():
+    plan = agent_graph.plan_node(
+        {"ctx": _student(), "query": "帮我搜一下Java岗位", "history": []})
+    assert plan["tool_name"] == "search_jobs"
+    assert plan["plan"]["args"].get("query") == "Java"
+    # 推荐问法仍归个性化推荐
+    assert _plan(_student(), "帮我推荐几个岗位") == "my_recommendations"
+
+
+def test_teacher_job_search_and_exam_notices_routing():
+    assert _plan(_teacher(), "搜一下重庆的岗位") == "search_jobs"
+    assert _plan(_teacher(), "最近有什么招考公告") == "exam_notices"
+    # 差距问法不被「岗位」抢走
+    assert _plan(_teacher(), "AI2201 和岗位要求的差距在哪") == "career_gap"
+
+
+# ----------------------------------------------------------------
+# 页面导航：操作型问法 → navigate（不取数、无数值、前端渲染前往按钮）
+# ----------------------------------------------------------------
+def test_navigate_routing_and_payload():
+    plan = agent_graph.plan_node(
+        {"ctx": _student(), "query": "打开校园洞察", "history": []})
+    assert plan["tool_name"] == "navigate"
+    assert plan["plan"]["args"]["route"] == "/student/campus"
+    plan2 = agent_graph.plan_node(
+        {"ctx": _teacher(), "query": "进入成绩单页面", "history": []})
+    assert plan2["tool_name"] == "navigate"
+    assert plan2["plan"]["args"]["route"] == "/teacher/grades"
+    # 数据问法不被导航劫走
+    assert _plan(_student(), "我想去考公") == "my_career_forecast"
+    assert _plan(_student(), "我的成绩怎么样") == "my_grades"
+
+
+def test_navigate_tool_and_draft_no_numbers():
+    from agents.critic import verify
+    state = {"ctx": _student(), "query": "打开校园洞察",
+             "plan": {"tool": "navigate",
+                      "args": {"route": "/student/campus", "title": "校园洞察",
+                               "hint": "这里能看你的行为画像。"}},
+             "tool_name": "navigate", "attempts": 0, "trace_id": "t"}
+    state.update(agent_graph.tool_node(state))
+    assert state["tool_result"]["mode"] == "navigate"
+    assert state["tool_result"]["navigate"]["route"] == "/student/campus"
+    state.update(agent_graph.draft_node(state))
+    assert "前往" in state["draft"] and "校园洞察" in state["draft"]
+    assert verify(state["draft"], state["tool_result"]).passed

@@ -12,6 +12,7 @@ import pymysql
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarsHTTPException
@@ -30,12 +31,15 @@ from app.config import get_settings
 from app.logging_config import get_logger
 from app.routers import assessment as assessment_router
 from app.routers import career as career_router
+from app.routers import cert as cert_router
 from app.routers import chat as chat_router
 from app.routers import elective as elective_router
 from app.routers import exam as exam_router
+from app.routers import export as export_router
 from app.routers import forecast as forecast_router
 from app.routers import grades as grades_router
 from app.routers import interview as interview_router
+from app.routers import interview_lab as interview_lab_router
 from app.routers import job as job_router
 from app.routers import kb as kb_router
 from app.routers import kg as kg_router
@@ -161,6 +165,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 静态资源与 JSON 走 gzip：JS/CSS 可再省约 70% 传输量。
+    # Starlette 默认排除 text/event-stream、video/*、image/webp、woff2，
+    # 因此不会影响 /chat/stream 的 SSE 和视频/字体。
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+
     app.include_router(assessment_router.router)
     app.include_router(teacher_router.router)
     app.include_router(student_router.router)
@@ -169,8 +178,11 @@ def create_app() -> FastAPI:
     app.include_router(forecast_router.router)
     app.include_router(grades_router.router)
     app.include_router(exam_router.router)
+    app.include_router(cert_router.router)
+    app.include_router(export_router.router)
     app.include_router(job_router.router)
     app.include_router(interview_router.router)
+    app.include_router(interview_lab_router.router)
     app.include_router(kg_router.router)
     app.include_router(qb_router.router)
     app.include_router(kb_router.router)
@@ -299,16 +311,31 @@ def create_app() -> FastAPI:
 
         身份只从 get_current_ctx 取（已校验角色与租户），不再手工解析 claims。
         """
-        trace_id = uuid.uuid4().hex[:12]
         result = _run_chat(ctx, body)
         answer = str(result.get("answer") or "").strip()
         degraded = bool(result.get("degraded"))
         if not answer:
             answer, degraded = "未得到可用答复，已降级为安全话术。", True
-        return ChatOut(answer=answer, trace_id=trace_id, term=body.term,
-                       degraded=degraded, session_id=result.get("session_id"),
-                       tool=str(result.get("tool_name") or ""),
-                       citations=list(result.get("citations") or []))
+        # 必须沿用图/服务返回的 trace_id：反馈接口按它回查审计，不能另生成一个
+        trace_id = str(result.get("trace_id") or uuid.uuid4().hex[:12])
+        return ChatOut(
+            answer=answer, trace_id=trace_id, term=body.term,
+            degraded=degraded, session_id=result.get("session_id"),
+            tool=str(result.get("tool_name") or ""),
+            citations=list(result.get("citations") or []),
+            suggested_followups=list(result.get("suggested_followups") or []),
+            attempts=int(result.get("attempts") or 1),
+            verdict=dict(result.get("verdict") or {}),
+            draft_mode=str(result.get("draft_mode") or ""),
+            planner=str(result.get("planner") or ""),
+            critic_version=str(result.get("critic_version") or ""),
+            graph_version=str(result.get("graph_version") or ""),
+            engine_version=str(result.get("engine_version") or ""),
+            calc_version=str(result.get("calc_version") or ""),
+            steps=list(result.get("steps") or []),
+            brain_version=str(result.get("brain_version") or ""),
+            elapsed_ms=int(result.get("elapsed_ms") or 0),
+        )
 
     # --- 静态托管（P10-3）：构建产物存在才挂，已注册路由与 /api 不受影响 ---
     dist = get_settings().frontend_dist_obj
@@ -351,6 +378,15 @@ try:
     start_recruit_sync()
 except Exception:
     logger.exception("recruit sync startup failed")
+
+# 后台同步：国考职位（《招考简章》年度数据）定期增量入库
+# 间隔由 GUOKAO_SYNC_HOURS 控制（默认 168 小时 = 一周；0 关闭）
+try:
+    from app.guokao_sync import start_background_sync as start_guokao_sync
+
+    start_guokao_sync()
+except Exception:
+    logger.exception("guokao sync startup failed")
 
 
 if __name__ == "__main__":  # pragma: no cover

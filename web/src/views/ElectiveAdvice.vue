@@ -258,7 +258,7 @@ const degradedText = computed(() => {
 })
 
 function goJobs() {
-  router.push('/student/jobs')
+  router.push('/student/opportunity')
 }
 
 async function load() {

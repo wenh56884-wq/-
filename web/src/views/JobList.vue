@@ -105,10 +105,23 @@
         <h3 class="bento-title">行业分布</h3>
         <span class="bento-eyebrow">按在招岗位</span>
       </div>
-      <div class="top-tags">
-        <span v-for="t in stats.top_industries || []" :key="t.industry" class="top-tag">
-          {{ t.industry }} {{ t.total }}
-        </span>
+      <div class="top-tags" aria-label="按行业筛选岗位">
+        <button
+          v-for="(t, index) in stats.top_industries || []"
+          :key="t.industry || `unknown-${index}`"
+          class="top-tag"
+          :class="{ active: !!t.industry && industry === t.industry, 'is-muted': !t.industry }"
+          type="button"
+          :disabled="!t.industry"
+          :aria-pressed="!!t.industry && industry === t.industry"
+          :title="!t.industry
+            ? '这些岗位未标注行业，无法按行业筛选'
+            : industry === t.industry ? `取消${t.industry}筛选` : `查看${t.industry}岗位`"
+          @click="toggleIndustry(t.industry)"
+        >
+          <span>{{ t.industry || '未标注' }}</span>
+          <b>{{ t.total }}</b>
+        </button>
         <span v-if="!(stats.top_industries || []).length" class="empty-note">暂无行业数据</span>
       </div>
     </section>
@@ -305,6 +318,13 @@ function reload() {
   loadList()
 }
 
+function toggleIndustry(value) {
+  const next = String(value || '').trim()
+  if (!next) return
+  industry.value = industry.value === next ? '' : next
+  reload()
+}
+
 function onPage(p) {
   page.value = p
   loadList()
@@ -397,9 +417,9 @@ onMounted(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   box-shadow:
-    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 2px 6px rgba(25, 81, 195, 0.1),
     0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
@@ -415,7 +435,7 @@ onMounted(() => {
   margin-left: auto;
   font-size: 14px;
   line-height: 1;
-  color: #5b5bd6;
+  color: #1951c3;
   opacity: 0.45;
   transition: opacity 180ms var(--bento-ease);
 }
@@ -450,7 +470,7 @@ onMounted(() => {
 .qh-arrow {
   font-size: 14px;
   line-height: 1;
-  color: #5b5bd6;
+  color: #1951c3;
   opacity: 0.45;
 }
 
@@ -483,9 +503,54 @@ onMounted(() => {
 }
 
 .top-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid transparent;
+  font-family: inherit;
   font-size: 13.5px;
   padding: 6px 12px;
   border-radius: 999px;
+  background: #eef0f5;
+  color: var(--bento-sub);
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease,
+    border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.top-tag b {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bento-mute);
+  font-variant-numeric: tabular-nums;
+}
+.top-tag:hover {
+  transform: translateY(-1px);
+  background: #e7edff;
+  border-color: #b9c9ff;
+  color: #1746a2;
+}
+.top-tag:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 2px;
+}
+.top-tag.active {
+  background: #1951c3;
+  border-color: #1951c3;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(25, 81, 195, 0.22);
+}
+.top-tag.active b {
+  color: rgba(255, 255, 255, 0.82);
+}
+.top-tag:disabled,
+.top-tag.is-muted {
+  cursor: default;
+  opacity: 0.72;
+}
+.top-tag.is-muted:hover {
+  transform: none;
+  border-color: transparent;
   background: #eef0f5;
   color: var(--bento-sub);
 }
@@ -493,6 +558,69 @@ onMounted(() => {
 .empty-note {
   font-size: 13.5px;
   color: var(--bento-mute);
+}
+
+@media (max-width: 700px) {
+  /* 四张概览卡改成 2×2，筛选区/行业分布/列表仍通栏 */
+  .bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .freshness,
+  .filter-bar,
+  .industry-card,
+  .list-card {
+    grid-column: 1 / -1;
+  }
+
+  .stat-card {
+    min-height: 112px;
+  }
+
+  .stat-card .bento-stat {
+    font-size: 30px;
+  }
+}
+
+/* 手机端概览卡：图标块 38px + 四字标签在 173px 卡内会把「岗位总数」拆成两行，
+   缩到 30px 并让标签不换行，2×2 保持整齐 */
+@media (max-width: 560px) {
+  .stat-card {
+    gap: 6px;
+    min-height: 0;
+    padding: 12px 13px;
+  }
+
+  .stat-top {
+    gap: 8px;
+  }
+
+  .stat-card .qh-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border-radius: 9px;
+  }
+
+  .stat-card .qh-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .stat-label {
+    overflow: hidden;
+    font-size: 12.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stat-card .bento-stat {
+    font-size: 26px;
+  }
+
+  .stat-card .stat-top::after {
+    display: none;
+  }
 }
 .job-item {
   padding: 12px 8px;
@@ -616,7 +744,7 @@ onMounted(() => {
   margin-left: auto;
   font-size: 12.5px;
   font-style: normal;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .jd-items {
@@ -641,7 +769,7 @@ onMounted(() => {
   margin-top: 2px;
   border-radius: 6px;
   background: rgba(37, 99, 235, 0.08);
-  color: #5b5bd6;
+  color: #1951c3;
   font-size: 12.5px;
   font-weight: 600;
   display: inline-flex;
@@ -668,7 +796,7 @@ onMounted(() => {
 .jd-p.jd-en {
   font-size: 13.5px;
   line-height: 1.6;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 .official-link {
   align-self: flex-start;

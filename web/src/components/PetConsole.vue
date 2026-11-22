@@ -1,48 +1,78 @@
 <template>
-  <!-- 宠物陪伴控制条：输入框 + 发送 + 专注开关 + 设置 -->
-  <div class="pet-console" :class="{ 'is-focus': pet.state.focusMode }">
-    <input
-      v-model="text"
-      class="pet-input"
-      :placeholder="placeholder"
-      maxlength="200"
-      :disabled="pet.state.sending"
-      @keydown.enter="send"
-    />
-    <button class="pet-send" :disabled="pet.state.sending || !text.trim()" @click="send">
-      说
-    </button>
+  <!-- 宠物陪伴控制条：输入框 + 发送 + 专注开关 + 设置；窄屏折叠成右下角圆形入口 -->
+  <div
+    class="pet-console"
+    :class="{ 'is-focus': pet.state.focusMode, 'is-collapsed': collapsed }"
+  >
     <button
-      v-if="pet.state.available"
-      class="pet-focus"
-      title="跑腿面板：点一条，宠物替你打开对应页面"
-      @click="togglePad"
+      v-if="collapsed"
+      class="pet-expand"
+      type="button"
+      aria-label="打开小航对话"
+      title="和小航聊聊"
+      @click="expand"
     >
-      跑腿
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      <span class="pet-expand-ai">AI</span>
     </button>
-    <button
-      class="pet-focus"
-      :class="{ on: pet.state.focusMode }"
-      :title="pet.state.focusMode ? '专注模式：宠物不主动说话' : '陪伴模式：宠物会主动搭话'"
-      @click="toggleFocus"
-    >
-      {{ pet.state.focusMode ? '专注' : '陪伴' }}
-    </button>
-    <button class="pet-config" title="宠物设置" @click="openSettings">⚙</button>
 
-    <!-- 跑腿面板：贴在控制条上方，点指令直达页面或问 AI -->
-    <PetCommandPad
-      v-if="padOpen"
-      :commands="padCommands"
-      :name="pet.state.name"
-      @run="runCommand"
-      @submit="submitCommand"
-      @ask="askAssistant"
-      @close="padOpen = false"
-    />
+    <template v-else>
+      <input
+        ref="inputEl"
+        v-model="text"
+        class="pet-input"
+        :placeholder="placeholder"
+        maxlength="200"
+        :disabled="pet.state.sending"
+        @keydown.enter="send"
+      />
+      <button class="pet-send" type="button" :disabled="pet.state.sending || !text.trim()" @click="send">
+        说
+      </button>
+      <button
+        v-if="pet.state.available"
+        class="pet-focus"
+        type="button"
+        title="跑腿面板：点一条，宠物替你打开对应页面"
+        @click="togglePad"
+      >
+        跑腿
+      </button>
+      <button
+        class="pet-focus"
+        type="button"
+        :class="{ on: pet.state.focusMode }"
+        :title="pet.state.focusMode ? '专注模式：宠物不主动说话' : '陪伴模式：宠物会主动搭话'"
+        @click="toggleFocus"
+      >
+        {{ pet.state.focusMode ? '专注' : '陪伴' }}
+      </button>
+      <button class="pet-config" type="button" title="宠物设置" @click="openSettings">⚙</button>
+      <button
+        class="pet-collapse"
+        type="button"
+        aria-label="收起小航对话"
+        @click="collapse"
+      >
+        ×
+      </button>
+
+      <!-- 跑腿面板：贴在控制条上方，点指令直达页面或问 AI -->
+      <PetCommandPad
+        v-if="padOpen"
+        :commands="padCommands"
+        :name="pet.state.name"
+        @run="runCommand"
+        @submit="submitCommand"
+        @ask="askAssistant"
+        @close="padOpen = false"
+      />
+    </template>
   </div>
 
-  <ElDialog v-model="showSettings" title="宠物设置" width="380px" append-to-body>
+  <ElDialog v-model="showSettings" title="宠物设置" width="min(380px, 92vw)" append-to-body>
     <ElForm label-width="60px" label-position="left">
       <ElFormItem label="名字">
         <ElInput v-model="form.name" maxlength="40" show-word-limit />
@@ -109,9 +139,10 @@
 <script setup>
 // PetConsole：宠物对话输入 + 跑腿面板 + 专注开关 + 人格/鼓励池/长期记忆设置弹窗。只调 usePet。
 // 跑腿指令直达路由（不再做"宠物走到侧栏再点开"）：确定、快、演示稳。
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
+import { ElMessageBox } from 'element-plus/es/components/message-box/index.mjs'
 import { usePet } from '../composables/usePet'
 import { useAssistant } from '../composables/useAssistant'
 import { matchCommand, visibleCommands, resolveCommandPath } from '../composables/usePetCommand'
@@ -128,6 +159,22 @@ const padCommands = ref([])
 const editingId = ref(0)
 const editingText = ref('')
 const form = reactive({ name: '', tone: '', greeting: '', encourage: [] })
+
+// 控制条默认收成右下角一个 54px 圆形入口，点开才展开：
+// 320px 的常驻输入条会盖住图表、表格和手机正文，聊天入口不需要一直占着。
+const collapsed = ref(true)
+const inputEl = ref(null)
+
+async function expand() {
+  collapsed.value = false
+  await nextTick()
+  inputEl.value?.focus({ preventScroll: true })
+}
+
+function collapse() {
+  collapsed.value = true
+  padOpen.value = false
+}
 
 const placeholder = computed(() => `和${pet.state.name}聊聊…`)
 
@@ -284,6 +331,24 @@ async function removeMemory(id) {
     0 0 0 3px rgba(124, 108, 248, 0.10);
 }
 
+/* 收起态：整条退成一颗圆形按钮，圆形本身由 .pet-expand 绘制 */
+.pet-console.is-collapsed {
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  justify-content: center;
+}
+
+.pet-console.is-collapsed:focus-within {
+  box-shadow: none;
+}
+
 .pet-input {
   flex: 1;
   min-width: 0;
@@ -296,12 +361,12 @@ async function removeMemory(id) {
 }
 
 .pet-input::placeholder {
-  color: #9aa0b5;
+  color: #6b7280;
 }
 
 .pet-send {
   border: none;
-  background: linear-gradient(135deg, #8f7ffb 0%, #7c6cf8 55%, #6a5ce8 100%);
+  background: linear-gradient(135deg, #8f7ffb 0%, #3b6ee5 55%, #6a5ce8 100%);
   color: #fff;
   border-radius: 999px;
   padding: 6px 14px;
@@ -359,7 +424,7 @@ async function removeMemory(id) {
 .pet-config {
   border: none;
   background: transparent;
-  color: #9aa0b5;
+  color: #6b7280;
   cursor: pointer;
   font-size: 16px;
   padding: 4px 6px;
@@ -368,7 +433,7 @@ async function removeMemory(id) {
 }
 
 .pet-config:hover {
-  color: #7c6cf8;
+  color: #3b6ee5;
   background: #f0eefc;
 }
 
@@ -395,7 +460,7 @@ async function removeMemory(id) {
 
 .encourage-hint {
   font-size: 11px;
-  color: #9aa0b5;
+  color: #6b7280;
   margin-top: 2px;
 }
 
@@ -408,7 +473,7 @@ async function removeMemory(id) {
 
 .memories-empty {
   font-size: 12px;
-  color: #9aa0b5;
+  color: #6b7280;
 }
 
 .memories-item {
@@ -435,7 +500,7 @@ async function removeMemory(id) {
 .memories-btn {
   border: none;
   background: transparent;
-  color: #9aa0b5;
+  color: #6b7280;
   cursor: pointer;
   font-size: 12px;
   padding: 1px 5px;
@@ -444,12 +509,154 @@ async function removeMemory(id) {
 }
 
 .memories-btn:hover {
-  color: #7c6cf8;
+  color: #3b6ee5;
   background: #f0eefc;
 }
 
 .memories-btn.is-danger:hover {
   color: #e05a4f;
   background: #fdeeee;
+}
+
+/* ---------- 窄屏折叠入口 ---------- */
+.pet-expand {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8f7ffb 0%, #3b6ee5 58%, #1951c3 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow:
+    0 4px 10px rgba(40, 50, 90, 0.12),
+    0 12px 26px rgba(59, 110, 229, 0.28);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.pet-expand svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pet-expand-ai {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #fff;
+  color: #1951c3;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+}
+
+.pet-expand:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow:
+    0 6px 14px rgba(40, 50, 90, 0.16),
+    0 16px 32px rgba(59, 110, 229, 0.36);
+}
+
+.pet-expand:active {
+  transform: scale(0.97);
+}
+
+.pet-collapse {
+  position: absolute;
+  top: -9px;
+  right: -7px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e3e6f0;
+  border-radius: 50%;
+  background: #fff;
+  color: #6b7080;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pet-collapse:hover {
+  border-color: #cfd4e8;
+  color: #3b6ee5;
+}
+
+@media (max-width: 1023px) {
+  .pet-console {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: min(360px, calc(100vw - 24px));
+    max-width: none;
+    padding: 7px;
+    flex-wrap: wrap;
+    border-radius: 18px;
+  }
+
+  .pet-console.is-collapsed {
+    width: 54px;
+    height: 54px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .pet-console.is-collapsed:focus-within {
+    box-shadow: none;
+  }
+
+  .pet-console.is-collapsed .pet-expand {
+    width: 54px;
+    height: 54px;
+  }
+
+  /* iOS 聚焦输入框时字号 <16px 会自动放大页面 */
+  .pet-input {
+    flex: 1 1 120px;
+    font-size: 16px;
+  }
+
+  .pet-send,
+  .pet-focus {
+    min-height: 40px;
+  }
+
+  .pet-config {
+    min-width: 34px;
+    min-height: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-expand {
+    transition: none;
+  }
+
+  .pet-expand:hover,
+  .pet-expand:active {
+    transform: none;
+  }
 }
 </style>

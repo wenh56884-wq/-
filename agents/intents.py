@@ -22,9 +22,37 @@ _DEFAULTS: dict[str, dict] = {
     "tools": {
         "warning_thresholds": ["阈值", "门槛", "预警线", "判定标准"],
         "class_list": ["班级列表", "班级目录", "有哪些班", "哪些班级", "学院列表", "院系", "各班人数"],
+        # 名册要排在预警名单之前：「班级名单」含「名单」，排后面会被预警路由吃掉
+        "class_roster": ["名册", "学生列表", "班里有哪些人", "有哪些学生",
+                         "班级名单", "全班名单", "全部学生名单"],
         "warning_list": ["预警", "风险名单", "风险学生", "名单", "挂科", "挂了"],
+        # 校园行为洞察（班级）：必须排在 student_profile 之前——「班级画像」含「画像」，
+        # 排后面会被个人画像路由抢走；点名到具体学生时由 _CLASS_LEVEL_TOOLS 让位。
+        # 通用行为词（图书馆/考勤…）也收进来：教师问「全班考勤怎么样」是班级行为数据，
+        # 与知识库制度词的冲突由 graph._teacher_campus_tool 的机构词守卫处理。
+        "class_campus_insight": ["班级洞察", "班级行为", "班级画像", "全班行为",
+                                 "班级活动", "低投入", "图书馆", "借阅", "到馆",
+                                 "一卡通", "消费", "考勤", "出勤", "证书",
+                                 "活动参与", "行为数据", "投入情况", "投入画像"],
+        # 逐生校园行为洞察：点名到学生时班级级让位后由它接住（学号在 plan_teacher 抠）
+        "student_campus_insight": ["借阅", "到馆", "一卡通", "消费", "考勤", "出勤",
+                                   "图书馆", "证书", "活动参与", "行为画像",
+                                   "投入画像", "低投入"],
         "student_profile": ["画像", "标签", "四维", "这个学生", "那位学生", "他的情况", "她的情况"],
         "career_gap": ["差距", "缺口", "能力结构", "岗位要求"],
+        "teacher_career_search": ["生涯规划", "职业规划", "生涯档案", "规划查看",
+                                   "按班级规划", "规划搜索", "全班规划", "班级规划"],
+        # 招考公告（教师端原先漏配词表，问「招考公告」会掉到班级概貌）
+        "exam_notices": ["招考公告", "招聘公告", "招聘信息", "事业单位公告", "报名截止"],
+        # agent-entry-v3：国考职位表（逐职位明细，师生通用）。
+        # 必须排在 search_jobs 之前：「国考职位表里有哪些税务岗位」含「岗位」，
+        # 排后面会被岗位搜索的宽泛词抢走。
+        "exam_positions": ["国考职位", "国考岗位", "职位表", "招考职位",
+                           "公务员职位", "国考招录"],
+        # 岗位搜索（检索不是推荐）：师生通用词，教师端原先漏配会掉到班级概貌。
+        # 「岗位要求」的差距问法由前面的 career_gap 先接住，不会被「岗位」抢走。
+        "search_jobs": ["搜岗位", "搜索岗位", "岗位搜索", "查岗位", "找岗位",
+                        "岗位库", "搜一下岗位", "招聘搜索", "岗位"],
         # agent-entry-v1 新增：成绩 / 预测 / 知识图谱（数值仍由 engine 算）
         # 排名要排在成绩之前：「班级成绩排名」里的「成绩」会先被成绩单路由吃掉
         "class_grades_rank": ["排名", "名次", "排第几", "第几名", "班级排名", "专业排名",
@@ -39,6 +67,14 @@ _DEFAULTS: dict[str, dict] = {
         # agent-entry-v3：国考职位表（逐职位明细，师生通用）
         "exam_positions": ["国考职位", "国考岗位", "职位表", "招考职位",
                            "公务员职位", "国考招录"],
+    },
+    # 学生端本人数据补充路由（graph.plan_node 在知识库分支之前检查）：
+    # 校园行为洞察。「考勤/证书」与知识库制度词（考勤管理规定/资格证书管理办法）撞车，
+    # 由 graph._student_campus_tool 的知识库词守卫让位——制度问法仍走 kb_search。
+    # 「校园行为」覆盖板块本名「校园行为洞察」（不含「校园洞察」子串）。
+    "student_tools": {
+        "my_campus_insight": ["校园洞察", "校园行为", "行为画像", "图书馆", "借阅",
+                              "到馆", "一卡通", "消费", "考勤", "出勤", "证书", "活动"],
     },
     # 名次信号词：判断教师问的是「第几名」还是「多少分」。
     # 是 tools.class_grades_rank 词表的子集，改那边时这里要同步。
@@ -113,13 +149,19 @@ def load(force: bool = False) -> dict:
 
 
 def section(name: str) -> dict | list:
-    """取某一节（tools/levels/chitchat/kb/web/workflow/overview…）。"""
-    return load().get(name) or ({} if name in ("tools", "levels") else [])
+    """取某一节（tools/student_tools/levels/chitchat/kb/web/workflow/overview…）。"""
+    return load().get(name) or ({} if name in ("tools", "student_tools", "levels") else [])
 
 
 def tool_keywords() -> list[tuple[str, tuple[str, ...]]]:
     """教师端工具路由表：按 JSON 里的书写顺序保持优先级。"""
     tools = section("tools")
+    return [(name, tuple(kws)) for name, kws in tools.items()]
+
+
+def student_tool_keywords() -> list[tuple[str, tuple[str, ...]]]:
+    """学生端补充路由表（校园行为洞察等本人数据）：书写顺序即优先级。"""
+    tools = section("student_tools")
     return [(name, tuple(kws)) for name, kws in tools.items()]
 
 

@@ -61,7 +61,8 @@ def my_grades(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     report = _report(ctx, stu)
-    audit_event(actor_type=ctx.actor_type, actor_id=ctx.student_id, action="grades.view",
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                actor_id=ctx.student_id, action="grades.view",
                 target=str(stu["student_no"]),
                 detail={"self": True, "records": report["summary"]["record_count"]})
     return report
@@ -76,7 +77,8 @@ def student_grades(student_no: str,
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     report = _report(ctx, stu)
-    audit_event(actor_type=ctx.actor_type, actor_id=ctx.teacher_id, action="grades.view",
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                actor_id=ctx.teacher_id, action="grades.view",
                 target=str(student_no),
                 detail={"records": report["summary"]["record_count"]})
     return report
@@ -97,7 +99,8 @@ def class_rank(class_name: str, term: str | None = None,
     except ValueError as exc:
         # 班级名写错不是越权，按 404 给出候选提示
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    audit_event(actor_type=ctx.actor_type, actor_id=ctx.teacher_id,
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                actor_id=ctx.teacher_id,
                 action="grades.class_rank", target=str(class_name),
                 detail={"term": result.get("term"),
                         "student_cnt": len(result.get("students") or []),

@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # auto = 配了星火 Key 就优先星火，否则 DeepSeek；也可显式 spark / deepseek
     llm_provider: str = "auto"
 
+    # --- 本地大模型（OpenAI 兼容，数据不出机，隐私优先）---
+    # 默认指向 Ollama 的 OpenAI 兼容端点；可换 vLLM / LM Studio 等任意本地推理服务
+    local_llm_base_url: str = "http://127.0.0.1:11434/v1"
+    local_llm_model: str = "qwen2.5:7b"
+    # 本地服务通常不校验密钥；留空则由 llm 层用占位，避免 ChatOpenAI 报错
+    local_llm_api_key: str = ""
+
     # --- MySQL ---
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306
@@ -42,6 +49,18 @@ class Settings(BaseSettings):
     app_port: int = 8000
     jwt_secret: str = ""
     jwt_expire_minutes: int = 120
+
+    # --- 本地演示账号 ---
+    # 仅用于本地/答辩演示账号的初始口令；公网演示另用 public_demo_password。
+    demo_password: str = ""
+
+    # --- 临时公网演示登录隔离 ---
+    # 开启后只允许明确列出的合成演示账号，并要求共享演示口令。
+    public_demo_mode: bool = False
+    public_demo_password: str = ""
+    public_demo_accounts: str = ""
+    # 显式允许短演示口令（如 123456h）；默认仍要求 24+ 字符。
+    public_demo_allow_weak_password: bool = False
 
     # --- 智能体商业化 ---
     # 每用户每日问答配额（0 = 不限量）。按 audit_log 里 agent.chat 实数计数。

@@ -128,14 +128,40 @@ def client() -> TestClient:
     return TestClient(create_app())
 
 
+def _db_position_total() -> tuple[int, int]:
+    """库内 (职位数, 招录人数合计)：与 facets 接口同口径（租户 1，2027 年度）。
+
+    总量不写死：官方职位表一年内会补录/更正，后台也会自动增量同步，
+    断言与库内实数对账即可，避免每次官方更新都要改测试。
+    """
+    import pymysql
+
+    from app.config import get_settings
+
+    s = get_settings()
+    db = pymysql.connect(host=s.mysql_host, port=s.mysql_port,
+                         user=s.mysql_user, password=s.mysql_password,
+                         database=s.mysql_db, charset="utf8mb4")
+    try:
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(`招考人数`),0) AS p "
+                "FROM `国考职位` WHERE `租户编号` = 1 AND `年度` = 2027")
+            n, p = cur.fetchone()
+    finally:
+        db.close()
+    return int(n), int(p)
+
+
 @DB_OK
 def test_positions_api_list_and_filters(client):
     resp = client.get("/exam/positions", params={"page_size": 5})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["year"] == 2027
-    assert body["total"] == 19426
-    assert body["total_headcount"] == 35691
+    total, headcount = _db_position_total()
+    assert body["total"] == total >= 19000
+    assert body["total_headcount"] == headcount
     assert len(body["items"]) == 5
     first = body["items"][0]
     assert first["dept_name"] and first["position_name"] and first["headcount"] > 0
@@ -161,8 +187,11 @@ def test_positions_facets_and_detail(client):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["year"] == 2027
-    assert body["total_positions"] == 19426
-    assert body["total_headcount"] == 35691
+    # 总量不写死：官方职位表在报名季会补录/更正（如 19426 → 19428），
+    # 只要求与库内实数一致（同一数据源的同一口径）且规模合理。
+    total, headcount = _db_position_total()
+    assert body["total_positions"] == total >= 19000
+    assert body["total_headcount"] == headcount
     assert body["source_url"].endswith("/kl2027/")
     assert {e["name"] for e in body["educations"]} >= {"本科及以上", "仅限本科"}
 

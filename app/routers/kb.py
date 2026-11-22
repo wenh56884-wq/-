@@ -104,7 +104,8 @@ def _persist(ctx: ToolContext, title: str, filename: str | None, source_type: st
                 [(doc_id, c.chunk_no, c.page, c.text, len(c.text),
                   json.dumps(rag.keywords_of(c.text), ensure_ascii=False)) for c in chunks])
         conn.commit()
-        audit_event(actor_type=role, actor_id=actor or 0, action="kb.ingest",
+        audit_event(tenant_id=ctx.tenant_id, actor_type=role,
+                    actor_id=actor or 0, action="kb.ingest",
                     target=str(doc_id), detail={"title": title[:60], "chunks": len(chunks),
                                                 "type": source_type})
         return {"doc_id": doc_id, "title": title, "chunks": len(chunks), "duplicated": False}
@@ -171,7 +172,8 @@ def delete_doc(doc_id: int, ctx: ToolContext = Depends(require_teacher)) -> dict
             cur.execute("DELETE FROM `知识库分块` WHERE `文档编号`=%s", (doc_id,))
             cur.execute("DELETE FROM `知识库文档` WHERE `编号`=%s", (doc_id,))
         conn.commit()
-        audit_event(actor_type="teacher", actor_id=ctx.teacher_id or 0, action="kb.delete",
+        audit_event(tenant_id=ctx.tenant_id, actor_type="teacher",
+                    actor_id=ctx.teacher_id or 0, action="kb.delete",
                     target=str(doc_id))
         return {"deleted": doc_id}
     finally:

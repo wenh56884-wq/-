@@ -13,7 +13,7 @@ from agents.tools import write_audit
 
 def audit_event(
     *,
-    tenant_id: int = 0,
+    tenant_id: int,
     actor_type: str,
     actor_id: int | None,
     action: str,

@@ -33,6 +33,32 @@ def test_compound_civil_position_question_is_exam_positions() -> None:
     assert args.get("year") is None   # 「今年」语义由工具按库内最新年度兜底
 
 
+def test_edu_threshold_followup_routes_to_exam_positions() -> None:
+    """用户实测翻车句：「里面有哪些是本科就可以考的吗」——不含职位/岗位字面，
+    但问的是职位表按学历过滤；学历过滤要从追问里抠出来，且不产生垃圾关键词。"""
+    q = "里面有哪些是本科就可以考的吗"
+    assert student_agent.personal_tool(q) == "exam_positions"
+    args = student_agent.tool_args("exam_positions", q)
+    assert args.get("education") == "本科"
+    assert "keyword" not in args
+
+
+def test_position_requirement_question_routes_to_exam_positions() -> None:
+    """用户实测翻车句：「我知道我具体岗位和要求」——岗位 + 要求 → 职位表明细，
+    清洗后不得把「知道我」这类残词当关键词。"""
+    q = "我知道我具体岗位和要求"
+    assert student_agent.personal_tool(q) == "exam_positions"
+    args = student_agent.tool_args("exam_positions", q)
+    assert "keyword" not in args
+
+
+def test_edu_threshold_rule_does_not_steal_non_civil_exams() -> None:
+    """学历 + 考 的组合不能抢走非国考范畴的考试问法。"""
+    assert student_agent.personal_tool("本科可以直接考研吗") != "exam_positions"
+    assert student_agent.personal_tool("本科能考教师资格证吗") != "exam_positions"
+    assert student_agent.personal_tool("四级可以考吗") != "exam_positions"
+
+
 def test_exam_position_args_include_year_and_clean_keyword() -> None:
     # 显式年度入参
     args = student_agent.tool_args("exam_positions", "2027年国考职位")

@@ -1,8 +1,8 @@
 # app/routers/job.py
-# 职责：企业岗位查询 API（全国职业岗位），数据由 scripts/sync_recruit.py 周更入库。
+# 职责：企业岗位查询 API；统一读取推荐/搜索共用的 `岗位` 主目录。
 #
 # 设计：
-# - 纯只读接口；每条都带 apply_url + published_at，可点开原文核对。
+# - 招聘源 `招聘岗位` 仅作抓取暂存，不再作为前台第二套岗位目录。
 # - 薪资/学历/人数可能为 None（站点没写），前端必须显示「未标注」，
 #   不能显示成 0 或「不限」——**缺失不冒充**。
 #   注意区别：「学历不限」是真信息（该岗不卡学历），「education is None」是没抓到。
@@ -54,6 +54,14 @@ def _row_to_dict(row: dict[str, Any], *, full: bool = False) -> dict[str, Any]:
     out["salary_min"] = _dec(out.get("salary_min"))
     out["salary_max"] = _dec(out.get("salary_max"))
     out["salary_text"] = _salary_text(out["salary_min"], out["salary_max"])
+    exp_min, exp_max = out.get("exp_min"), out.get("exp_max")
+    if exp_min is None and exp_max is None:
+        out["experience"] = None
+    elif exp_max is None or exp_min == exp_max:
+        out["experience"] = f"{exp_min} 年"
+    else:
+        out["experience"] = f"{exp_min}-{exp_max} 年"
+    out.setdefault("status", "unknown")
 
     # 技能标签是 JSON 列，MySQL 可能回字符串
     tags = out.get("skill_tags")
@@ -98,11 +106,11 @@ def list_jobs(
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> dict[str, Any]:
     """按条件分页查岗位。"""
-    where = ["`租户编号` = %s"]
-    params: list[Any] = [1]
+    where = ["1=1"]
+    params: list[Any] = []
     if keyword:
         # 岗位名或单位名命中都算（学生常按公司搜）
-        where.append("(`岗位名称` LIKE %s OR `招聘单位` LIKE %s)")
+        where.append("(`岗位名称` LIKE %s OR `企业` LIKE %s)")
         params += [f"%{keyword}%", f"%{keyword}%"]
     if city:
         where.append("`城市` LIKE %s")
@@ -111,34 +119,30 @@ def list_jobs(
         where.append("`行业` LIKE %s")
         params.append(f"%{industry}%")
     if education:
-        where.append("`学历要求` LIKE %s")
+        where.append("`学历` LIKE %s")
         params.append(f"%{education}%")
     if salary_min:
         # 只要「该岗上限能达到」就算匹配；上限未知的岗不能因为 unknown 被筛掉，
         # 否则会系统性漏掉「面议」的高薪岗。这里只按已知上限判。
         where.append("(`最高薪资` IS NULL OR `最高薪资` >= %s)")
         params.append(salary_min)
-    if not include_closed:
-        where.append("`状态` <> 'closed'")
-
     cond = " AND ".join(where)
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) AS n FROM `招聘岗位` WHERE {cond}", params)
+            cur.execute(f"SELECT COUNT(*) AS n FROM `岗位` WHERE {cond}", params)
             total = int(cur.fetchone()["n"])
             cur.execute(
                 "SELECT `编号` AS id, `来源` AS source, `岗位名称` AS title, "
-                "`招聘单位` AS company, `行业` AS industry, `城市` AS city, "
-                "`区县` AS district, `最低薪资` AS salary_min, `最高薪资` AS salary_max, "
-                "`学历要求` AS education, `经验要求` AS experience, "
-                "`招聘人数` AS headcount, `技能标签` AS skill_tags, "
-                "`投递链接` AS apply_url, `发布日期` AS published_at, "
-                "`截止日期` AS deadline, `状态` AS status, "
-                "`首次发现时间` AS first_seen_at, `最近发现时间` AS last_seen_at, "
-                "LEFT(`职位描述`, 200) AS description "
-                f"FROM `招聘岗位` WHERE {cond} "
-                "ORDER BY (`发布日期` IS NULL), `发布日期` DESC, `编号` DESC "
+                "`企业` AS company, `行业` AS industry, `企业规模` AS company_size, "
+                "`城市` AS city, `区县` AS district, `最低薪资` AS salary_min, "
+                "`最高薪资` AS salary_max, `薪资单位` AS salary_unit, "
+                "`薪资月数` AS salary_months, `最低经验` AS exp_min, "
+                "`最高经验` AS exp_max, `学历` AS education, "
+                "`技能标签` AS skill_tags, `福利待遇` AS benefits, "
+                "LEFT(`岗位描述`, 200) AS description, `发布时间` AS published_at "
+                f"FROM `岗位` WHERE {cond} "
+                "ORDER BY (`发布时间` IS NULL), `发布时间` DESC, `编号` DESC "
                 "LIMIT %s OFFSET %s",
                 [*params, page_size, (page - 1) * page_size],
             )
@@ -157,15 +161,15 @@ def get_job(job_id: int) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT `编号` AS id, `来源` AS source, `岗位名称` AS title, "
-                "`招聘单位` AS company, `行业` AS industry, `城市` AS city, "
-                "`区县` AS district, `最低薪资` AS salary_min, `最高薪资` AS salary_max, "
-                "`学历要求` AS education, `经验要求` AS experience, "
-                "`招聘人数` AS headcount, `技能标签` AS skill_tags, "
-                "`职位描述` AS description, `投递链接` AS apply_url, "
-                "`发布日期` AS published_at, `截止日期` AS deadline, `状态` AS status, "
-                "`首次发现时间` AS first_seen_at, `最近发现时间` AS last_seen_at "
-                "FROM `招聘岗位` WHERE `编号` = %s AND `租户编号` = %s",
-                (job_id, 1),
+                "`企业` AS company, `行业` AS industry, `企业规模` AS company_size, "
+                "`城市` AS city, `区县` AS district, `最低薪资` AS salary_min, "
+                "`最高薪资` AS salary_max, `薪资单位` AS salary_unit, "
+                "`薪资月数` AS salary_months, `最低经验` AS exp_min, "
+                "`最高经验` AS exp_max, `学历` AS education, "
+                "`技能标签` AS skill_tags, `福利待遇` AS benefits, "
+                "`岗位描述` AS description, `发布时间` AS published_at "
+                "FROM `岗位` WHERE `编号` = %s",
+                (job_id,),
             )
             row = cur.fetchone()
     finally:
@@ -182,12 +186,11 @@ def stats() -> dict[str, Any]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) AS n, SUM(`状态`='open') AS open_n, "
-                "       COUNT(DISTINCT `招聘单位`) AS firms, "
+                "SELECT COUNT(*) AS n, COUNT(*) AS open_n, "
+                "       COUNT(DISTINCT `企业`) AS firms, "
                 "       COUNT(DISTINCT `城市`) AS cities, "
                 "       COUNT(DISTINCT `行业`) AS industries "
-                "FROM `招聘岗位` WHERE `租户编号`=%s",
-                (1,),
+                "FROM `岗位`",
             )
             r = cur.fetchone()
             cur.execute(
@@ -196,10 +199,9 @@ def stats() -> dict[str, Any]:
             )
             last = cur.fetchone()["last_ok"]
             cur.execute(
-                "SELECT `行业` AS industry, COUNT(*) AS n FROM `招聘岗位` "
-                "WHERE `租户编号`=%s AND `行业` IS NOT NULL "
+                "SELECT `行业` AS industry, COUNT(*) AS n FROM `岗位` "
+                "WHERE `行业` IS NOT NULL "
                 "GROUP BY `行业` ORDER BY n DESC LIMIT 8",
-                (1,),
             )
             top_ind = [{"industry": x["industry"], "total": int(x["n"])}
                        for x in cur.fetchall()]

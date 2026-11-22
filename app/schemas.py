@@ -61,6 +61,27 @@ class ChatOut(BaseModel):
                                   description="引用清单：知识库给页码，联网给 URL")
     suggested_followups: list[str] = Field(default_factory=list,
                                            description="引导式追问：答完后建议继续问的问题")
+    navigate: dict | None = Field(default=None,
+                                  description="页面导航 payload（route/title/hint），前端渲染「前往」按钮")
+    download: dict | None = Field(default=None,
+                                  description="文档导出 payload（url/filename/format/row_count），前端渲染下载按钮")
+    # 执行与回查元数据：前端「执行与回查」卡直接展示，不做二次计算
+    attempts: int = Field(default=1, description="草稿轮数（含重写）")
+    verdict: dict = Field(default_factory=dict,
+                          description="Critic 结论：passed / claims / mismatches / fuzzy")
+    draft_mode: str = Field(default="", description="draft / template / rag / workflow / brain")
+    planner: str = Field(default="", description="graph / auto / brain")
+    critic_version: str = Field(default="", description="Critic 版本")
+    graph_version: str = Field(default="", description="LangGraph 编排版本")
+    engine_version: str = Field(default="", description="本轮工具的引擎版本")
+    calc_version: str = Field(default="", description="本轮画像/计算版本")
+    # 自主大脑的执行轨迹：前端「执行与回查」面板直接渲染，含每步耗时。
+    # 以前只有流式接口带 steps，走 /chat 时前端永远显示「0 步」——
+    # 明明跑了三步工具，面板却是空的，等于把最有说服力的证据丢了。
+    steps: list[dict] = Field(default_factory=list,
+                              description="自主大脑执行步骤：tool/args/ok/elapsed_ms/observation")
+    brain_version: str = Field(default="", description="自主大脑版本（非大脑路径为空）")
+    elapsed_ms: int = Field(default=0, description="自主大脑整轮耗时（毫秒）")
 
 
 class FeedbackIn(BaseModel):

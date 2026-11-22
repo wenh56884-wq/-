@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from agents.tools import ToolContext
+from app.audit import audit_event
+from app.auth import require_teacher
 from engine import question_bank as qb
 
 router = APIRouter(prefix="/qb", tags=["question_bank"])
@@ -45,8 +48,15 @@ def search(industry: str = Query(default="", max_length=60,
 
 
 @router.post("/reload")
-def reload_bank() -> dict[str, Any]:
+def reload_bank(ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
     """语料文件更新后热加载（清进程缓存并重新构建索引）。"""
     qb.clear_cache()
     s = qb.stats()
+    audit_event(
+        tenant_id=ctx.tenant_id,
+        actor_type=ctx.actor_type,
+        actor_id=ctx.teacher_id or 0,
+        action="question_bank.reload",
+        detail={"total": s["total"], "families": len(s["families"])},
+    )
     return {"ok": True, "total": s["total"], "families": len(s["families"])}

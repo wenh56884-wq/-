@@ -17,6 +17,8 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
+from app.config import get_settings  # noqa: E402
+
 BASE = os.getenv("QH_BASE", "http://127.0.0.1:8001").rstrip("/")
 
 DOCS = [
@@ -147,7 +149,8 @@ def _teacher_token() -> str:
     if not row:
         raise SystemExit("库里没有教师账号，先跑 scripts/gen_verify_report.py 建号")
     code, body = _call("POST", "/auth/login",
-                       body={"role": "teacher", "account": row["工号"], "password": "teacher@123"})
+                       body={"role": "teacher", "account": row["工号"],
+                             "password": str(get_settings().demo_password or "").strip()})
     if code != 200:
         raise SystemExit(f"教师登录失败：{code} {body}")
     return body["access_token"]

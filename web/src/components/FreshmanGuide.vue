@@ -17,13 +17,13 @@
           <header class="xh-head">
             <span class="xh-mascot" aria-hidden="true">
               <svg viewBox="0 0 64 64">
-                <line x1="32" y1="9" x2="32" y2="17" stroke="#5b5bd6" stroke-width="3" stroke-linecap="round" />
-                <circle class="xh-mascot__antenna" cx="32" cy="6.5" r="4" fill="#5b5bd6" />
+                <line x1="32" y1="9" x2="32" y2="17" stroke="#1951c3" stroke-width="3" stroke-linecap="round" />
+                <circle class="xh-mascot__antenna" cx="32" cy="6.5" r="4" fill="#1951c3" />
                 <rect x="9" y="17" width="46" height="42" rx="16" fill="#16181d" />
                 <rect x="15" y="27" width="34" height="22" rx="11" fill="#ffffff" />
                 <circle class="xh-mascot__eye" cx="26" cy="38" r="2.8" fill="#16181d" />
                 <circle class="xh-mascot__eye" cx="38" cy="38" r="2.8" fill="#16181d" />
-                <path d="M28.5 43.5q3.5 2.8 7 0" stroke="#5b5bd6" stroke-width="2" fill="none" stroke-linecap="round" />
+                <path d="M28.5 43.5q3.5 2.8 7 0" stroke="#1951c3" stroke-width="2" fill="none" stroke-linecap="round" />
               </svg>
             </span>
             <div class="xh-who">
@@ -402,11 +402,11 @@ onBeforeUnmount(() => {
   height: 26px;
   place-items: center;
   border-radius: 50%;
-  background: #5b5bd6;
+  background: #1951c3;
   color: #fff;
   font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 3px 10px rgba(91, 91, 214, 0.4);
+  box-shadow: 0 3px 10px rgba(25, 81, 195, 0.4);
 }
 
 .xh-veil {
@@ -424,7 +424,7 @@ onBeforeUnmount(() => {
   border: 1px solid #e4e7ee;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 92% 0%, rgba(91, 91, 214, 0.07), transparent 42%),
+    radial-gradient(circle at 92% 0%, rgba(25, 81, 195, 0.07), transparent 42%),
     #ffffff;
   box-shadow: 0 24px 70px rgba(9, 34, 36, 0.34), 0 2px 8px rgba(9, 34, 36, 0.1);
   animation: xh-pop 260ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -460,7 +460,7 @@ onBeforeUnmount(() => {
   flex: 0 0 46px;
   place-items: center;
   border-radius: 15px;
-  background: linear-gradient(150deg, #eef0ff, #e9f7f4);
+  background: linear-gradient(150deg, #e9efff, #e9f7f4);
   animation: xh-bob 3.2s ease-in-out infinite;
 }
 
@@ -498,13 +498,13 @@ onBeforeUnmount(() => {
 }
 
 .xh-who__role {
-  color: #9aa1ad;
+  color: #6b7280;
   font-size: 11.5px;
 }
 
 .xh-progress {
   margin-left: auto;
-  color: #9aa1ad;
+  color: #6b7280;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -544,7 +544,7 @@ onBeforeUnmount(() => {
 
 .xh-eyebrow {
   margin: 0 0 6px;
-  color: #5b5bd6;
+  color: #1951c3;
   font-size: 11.5px;
   font-weight: 750;
   letter-spacing: 0.1em;
@@ -595,7 +595,7 @@ onBeforeUnmount(() => {
   padding: 4px 2px;
   border: 0;
   background: transparent;
-  color: #9aa1ad;
+  color: #6b7280;
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
@@ -623,7 +623,7 @@ onBeforeUnmount(() => {
 }
 
 .xh-dots span.is-done { background: #b9b9ea; }
-.xh-dots span.is-on { width: 18px; background: #5b5bd6; }
+.xh-dots span.is-on { width: 18px; background: #1951c3; }
 
 .xh-btn {
   display: inline-flex;
@@ -644,7 +644,7 @@ onBeforeUnmount(() => {
 .xh-btn--ghost:hover { background: #e8e8eb; }
 
 .xh-btn--primary {
-  background-image: linear-gradient(135deg, #6d5cf6 0%, #5b5bd6 52%, #4a4ac0 100%);
+  background-image: linear-gradient(135deg, #2d61dd 0%, #1951c3 52%, #14419c 100%);
   color: #fff;
   box-shadow:
     0 8px 20px rgba(79, 70, 229, 0.28),
@@ -652,7 +652,7 @@ onBeforeUnmount(() => {
 }
 
 .xh-btn--primary:hover {
-  background-image: linear-gradient(135deg, #7c6cf8 0%, #5f5fdd 52%, #4f46e5 100%);
+  background-image: linear-gradient(135deg, #3b6ee5 0%, #1f5ad0 52%, #14419c 100%);
   transform: translateY(-1px);
   box-shadow:
     0 12px 26px rgba(79, 70, 229, 0.34),
@@ -672,7 +672,7 @@ onBeforeUnmount(() => {
 .xh-skip:focus-visible,
 .xh-btn:focus-visible,
 .xh-close:focus-visible {
-  outline: 3px solid rgba(91, 91, 214, 0.3);
+  outline: 3px solid rgba(25, 81, 195, 0.3);
   outline-offset: 2px;
 }
 

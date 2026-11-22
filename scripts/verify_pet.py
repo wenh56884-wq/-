@@ -27,6 +27,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from app.config import get_settings  # noqa: E402
+
 # 服务端口可配：本机常有多个 uvicorn 同时在跑，QH_BASE 覆盖，或 --base 传参。
 BASE = os.getenv("QH_BASE", "http://127.0.0.1:8000")
 VALID_MOOD = {"idle", "happy", "thinking", "sleepy"}
@@ -69,7 +71,7 @@ def _req(method: str, path: str, token: str | None = None, body: Any = None) -> 
 
 
 def _pick_demo_account() -> str | None:
-    """从库里挑一个真实存在的学生学号当演示账号（口令同学号）。"""
+    """从库里挑一个真实存在的学生学号当演示账号（演示账号用统一口令）。"""
     try:
         import pymysql
 
@@ -101,7 +103,7 @@ def _pick_demo_account() -> str | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--account", default=None,
-                    help="学生学号（演示账号口令同学号）；不传则从库里取一个真实学号")
+                    help="学生学号（演示账号用统一口令）；不传则从库里取一个真实学号")
     ap.add_argument("--base", default=None, help="服务基地址，默认 http://127.0.0.1:8000")
     args = ap.parse_args()
     global BASE
@@ -121,12 +123,17 @@ def main() -> int:
         return 1
 
     # ---- 1 登录 ----
-    code, login = _req("POST", "/auth/login",
-                       body={"role": "student", "account": account, "password": account})
+    demo_password = str(get_settings().demo_password or "").strip()
+    code, login = (0, {})
+    for password in [p for p in (demo_password, account) if p]:
+        code, login = _req("POST", "/auth/login",
+                           body={"role": "student", "account": account, "password": password})
+        if code == 200:
+            break
     print(f"\n[1] 登录 {account}  HTTP {code}")
     if code != 200:
         print(f"  detail: {login}")
-        print("  → 演示账号口令 = 学号本身；确认 seed_mock 已跑过")
+        print("  → 演示账号统一口令见 .env 的 DEMO_PASSWORD；确认 seed_mock 已跑过")
         return 1
     token = login["access_token"]
     check("登录拿到 token", bool(token))

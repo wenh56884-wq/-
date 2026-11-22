@@ -20,6 +20,7 @@ if str(_ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 # (标题, 正文)：按「学业 → 实习 → 就业 → 职业资格 → 奖助」的顺序，
@@ -786,7 +787,7 @@ def main() -> None:
     purge = "--purge-legacy" in sys.argv
     client = TestClient(create_app())
     r = client.post("/auth/login", json={"role": "teacher", "account": "T001",
-                                         "password": "teacher@123"})
+                                         "password": str(get_settings().demo_password or "").strip()})
     if r.status_code != 200:
         print(f"教师登录失败：{r.status_code} {r.text[:200]}")
         return

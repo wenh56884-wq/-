@@ -87,7 +87,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import http from '../api/http'
 
 // embedded=true 时由 AI 助手页嵌入，去掉自身 .bento-page 内边距（父级已提供），避免双重留白
@@ -301,7 +301,7 @@ async function copyUrl() {
 
 .ws-item:hover {
   transform: translateY(-1px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   background: #fbfbff;
 }
 

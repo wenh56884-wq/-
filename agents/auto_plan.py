@@ -11,14 +11,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import re
 from typing import Any
 
 from langchain_core.tools import tool
 
 from agents import llm as llm_client
 
-AUTO_PLAN_VERSION = "auto-plan-v1"
+AUTO_PLAN_VERSION = "auto-plan-v2"
 
 # 寒暄不进自主规划：交给图里的 chitchat 分支（不取数、纯对话）
 _CHITCHAT_HINT = "（如果是打招呼或问「你能做什么」，不要选工具，直接回答即可。）"
@@ -63,6 +66,15 @@ def student_profile(student_no: str = "", term: str = "") -> str:
 @tool
 def career_gap(class_name: str = "", term: str = "") -> str:
     """分析某个班级的能力与目标岗位要求之间的差距：哪些维度差、差多少。"""
+
+
+@tool
+def teacher_career_search(class_name: str = "", term: str = "", intent: str = "",
+                          limit: int = 20) -> str:
+    """查询某个班级的生涯规划档案：班级摘要（人数/预警/均分/方向分布/风险定级/
+    成绩前列/高匹配岗位）+ 每位学生的全域档案（成绩/预警/预测/岗位/面试/竞赛/测评/
+    选课/招考/图谱）。class_name 形如 AI2301；intent 填 考公/考研/考编/就业 之一做方向过滤；
+    limit 控制完整档案的学生数（默认 20，班级人数多时按学号截断，摘要为样本口径）。"""
 
 
 @tool
@@ -139,6 +151,17 @@ def my_notices(limit: int = 20) -> str:
 
 
 @tool
+def mark_notices_read() -> str:
+    """把**本人**的竞赛通知全部标记为已读（已读水位推到最新）。只能操作自己。"""
+
+
+@tool
+def save_career_intent(intent: str) -> str:
+    """保存**本人**的职业目标。intent 只能是 考公 / 考研 / 考编 / 就业 之一。
+    用于「把我的目标定为考公」这类明确的操作请求；只是问竞争力分析请用 my_career_forecast。"""
+
+
+@tool
 def my_career_guide() -> str:
     """查询**本人**按年级分层的职业规划路径（大一先选目标，大二大三直接给路径）。只能查自己。"""
 
@@ -146,6 +169,13 @@ def my_career_guide() -> str:
 @tool
 def competition_guide(track: str = "就业", direction: str = "") -> str:
     """按去向（考公 / 就业）和岗位方向推荐该参加的竞赛，结果附官方来源链接。"""
+
+
+@tool
+def cert_guide(limit: int = 6) -> str:
+    """推荐**本人**适合考的证书（计算机等级/软考/四六级/普通话/教资等）：
+    谁负责、差什么前提、能获得什么、报名窗口与考试时间，全部来自官方公告。
+    只查自己。"""
 
 
 @tool
@@ -204,19 +234,46 @@ def my_elective_advice(term: str = "", top_n: int = 8) -> str:
     算出缺口并推荐能补缺口的选修课。只能查自己。用于「选什么课/补什么课/技能缺口」。"""
 
 
+@tool
+def my_campus_insight(term: str = "") -> str:
+    """查询**本人**的校园行为洞察：图书馆到馆/借阅、一卡通消费规律、证书/竞赛/项目活动、
+    出勤率、岗位浏览兴趣与学习投入画像。只能查自己。用于「校园洞察/行为画像/到馆/消费/出勤」。"""
+
+
+@tool
+def class_campus_insight(class_name: str = "", term: str = "", limit: int = 30) -> str:
+    """查询某个班级的校园行为洞察：投入画像分布、低投入名单及原因、活动覆盖率、
+    岗位兴趣城市与班级均值。class_name 形如 AI2301；limit 控制样本学生数
+    （默认 30，上限 60，班级人数多时按学号截断，摘要为样本口径）。"""
+
+
+@tool
+def student_campus_insight(student_no: str = "", term: str = "") -> str:
+    """教师查询**某个学生**的校园行为洞察：图书馆/消费/活动/出勤/岗位兴趣与学习投入画像。
+    不受班级样本截断限制，全班任何学生都能查；student_no 填学号，姓名需先换成学号。"""
+
+
+@tool
+def class_roster(class_name: str = "") -> str:
+    """查询某个班级的**完整学生名册**（学号/姓名/专业，不截断）。
+    用于「班里有哪些学生 / 全班名单」，或先拿学号再查某个学生的行为洞察。"""
+
+
 # 教师端可用全部；学生端**只给本人工具**——不给 student_profile / warning_list /
 # student_grades / student_forecast，免得模型顺着「帮我看看张三」去查别人
 # （越权会在工具层被拦，但根本不该给它选项）。
 # 知识图谱是全校公共数据（专业-课程-岗位-技能），两端都给。
 _TEACHER_TOOLS = (class_list, class_overview, warning_list, warning_thresholds,
                   student_profile, student_grades, student_forecast, class_grades_rank,
-                  career_gap,
+                  career_gap, teacher_career_search, class_campus_insight,
+                  student_campus_insight, class_roster,
                   kg_major_skills, kg_skill_jobs, kg_path,
                   exam_notices, exam_positions, question_bank_lookup,
                   kb_search, web_search, run_workflow)
 _STUDENT_TOOLS = (my_warning, my_recommendations, my_grades, my_forecast,
-                  my_career_forecast, my_elective_advice, my_notices, my_career_guide,
-                  competition_guide,
+                  my_career_forecast, my_elective_advice, my_campus_insight,
+                  my_notices, mark_notices_read, save_career_intent, my_career_guide,
+                  competition_guide, cert_guide,
                   search_jobs, job_facets, my_interviews, my_assessment,
                   kg_major_skills, kg_skill_jobs, kg_path,
                   exam_notices, exam_positions, question_bank_lookup,
@@ -225,21 +282,141 @@ _STUDENT_TOOLS = (my_warning, my_recommendations, my_grades, my_forecast,
 # graph.tool_node 能执行的工具全集：模型选出来的名字必须在这个集合里，否则退回确定性路由
 EXECUTABLE = {t.name for t in _TEACHER_TOOLS} | {t.name for t in _STUDENT_TOOLS}
 
+# 有副作用的工具：自主规划里不能让模型「顺手」调用——把通知全部标已读、
+# 改掉职业目标这类操作必须由用户明确说出。query 里没有操作意图词时，
+# 模型即使选了也退回确定性路由（brain-v1 的 _BLOCKED_TOOLS 同口径）。
+_SIDE_EFFECT_TOOLS = frozenset({"mark_notices_read", "save_career_intent"})
+_SIDE_EFFECT_MARKERS = ("标记已读", "标为已读", "设为已读", "全部已读",
+                        "保存", "设置", "定为", "改成", "更新为",
+                        "我的目标", "目标是", "记下")
+
 
 def _tools_for(actor_type: str) -> tuple[Any, ...]:
     return _TEACHER_TOOLS if actor_type == "teacher" else _STUDENT_TOOLS
 
 
+_TOOLS_BY_NAME = {t.name: t for t in (*_TEACHER_TOOLS, *_STUDENT_TOOLS)}
+
+# ----------------------------------------------------------------
+# 参数归一化：模型很爱把「第二个学期」「红色预警」原样塞进参数
+# ----------------------------------------------------------------
+_TERM_RE = re.compile(r"(20\d{2})\D{0,4}(20\d{2})\D{0,12}?(?:第)?([12一二上下])")
+_TERM_INDEX = {"一": "1", "二": "2", "上": "1", "下": "2"}
+_LEVEL_MAP = {
+    "红色": "red", "红": "red", "red": "red",
+    "橙色": "orange", "橙": "orange", "orange": "orange",
+    "黄色": "yellow", "黄": "yellow", "yellow": "yellow",
+    "正常": "none", "无预警": "none", "none": "none",
+    "未知": "unknown", "数据不足": "unknown", "unknown": "unknown",
+}
+_EXAM_TYPE_MAP = {
+    "考公": "civil", "公务员": "civil", "国考": "civil", "省考": "civil", "civil": "civil",
+    "考编": "institution", "事业编": "institution", "事业单位": "institution",
+    "institution": "institution",
+    "考研": "postgraduate", "研究生": "postgraduate", "postgraduate": "postgraduate",
+}
+# 返回条数类参数：越界会让工具直接报错或拖垮响应，统一夹紧
+_COUNT_PARAMS = {"limit": (1, 50), "top_n": (1, 50), "top_k": (1, 50)}
+
+
+def _norm_term(value: str) -> str:
+    """「2025-2026学年第二学期」→「2025-2026-2」；认不出来就原样返回，不猜。"""
+    text = str(value or "").strip()
+    match = _TERM_RE.search(text)
+    if not match:
+        return text
+    index = _TERM_INDEX.get(match.group(3), match.group(3))
+    return f"{match.group(1)}-{match.group(2)}-{index}"
+
+
+def _norm_class(value: str) -> str:
+    return re.sub(r"\s+", "", str(value or "")).upper()
+
+
+def _normalize_args(name: str, args: Any) -> dict[str, Any]:
+    """把模型给的参数规整成工具真能吃下的形状。
+
+    只做四件事：去掉工具没声明的键、字符串去空白、枚举/学期/班级按口径改写、
+    条数类参数夹到合法区间。不做任何「猜学号」「补班级」这类补全——
+    补出来的参数等于替用户编事实。
+    """
+    if not isinstance(args, dict):
+        return {}
+    tool = _TOOLS_BY_NAME.get(name)
+    declared = set(getattr(tool, "args", {}) or {}) if tool else None
+    out: dict[str, Any] = {}
+    for key, value in args.items():
+        if key == "self" or value is None:
+            continue
+        if declared is not None and key not in declared:
+            continue
+        if isinstance(value, bool):
+            out[key] = value
+            continue
+        if isinstance(value, (int, float)):
+            out[key] = _clamp(key, value)
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        if key == "term":
+            text = _norm_term(text)
+        elif key == "class_name":
+            text = _norm_class(text)
+        elif key == "level":
+            text = _norm_level(text)
+        elif key == "exam_type":
+            text = _EXAM_TYPE_MAP.get(text, text)
+        elif (key in _COUNT_PARAMS or key == "job_id") and re.fullmatch(r"\d+", text):
+            out[key] = _clamp(key, int(text))
+            continue
+        out[key] = text
+    return out
+
+
+def _norm_level(value: str) -> str:
+    """「红色预警」「橙色」→ red / orange；认不出就原样小写，不硬猜。"""
+    text = str(value or "").strip()
+    if text in _LEVEL_MAP:
+        return _LEVEL_MAP[text]
+    stripped = re.sub(r"(预警|等级|级别|风险)$", "", text)
+    return _LEVEL_MAP.get(stripped, _LEVEL_MAP.get(stripped.lower(), text.lower()))
+
+
+def _clamp(key: str, value: float) -> int:
+    low, high = _COUNT_PARAMS.get(key, (0, 10 ** 9))
+    return max(low, min(int(value), high))
+
+
 def plan_with_llm(ctx: Any, query: str, term: str | None = None,
                   history: list[dict[str, str]] | None = None) -> dict[str, Any] | None:
-    """让模型自主选一个工具并填参数。
+    """让模型自主选**一个**工具并填参数（旧接口，保留兼容）。
 
     返回 {"tool": ..., "args": {...}}；不可用/没选工具/选了不允许的工具 → 返回 None，
     由调用方退回确定性路由。**这里不执行任何工具**，执行仍在 graph.tool_node。
     """
+    plans = plan_many(ctx, query, term, history, max_calls=1)
+    return plans[0] if plans else None
+
+
+def plan_many(ctx: Any, query: str, term: str | None = None,
+              history: list[dict[str, str]] | None = None,
+              max_calls: int = 3) -> list[dict[str, Any]]:
+    """让模型自主拆出**多个**工具调用（v2）。
+
+    旧版只取 tool_calls[0]，模型明明识别出「查成绩 + 查预警」两件事，
+    第二件会被直接丢掉，用户看到的回答就少一半。v2 把同一次响应里的
+    多个调用都收下来（去重、限流、副作用工具仍要显式意图），
+    交给调用方并发执行。返回值：[] 表示不可用/没选出可用工具。
+    """
     actor = str(getattr(ctx, "actor_type", "") or "")
     if actor not in ("teacher", "student"):
-        return None
+        return []
+
+    cache_key = _cache_key(actor, query, term, history, max_calls)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return [dict(item) for item in cached]
 
     tools = _tools_for(actor)
     names = ", ".join(t.name for t in tools)
@@ -247,6 +424,8 @@ def plan_with_llm(ctx: Any, query: str, term: str | None = None,
     lines = [f"当前使用者是{who}。", f"可选工具：{names}。", _CHITCHAT_HINT]
     if term:
         lines.append(f"当前学期：{term}（用户没指定学期就不用填 term）。")
+    if max_calls > 1:
+        lines.append(f"如果一个问题需要查多件事，最多给出 {max_calls} 个互不依赖的工具调用。")
     for turn in list(history or [])[-4:]:
         text = str(turn.get("text") or "").strip()
         if text:
@@ -259,25 +438,71 @@ def plan_with_llm(ctx: Any, query: str, term: str | None = None,
                  else llm_client.get_student_llm())
         bound = model.bind_tools(tools, tool_choice="auto")
         resp = bound.invoke([("system", "你是「启航」智能助手的意图路由，"
-                                        "只负责从工具清单里挑一个最合适的工具。"),
+                                        "只负责从工具清单里挑最合适的工具。"),
                              ("user", "\n".join(lines))])
     except Exception:
-        return None        # 模型不可用：交给确定性路由，不硬撑
+        return []          # 模型不可用：交给确定性路由，不硬撑
 
-    calls = list(getattr(resp, "tool_calls", None) or [])
-    if not calls:
-        return None
-    call = calls[0]
-    name = str(call.get("name") or "")
-    if name not in EXECUTABLE:
-        return None
     allowed = {t.name for t in tools}
-    if name not in allowed:          # 角色越权：学生不能选教师工具
+    plans: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for call in list(getattr(resp, "tool_calls", None) or [])[:max_calls]:
+        name = str(call.get("name") or "")
+        if name not in EXECUTABLE or name not in allowed:
+            continue           # 编造的工具名 / 角色越权：整条丢弃
+        if name in _SIDE_EFFECT_TOOLS and not any(
+                marker in str(query or "") for marker in _SIDE_EFFECT_MARKERS):
+            # 副作用工具但用户没有明确表达操作意图：不执行，退回确定性路由
+            continue
+        args = _normalize_args(name, call.get("args") or {})
+        signature = name + "|" + json.dumps(args, sort_keys=True, ensure_ascii=False)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        plans.append({"tool": name, "args": args, "planner": AUTO_PLAN_VERSION})
+    if plans:
+        _cache_put(cache_key, plans)
+    return plans
+
+
+# ----------------------------------------------------------------
+# 决策缓存：同一个问题在一次演示里常被连问两遍（评委复述、用户重试），
+# 第二次没必要再付一次模型往返
+# ----------------------------------------------------------------
+_PLAN_CACHE: dict[str, list[dict[str, Any]]] = {}
+_CACHE_LIMIT = 256
+
+
+def _cache_enabled() -> bool:
+    return str(os.getenv("AGENT_PLAN_CACHE", "1")).strip().lower() not in (
+        "0", "false", "off", "no")
+
+
+def _cache_key(actor: str, query: str, term: str | None,
+               history: list[dict[str, str]] | None, max_calls: int) -> str:
+    last_user = ""
+    for turn in reversed(list(history or [])):
+        if str(turn.get("role") or "") == "user":
+            last_user = str(turn.get("text") or "")[:80]
+            break
+    raw = f"{actor}|{term or ''}|{max_calls}|{str(query or '').strip()}|{last_user}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cache_get(key: str) -> list[dict[str, Any]] | None:
+    if not _cache_enabled():
         return None
-    args = call.get("args") or {}
-    if not isinstance(args, dict):
-        args = {}
-    # 只保留字符串/数字/布尔参数，避免模型塞进奇怪结构
-    clean = {k: v for k, v in args.items()
-             if isinstance(v, (str, int, float, bool)) and k != "self"}
-    return {"tool": name, "args": clean, "planner": AUTO_PLAN_VERSION}
+    return _PLAN_CACHE.get(key)
+
+
+def _cache_put(key: str, plans: list[dict[str, Any]]) -> None:
+    if not _cache_enabled():
+        return
+    if len(_PLAN_CACHE) >= _CACHE_LIMIT:
+        _PLAN_CACHE.pop(next(iter(_PLAN_CACHE)))   # FIFO：先淘汰最早的一条
+    _PLAN_CACHE[key] = [dict(item, args=dict(item.get("args") or {})) for item in plans]
+
+
+def clear_cache() -> None:
+    """测试与热更新用：清掉规划缓存。"""
+    _PLAN_CACHE.clear()

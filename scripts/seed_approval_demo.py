@@ -17,6 +17,7 @@ if str(_ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 WORKFLOW_NAME = "求职体检（审批演示）"
@@ -46,8 +47,9 @@ def _pending_has(client: TestClient, headers: dict[str, str]) -> bool:
 
 def main() -> int:
     client = TestClient(create_app())
-    teacher = _login(client, "teacher", "T001", "teacher@123")
-    student = _login(client, "student", "AI20230001", "AI20230001")
+    demo_password = str(get_settings().demo_password or "").strip()
+    teacher = _login(client, "teacher", "T001", demo_password)
+    student = _login(client, "student", "AI20230001", demo_password)
 
     # 1) 定义（同名则更新）：打开 needs_approval，步骤快照用当前定义
     resp = client.post("/workflow/defs", headers=teacher, json={

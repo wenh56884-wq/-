@@ -26,7 +26,7 @@ def test_search_rejects_empty_query_when_authed():
     """已登录但查询词为空必须 422，不能把空串丢给搜索引擎。"""
     c = _client()
     login = c.post("/auth/login", json={"role": "student", "account": "AI20230001",
-                                        "password": "student@123"})
+                                        "password": "123456h"})
     if login.status_code != 200:
         assert login.status_code == 401
         return
@@ -39,7 +39,7 @@ def test_search_unconfigured_returns_configured_false():
     """已登录但未配密钥：返回 configured=False + 说明，绝不 500、绝不编结果。"""
     c = _client()
     login = c.post("/auth/login", json={"role": "student", "account": "AI20230001",
-                                        "password": "student@123"})
+                                        "password": "123456h"})
     if login.status_code != 200:
         assert login.status_code == 401
         return

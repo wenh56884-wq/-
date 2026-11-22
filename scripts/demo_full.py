@@ -24,6 +24,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from app.config import get_settings  # noqa: E402
+
 BASE = os.getenv("QH_BASE", "http://127.0.0.1:8001")
 STEP = {"n": 0}
 
@@ -55,8 +57,9 @@ def brief(items, fmt, limit=3) -> None:
 
 
 def login(account: str, role: str) -> str:
-    """学生口令=学号；教师口令=teacher@123（scripts/gen_verify_report.py 建号口径）。"""
-    candidates = [account] if role == "student" else ["teacher@123", account]
+    """演示账号统一口令取 DEMO_PASSWORD；非演示生成学生仍回退到「初始口令=学号」。"""
+    demo_password = str(get_settings().demo_password or "").strip()
+    candidates = [p for p in (demo_password, account) if p]
     last = None
     for pwd in candidates:
         s, d = _call("POST", "/auth/login", body={"account": account, "password": pwd, "role": role})
@@ -230,7 +233,7 @@ Python、MySQL、Hive
     step("模拟面试：逐轮作答（每题含引擎评分 + 防虚构校验后的点评）")
     final = None
     for i, ans in enumerate(answers):
-        s, d = _call("POST", f"/interview/{sid}/answer", st, {"text": ans})
+        s, d = _call("POST", f"/interview/{sid}/answer", st, {"text": ans, "expected_round": i + 1})
         if d.get("finished"):
             final = d
             print(f"   第{i + 1}轮 → 收卷")
@@ -242,7 +245,8 @@ Python、MySQL、Hive
         origin = (f"题库·{nsrc.get('name')}" if nsrc.get("kind") == "bank" else "模板")
         print(f"      下一题（{origin}）：{(nxt.get('question') or '')[:44]}")
     if final is None:
-        s, final = _call("POST", f"/interview/{sid}/answer", st, {"text": answers[-1]})
+        s, final = _call("POST", f"/interview/{sid}/answer", st,
+                         {"text": answers[-1], "expected_round": len(answers) + 1})
 
     step("面试报告（总分/各题/差距清单，全部引擎计算）")
     print(f"   总分 {final.get('total')}｜候选题 {len(final.get('items') or [])} 题")

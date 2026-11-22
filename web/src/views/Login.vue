@@ -140,7 +140,7 @@
 // 左侧是 SVG 山水叙事场景 + 品牌航线，右侧是稳定的登录工作台；
 // 不再使用全屏视频/玻璃遮罩，首屏更轻，表单始终可见。
 
-import { nextTick, reactive, ref, watch } from 'vue'
+import { nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 
@@ -193,6 +193,21 @@ function fillDemo(role, account, password) {
   form.account = account
   form.password = password
 }
+
+// 登录页空闲时预取工作台骨架与两个首页 chunk：用户输口令的几秒钟足够把
+// ShellLayout + 首页拉完，登录成功跳转时不用再白屏等网络。只预取确定会用的
+// 三块，图表页（echarts 551KB）不在列——没进那些页面就别下载。
+function prefetchWorkbench() {
+  const run = () => {
+    import('../layout/ShellLayout.vue')
+    import('../views/StudentHome.vue')
+    import('../views/TeacherDashboard.vue')
+  }
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 4000 })
+  else setTimeout(run, 1500)
+}
+
+onMounted(prefetchWorkbench)
 
 async function onLogin() {
   if (!form.account || !form.password) {

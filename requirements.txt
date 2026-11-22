@@ -7,11 +7,11 @@ python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 httpx==0.28.1
+python-multipart==0.0.32
 
 # ===== LLM / Agent =====
 langchain==1.4.0
 langgraph==1.2.11
-langgraph-checkpoint-sqlite==3.1.1
 langchain-openai==1.6.0
 
 # ===== Data / Analytics =====
@@ -19,9 +19,12 @@ pandas==3.0.5
 numpy==2.5.2
 # 国考《招考简章》是旧版 .xls（BIFF），用 xlrd 只读解析
 xlrd==2.0.2
+# 导出：生成 .xlsx（学生档案 / 成绩单一键下载）
+openpyxl==3.1.5
 scikit-learn==1.9.0
 duckdb==1.5.5
 pypdf==6.21.2
+networkx==3.7
 
 # ===== Database =====
 PyMySQL==1.2.0
@@ -32,6 +35,3 @@ python-dotenv==1.2.4
 
 # ===== Testing =====
 pytest==9.1.1
-
-# ===== Demo UI =====
-streamlit==1.66.1

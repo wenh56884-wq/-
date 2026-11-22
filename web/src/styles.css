@@ -9,12 +9,13 @@
   --cf-surface-solid: #ffffff;
   --cf-ink: #16181d;
   --cf-mid: #5f6672;
-  --cf-faint: #9aa1ad;
+  /* 次级文字 #9aa1ad 对白底只有 ~2.6:1，投影/户外几乎看不清；统一压到 4.5:1 以上 */
+  --cf-faint: #6b7280;
   --cf-line: #e4e7ee;
   --cf-line-strong: #cfd4de;
   /* 名字是历史遗留（原为珊瑚红），值现在是品牌靛蓝；新代码优先用 --qh-primary */
-  --cf-coral: #5b5bd6;
-  --cf-coral-soft: #ececfb;
+  --cf-coral: #1951c3;
+  --cf-coral-soft: #e9efff;
   /* teal / aqua 是「正常·无风险」的语义色，不参与强调，别当主色用 */
   --cf-teal: #0f9d8a;
   --cf-teal-soft: #ddf6f1;
@@ -35,11 +36,11 @@
   --qh-border: #e4e7ee;
   --qh-text: #16181d;
   --qh-text-sub: #5f6672;
-  --qh-text-mute: #9aa1ad;
+  --qh-text-mute: #6b7280;
   /* 主强调色：靛蓝（按钮/选中/关键强调）。改这一处即可全站换主色 */
-  --qh-primary: #5b5bd6;
-  --qh-primary-soft: #ececfb;
-  --qh-primary-deep: #4a4ac0;
+  --qh-primary: #1951c3;
+  --qh-primary-soft: #e9efff;
+  --qh-primary-deep: #14419c;
   --qh-radius-lg: 8px;
   --qh-radius-xl: 14px;
   --qh-shadow: 0 6px 30px rgba(16, 24, 40, 0.08);
@@ -51,13 +52,13 @@
   --cf-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   /* Element Plus 主题色：全站按钮/标签/链接/聚焦环统一到靛蓝 */
-  --el-color-primary: #5b5bd6;
-  --el-color-primary-light-3: #8f8fe8;
-  --el-color-primary-light-5: #bdbdf2;
-  --el-color-primary-light-7: #dcdcf9;
-  --el-color-primary-light-8: #ececfb;
-  --el-color-primary-light-9: #f4f4fe;
-  --el-color-primary-dark-2: #4a4ac0;
+  --el-color-primary: #1951c3;
+  --el-color-primary-light-3: #5e84d2;
+  --el-color-primary-light-5: #8ca8e1;
+  --el-color-primary-light-7: #baccf0;
+  --el-color-primary-light-8: #e9efff;
+  --el-color-primary-light-9: #e6eafa;
+  --el-color-primary-dark-2: #14419c;
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
 
@@ -68,6 +69,14 @@
   --el-font-size-base: 15px;
   --el-font-size-small: 14px;
   --el-font-size-extra-small: 13px;
+
+  /* Element Plus 默认 secondary/placeholder 偏浅（#909399 / #a8abb2），
+     投影和浅色卡片上读不清；统一压深到可读区间。 */
+  --el-text-color-primary: #16181d;
+  --el-text-color-regular: #4b5563;
+  --el-text-color-secondary: #5f6672;
+  --el-text-color-placeholder: #6b7280;
+  --el-text-color-disabled: #9aa1ad;
 }
 
 * {
@@ -76,16 +85,10 @@
 
 body {
   margin: 0;
-  /* 浅青白底 + 顶部两团极光（靛蓝 / 青）+ 极淡工程网格。
-     光晕用 fixed 附着：滚动时页面内容在光里走，不会出现“背景跟着滑”的廉价感。 */
-  background-color: var(--cf-bg);
-  background-image:
-    radial-gradient(1200px 520px at 6% -10%, rgba(91, 91, 214, 0.13), transparent 62%),
-    radial-gradient(1000px 460px at 98% -6%, rgba(15, 157, 138, 0.11), transparent 58%),
-    linear-gradient(rgba(15, 157, 138, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 157, 138, 0.035) 1px, transparent 1px);
-  background-size: auto, auto, 32px 32px, 32px 32px;
-  background-attachment: fixed, fixed, scroll, scroll;
+  /* 应用画布：单一中性冷灰底。之前叠了「极光光晕 + 工程网格 + 页面顶部渐层」三层，
+     卡片浮在花纹上显得脏、也不利于长时间读数据；信息密度高的后台界面，
+     背景只负责退后，让卡片边界说话。 */
+  background-color: #f5f6f8;
   font-family: var(--cf-font-sans);
   font-size: 15px;
   line-height: 1.65;
@@ -95,20 +98,20 @@ body {
 }
 
 ::selection {
-  background: rgba(91, 91, 214, 0.18);
+  background: rgba(25, 81, 195, 0.18);
   color: var(--cf-ink);
 }
 
 /* 统一聚焦环：键盘可达性红线，任何组件都不许吃掉 focus-visible */
 :focus-visible {
-  outline: 2px solid rgba(91, 91, 214, 0.55);
+  outline: 2px solid rgba(25, 81, 195, 0.55);
   outline-offset: 2px;
 }
 
 /* 细滚动条：鼠标不动时几乎看不见，滚动时才显出靛蓝滑块 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(91, 91, 214, 0.28) transparent;
+  scrollbar-color: rgba(25, 81, 195, 0.28) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -120,11 +123,11 @@ body {
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
-  background-color: rgba(91, 91, 214, 0.26);
+  background-color: rgba(25, 81, 195, 0.26);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(91, 91, 214, 0.42);
+  background-color: rgba(25, 81, 195, 0.42);
 }
 
 .page {
@@ -144,21 +147,22 @@ body {
   margin-bottom: 10px;
 }
 
-/* 卡片（含 Element Plus 的 el-card）：浅青白底 + 细线 + 8px 圆角 */
+/* 卡片：全站唯一的容器语言——12px 圆角、1px 中性边、单层轻影。
+   之前 8px/12px/14px/16px/24px 五种圆角混用、阴影两套值互相覆盖，
+   卡片贴在一起时边界对不齐，是“不协调”的根源。 */
 .el-card {
-  border: 1px solid var(--qh-border) !important;
-  border-radius: var(--qh-radius-lg) !important;
+  border: 1px solid #e7eaf1 !important;
+  border-radius: 12px !important;
   background: var(--qh-surface);
-  box-shadow: var(--qh-shadow);
-  transition:
-    transform 260ms var(--qh-ease),
-    box-shadow 260ms var(--qh-ease),
-    border-color 260ms var(--qh-ease);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
+  transition: border-color 180ms var(--qh-ease), box-shadow 180ms var(--qh-ease);
 }
 
+/* 悬停只加深边界与阴影，不做位移：后台界面里整页卡片一起“跳起来”
+   会让人以为点错了东西，也是廉价感来源之一。 */
 .el-card:hover {
-  border-color: var(--cf-line-strong) !important;
-  box-shadow: var(--qh-shadow-hover);
+  border-color: #d8dde8 !important;
+  box-shadow: 0 6px 18px -8px rgba(16, 24, 40, 0.14);
 }
 
 .el-card__header {
@@ -179,31 +183,28 @@ body {
   transform: scale(0.98);
 }
 
-/* 主按钮：靛蓝→深靛蓝渐变 + 内高光 + 落影。
-   只作用于默认形态（plain / text / link 保持文字形态，不被填色）。 */
+/* 主按钮：品牌靛蓝实底 + 同色系浅影。
+   原先是紫蓝渐变 + rgba(79,70,229) 紫光阴影 + 悬停上浮 1px，浅灰画布上
+   像贴了一层塑料膜，也把“单一强调色”稀释成了紫色。 */
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
-  --el-button-bg-color: transparent;
-  --el-button-hover-bg-color: transparent;
-  --el-button-active-bg-color: transparent;
-  border-color: transparent;
-  background-image: linear-gradient(135deg, #6d5cf6 0%, #5b5bd6 52%, #4a4ac0 100%);
-  box-shadow:
-    0 6px 16px rgba(79, 70, 229, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --el-button-bg-color: #1951c3;
+  --el-button-border-color: #1951c3;
+  --el-button-hover-bg-color: #1b5ad8;
+  --el-button-hover-border-color: #1b5ad8;
+  --el-button-active-bg-color: #14419c;
+  --el-button-active-border-color: #14419c;
+  background-image: none;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 12px -6px rgba(25, 81, 195, 0.55);
 }
 
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
-  border-color: transparent;
-  background-image: linear-gradient(135deg, #7c6cf8 0%, #5f5fdd 52%, #4f46e5 100%);
-  box-shadow:
-    0 10px 24px rgba(79, 70, 229, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.26);
-  transform: translateY(-1px);
+  background-image: none;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 16px -6px rgba(25, 81, 195, 0.6);
 }
 
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active {
-  transform: translateY(0) scale(0.99);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.28);
+  transform: none;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
 }
 
 .el-button--primary.is-disabled,
@@ -230,24 +231,8 @@ body {
 .el-textarea__inner:focus {
   background: #fff;
   box-shadow:
-    0 0 0 1px #5b5bd6 inset,
-    0 0 0 4px rgba(91, 91, 214, 0.22) !important;
-}
-
-/* 路由切换动画 */
-.page-fade-enter-active,
-.page-fade-leave-active {
-  transition: opacity 240ms var(--qh-ease), transform 240ms var(--qh-ease);
-}
-
-.page-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.page-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+    0 0 0 1px #1951c3 inset,
+    0 0 0 4px rgba(25, 81, 195, 0.22) !important;
 }
 
 /* 骨架屏：不用渐变，用纯中性灰静止块 */
@@ -262,23 +247,25 @@ body {
   background-color: #eef0f5 !important;
 }
 
-/* 信任说明条：原先是 el-alert success，通栏浅绿块的视觉重量盖过了正文。
-   降级成中性底脚注，绿色只保留在勾选图标上。 */
-.trust-bar.el-alert {
-  background: var(--cf-surface-solid);
+/* 信任说明条：Element Plus 的 success 类型会铺一层浅绿底，
+   在白色工作区里形成一条与内容无关的色带（全站第二强调色）。统一压成中性脚注，
+   绿色只留在勾选图标上。加 !important 是因为 EP 的 .is-light 变量赋值后注入更晚。 */
+.el-alert.trust-bar,
+.el-alert.trust-bar.is-light {
+  background: #ffffff !important;
   border: 1px solid var(--cf-line);
-  border-radius: var(--cf-radius);
+  border-radius: 10px;
   padding: 9px 14px;
   color: var(--cf-mid);
 }
 
-.trust-bar.el-alert .el-alert__title {
+.el-alert.trust-bar .el-alert__title {
   color: var(--cf-mid);
   font-size: 13px;
   font-weight: 500;
 }
 
-.trust-bar.el-alert .el-alert__icon {
+.el-alert.trust-bar .el-alert__icon {
   color: var(--cf-teal);
   font-size: 15px;
 }
@@ -406,14 +393,9 @@ p {
 }
 
 .page-main::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 180px;
-  pointer-events: none;
-  background: radial-gradient(circle at 12% 0%, rgba(91, 91, 214, 0.1), transparent 44%),
-    radial-gradient(circle at 88% 0%, rgba(15, 157, 138, 0.09), transparent 40%);
-  opacity: 0.85;
+  /* 原先这里还有一层 180px 高的蓝绿径向渐层，与 body 的光晕叠加后
+     在首屏形成一条与卡片不对齐的淡色带（“脏底”的主要来源），去掉。 */
+  content: none;
 }
 
 .page-head,
@@ -423,14 +405,90 @@ p {
   z-index: 1;
 }
 
-.bento-card,
-.el-card {
-  box-shadow: 0 10px 28px rgba(14, 58, 61, 0.06);
+/* 聚合板块（学业 / 机会库 / 生涯规划 / 学生 / 模拟面试）：外层只是二级 Tab 的容器，
+   内层视图自带 24px 内距，外层再加一层会变成 48px，首卡离顶栏过远。 */
+.page-main > .hub-page {
+  position: relative;
+  z-index: 1;
+  padding: 0;
 }
 
-.bento-card:hover,
-.el-card:hover {
-  transform: translateY(-2px);
+/* 历史遗留：这里曾给 .bento-card/.el-card 追加过一套更重的绿灰阴影 + 悬停位移，
+   与上面的卡片定义冲突（同一元素两套阴影，边缘发灰）。现在统一以 .el-card 为准。 */
+
+/* ---------- Nuxt UI 设计语言借鉴（2026-11-10）----------
+   对照 github.com/nuxt/ui 的设计细节做的数据组件层打磨：
+   表格行悬停染色 / 表头降权、标签胶囊化、折叠面板悬停反馈、
+   弹层毛玻璃遮罩、链接过渡、表格数字等宽对齐。
+   全部追加式规则，不改上方 Medusa 基线。 */
+
+/* 表格：Nuxt UI 的数据表是「表头降权 + 行悬停轻染色 + 等宽数字」，
+   数字纵向对齐后 19426 / 0.7557 这类列一眼可扫。 */
+.el-table {
+  --el-table-border-color: var(--cf-line);
+  --el-table-header-bg-color: var(--cf-bg-deep);
+  --el-table-row-hover-bg-color: var(--cf-coral-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.el-table th.el-table__cell {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cf-mid);
+  letter-spacing: 0.02em;
+}
+
+.el-table .el-table__cell {
+  transition: background-color 160ms var(--qh-ease);
+}
+
+/* 标签：Nuxt UI 徽章是全圆角胶囊 + 无边框软底，边框在浅底上属于噪音 */
+.el-tag {
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.el-tag:not(.is-plain):not(.el-tag--dark) {
+  border-color: transparent;
+}
+
+/* 折叠面板：标题悬停给主色反馈（Nuxt UI 的 Accordion 行为），分隔线对齐 token */
+.el-collapse {
+  --el-collapse-border-color: var(--cf-line);
+}
+
+.el-collapse-item__header {
+  font-weight: 600;
+  transition: color 180ms var(--qh-ease), background-color 180ms var(--qh-ease);
+}
+
+.el-collapse-item__header:hover {
+  color: var(--qh-primary);
+}
+
+.el-collapse-item__content {
+  color: var(--qh-text-sub);
+}
+
+/* 弹层遮罩：Nuxt UI 的 Modal 自带 backdrop-blur，浮层与页面拉开一层景深 */
+.el-overlay {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* 链接：颜色过渡 + 下划线偏移（默认下划线贴字太挤） */
+a {
+  transition: color 160ms var(--qh-ease);
+}
+
+a:hover {
+  text-underline-offset: 3px;
+}
+
+/* 描述列表/统计数字：与表格同口径等宽对齐 */
+.el-descriptions__cell,
+.el-statistic__number {
+  font-variant-numeric: tabular-nums;
 }
 
 .hero-card:hover,
@@ -441,17 +499,19 @@ p {
 /* ---------- 数据表：表头浅染、行悬停极淡靛蓝、数字等宽 ---------- */
 .el-table {
   --el-table-header-bg-color: #f6f7fc;
-  --el-table-row-hover-bg-color: rgba(91, 91, 214, 0.055);
+  --el-table-row-hover-bg-color: rgba(25, 81, 195, 0.055);
   --el-table-border-color: var(--cf-line);
   font-variant-numeric: tabular-nums;
 }
 
 .el-table th.el-table__cell {
-  background: linear-gradient(180deg, #f8f9fe, #f4f5fb) !important;
+  /* 表头改平涂：浅灰渐变会让表头看起来“凸起来”，与卡片平铺的容器语言打架 */
+  background: #f7f8fb !important;
   color: var(--cf-mid);
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: 13px;
   letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--cf-line) !important;
 }
 
 .el-table td.el-table__cell {
@@ -474,7 +534,7 @@ p {
 
 .el-tag--primary.el-tag--light {
   background: var(--qh-primary-soft);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   color: var(--qh-primary-deep);
 }
 
@@ -493,4 +553,96 @@ p {
   .el-card:hover {
     transform: none;
   }
+}
+
+/* ---------- 移动端：筛选表单、背景与信任条 ---------- */
+@media (max-width: 767px) {
+  /* fixed 背景层在手机滚动时会持续重绘，改成 scroll 只保留静态底色 */
+  body {
+    background-attachment: scroll, scroll, scroll, scroll;
+  }
+
+  /* 内联筛选表单：每个字段独占一行，控件撑满，不再靠固定 px 宽度溢出卡片 */
+  .filter-bar .el-form--inline .el-form-item,
+  .filter-card .el-form--inline .el-form-item {
+    display: flex;
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .filter-bar .el-form-item__content,
+  .filter-card .el-form-item__content {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .filter-bar .el-input,
+  .filter-bar .el-select,
+  .filter-bar .el-input-number,
+  .filter-card .el-input,
+  .filter-card .el-select {
+    width: 100% !important;
+  }
+
+  .filter-bar .filter-actions {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .trust-bar .el-alert__title {
+    white-space: normal;
+    line-height: 1.55;
+  }
+}
+
+/* 移动端导航抽屉打开时，宠物立绘与控制条让位 */
+body.nav-open .pet-root,
+body.nav-open .pet-console {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 桌面端鼠标进入侧栏时宠物淡出：它固定在左下角，会压住「本页可以直接问」
+   的后两条问法，淡出后问法完整可点，移开鼠标宠物再回来。 */
+@media (min-width: 1024px) {
+  body:has(.sidebar:hover) .pet-root {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* ---------- 科技感：关键数字发光 + 滚动入场（仅视觉，不改引擎数值） ----------
+   数字仍由 engine 计算后原样渲染，这里只加入场动效与极淡青色光晕。 */
+@keyframes qh-tech-count-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5em);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.bento-stat,
+.metric-value,
+.stat-value,
+.el-statistic__number,
+.qh-tech-count {
+  animation: qh-tech-count-in 0.6s var(--tech-ease, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  text-shadow: var(--tech-glow-text, 0 0 18px rgba(0, 194, 255, 0.2));
+}
+
+/* 深色展示区内的数字用更强一档的青色光晕 */
+.qh-tech-panel .bento-stat,
+.qh-tech-panel .metric-value,
+.qh-tech-panel .stat-value {
+  text-shadow: 0 0 22px rgba(0, 194, 255, 0.35);
 }

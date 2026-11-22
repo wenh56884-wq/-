@@ -59,9 +59,13 @@ scripts\start_qihang.bat 8000 lan             # 绑 0.0.0.0，手机/平板可�
 
 | 角色 | 账号 | 口令 | 说明 |
 |---|---|---|---|
-| 教师 | `T001` | `teacher@123` | 任教 40 个班 |
-| 学生（大四） | `AI20230001` | 与账号相同 | 2023 级 |
-| 学生（大一） | `AI20260001` | 与账号相同 | 2026 级，**学号是 8 位数字段**，不是 `AI2026001` |
+| 教师 | `T001` | `123456h` | 任教 40 个班 |
+| 学生（大四） | `AI20230001` | `123456h` | 2023 级 |
+| 学生（大一） | `AI20260001` | `123456h` | 2026 级，**学号是 8 位数字段**，不是 `AI2026001` |
+
+演示账号口令统一为 `123456h`；该口令只用于本地/答辩演示，正式部署请改回强口令或关闭演示入口。
+
+公网临时演示用 `scripts\start_public_demo.bat` 启动，教师 T001 与四个年级演示学生共用口令 `123456h`；公网模式仍只允许白名单账号登录。
 
 登录页「演示账号」区点一下即自动填入。要换别的学生，先查一个真实存在的学号：
 `SELECT 学号, 姓名, 班级 FROM 学生 WHERE 年级 = '2026' LIMIT 5;`
@@ -199,6 +203,24 @@ D:\qihang\
 
 ## 更新记录
 
+### 2026-11-10
+- **修复「本科能考哪些职位」类追问被兜底进 my_warning**（用户实测截图翻车）：
+  ① `agents\student_agent.py` `personal_tool` 新增两条复合路由——「学历词 + 考/报」
+  → `exam_positions`（排除考研/教资等非国考范畴）、「职位/岗位 + 要求/条件/门槛」
+  → `exam_positions`；复合规则只看当前问句（新增 `raw` 参数），关键词路由先查
+  当前问句、未命中再退合并意图，避免上一轮「国考职位表」字面劫走新话题追问；
+  泛词剥离表补「知道/要求/条件/我/里面/其中/还有/就/面」，追问残词不再变成
+  垃圾关键词 LIKE 查空。② `agents\graph.py` 新增学生端数据面追问延续：追问 +
+  上一轮工具为 `exam_positions`/`exam_notices` 时沿用同一工具，只让学历/地点等
+  结构化过滤生效（不带检索词）；`_looks_like_followup` 补「里面/其中/这些/上面/
+  刚才」。③ `agents\graph.py` `draft_node` exam_positions 专用草稿分支修复
+  `str(attempts) >= 3` 的 str/int 比较必炸 TypeError（一进该分支就「智能体处理
+  失败」）。④ `agents\critic.py`（critic-v2）修复列表型草稿被误杀：行首列表序号
+  （「1. 外交部…」）不再算数值论断；新增 rowref 论断（「第1、3条」行引用）按
+  返回列表行数校验边界；白名单收进列表条数（「共 8 条」= len(列表)）。修复后
+  职位表问答第一稿即通过，不再连吃两次驳回降级。测试：test_student_agent.py /
+  test_agent_entry.py / test_critic.py 共新增 8 个回归用例。
+
 ### 2026-11-09
 - **宠物话术与打扰修复**：① `app\routers\pet.py` 新增确定性
   `normalize_reply()`——LLM 输出的半角 `?!,;:` 转全角、连续波浪号收敛为单个
@@ -265,6 +287,48 @@ D:\qihang\
   bug，已修）。另修测试隔离：`test_guokao_sync` 的日志清理改用专用触发
   方式 `test` 打标（日志表无租户列），不再误删真实 schedule 运行历史
   （被误删的 5 条已按查库原始输出回插）。全量回归 792 passed。
+- **借鉴 Nuxt UI 设计语言的数据组件打磨**：评估 github.com/nuxt/ui 后
+  定论——它可用于纯 Vue 项目（Vite 插件形态）但硬依赖 Tailwind v4，
+  preflight 会与 Element Plus 全套样式打架，16 个 view 全是 el-table/
+  el-collapse/el-form，整体迁移是重写级工作量且推翻刚落地的 Medusa 基线，
+  故不换栈，只把它的设计细节融进 `styles.css`（追加式，不动基线）：
+  el-table 表头降权（12.5px/600/灰字/字距）+ 行悬停染靛蓝软底 +
+  `font-variant-numeric: tabular-nums` 数字等宽对齐（含 el-descriptions/
+  el-statistic）；el-tag 全圆角胶囊化 + 软底去边框；el-collapse 标题
+  悬停主色反馈；el-overlay 弹层遮罩加 backdrop-blur 景深；全局链接
+  颜色过渡 + 下划线偏移。验证：`npm run build` ✓；浏览器实测报考分析
+  （卡片标签胶囊/表格表头/等宽数字）与岗位库（行业标签胶囊不破布局、
+  统计卡数字对齐）均正常。截图 `logs/screenshots/nuxtui-polish-*.png`。
+- **修模拟面试页两处布局空洞**（用户反馈「有点空」）：根因有二——
+  ① `.kv` 是 flex 容器，「当前简历」的 v-for 经历项被当独立 flex 子项
+  互相挤压成竖排单字列，把卡体撑到天高；② 「录入简历」「答题卡」带
+  `bento-row-2` 跨两行，bento 行高 = 行内最高者，右侧长卡（长简历/
+  长诊断/长点评）把整行拉爆，跨行卡体内全是空白。修法：经历项包进
+  `.exp-list`（flex:1 块级容器）回归正常文档流；去掉两处 `bento-row-2`；
+  长内容卡（当前简历/简历诊断/上一题点评）加 `cap-body` 体高 540px
+  封顶内部滚动；「怎么练」无诊断时 span-4 占满整行、「历史场次」动态
+  跨列（无点评时与答题卡/选岗卡并排，有点评时占满整行）——历史场次
+  从页尾提到首屏，选岗时可直接参考过往场次。验证：dev server (5173)
+  实测两个标签页布局紧凑无空洞、竖排文字修复；`npm run build` ✓。
+  截图 `logs/screenshots/interview-before/after*.png`。
+  遗留（后端，转 Claude）：简历文本含 `<w` 前缀乱码（docx 解析产物，
+  v19 自填简历的教育/技能/经历多处可见），属 resume 解析层问题，
+  前端展示层无法根治。
+- **按校内参考站（xsc.cfec.edu.cn:82/dashboard）整体换肤**：该站是
+  Vue SPA 且本机浏览器被代理拦（PowerShell 可直连），改为抓取其全部
+  CSS 提取设计体系——深藏青侧栏 #161c2b、主蓝 #1951c3、选中项深蓝实底
+  + 右缘 3px 浅蓝指示条 #a3beff、内容区 #ebf0f5、语义绿 #77d9a3/红
+  #f57676。迁移分两步：① `data/_retheme_colors.py`（已删）把全前端
+  21 个文件的靛蓝系精确映射到深蓝系（#5b5bd6→#1951c3 等 12 个 hex +
+  rgba(91,91,214)→rgba(25,81,195)，字节级读写保换行符）；② 手工重做
+  `ShellLayout.vue`：桌面侧栏与移动抽屉改 #161c2b 深底、导航项灰字
+  #969eaf、悬停/选中 #1951c3 + inset 浅蓝指示条、品牌白字（白字只
+  作用于深底作用域，浅色顶栏品牌保持墨色）、AI 问法面板深底卡片
+  （边框 #272d3c、字 #c8d3e8、标签 #a3beff）。Medusa 的结构层
+  （圆角/阴影/bento/焦点环）原样保留，只换色相。验证：`npm run build`
+  ✓；工作台/报考分析实测侧栏、选中态、按钮/单选组/链接全蓝系统一，
+  宠物与内容区不受影响。截图 `logs/screenshots/retheme-*.png`。
+  语义色（teal 正常/warning/danger）与图表非主色轴未动。
 - **修宠物遮挡登录入口**：2D 宠物固定左下角后，`.enter-btn`（登录页
   「开始使用」CTA，实测位于视口 (68,787)）被 `pet-img` 完全盖住，点击
   全被宠物吃掉，登录页无法进入。修法：`App.vue` 陪伴层在 `/login` 路由
@@ -382,6 +446,7 @@ D:\qihang\
 - 教师端班级总览新增「职业目标分布」卡：考公 / 考研 / 考编 / 就业 / 未填写人数与占比。
 - 新增 `scripts/seed_intent_demo.py`：按学号哈希为演示学生补目标分布（`--reset` 可重建），不影响 2026 级大一先选流程。
 - 新增考核指标报告：`python scripts\gen_kpi_report.py` 生成 `docs\KPI.md`（预警准确率、Critic 通过率/幻觉率、接口 P95、推荐日志覆盖与计划书指标对照）。
-- 新增 `teacher_class` 教师任教班级绑定与 `class_warning_threshold` 班级级阈值：配置后教师只能访问任教班级；未配置时回退租户范围。
+- 新增 `teacher_class` 教师任教班级绑定与 `class_warning_threshold` 班级级阈值：教师只能访问自己绑定的班级；未绑定任何班级时教师端目录为空（不可见全校），用 `scripts/seed_teacher_scope.py` 配置。
 - 教师端「班级总览」新增“预警阈值”弹窗，可按班覆盖挂科/均分下滑/出勤率/分级门槛。
-- 新增 `scripts/seed_teacher_scope.py`：`--classes AI2201,RJ2201` 配置任教范围，`--clear` 回退租户范围。
+- 新增 `scripts/seed_teacher_scope.py`：`--classes AI2201,RJ2201` 绑定任教范围，`--clear` 清空绑定（此后看不到任何班级）。
+- 教师端登录入口链接：`/login?role=teacher` 直达教师身份；演示账号 T001（绑定 AI2301/AI2401/AI2501）、T908208（AI2601）、T921028（AI2501），口令统一为 `123456h`。

@@ -12,6 +12,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app.config import get_settings  # noqa: E402
 from scripts.sync_recruit import _connect  # noqa: E402
 
 BASE = os.getenv("DEMO_BASE", "http://127.0.0.1:8001").rstrip("/")
@@ -22,7 +23,11 @@ with conn.cursor() as cur:
     acc = cur.fetchone()[0]
 conn.close()
 
-body = json.dumps({"account": acc, "password": acc, "role": "student"}).encode()
+demo_password = str(get_settings().demo_password or "").strip()
+demo_accounts = {"AI20230001", "AI20260001", "AI20260004",
+                 "AI20250001", "AI20240004"}
+password = demo_password if acc in demo_accounts and demo_password else acc
+body = json.dumps({"account": acc, "password": password, "role": "student"}).encode()
 req = urllib.request.Request(BASE + "/auth/login", data=body,
                              headers={"Content-Type": "application/json"})
 with urllib.request.urlopen(req, timeout=15) as r:
@@ -91,14 +96,15 @@ ANSWERS = [
 ]
 # 6. 逐轮作答
 for i, ans in enumerate(ANSWERS, 1):
-    s, d = call("POST", f"/interview/{sid}/answer", {"text": ans})
+    s, d = call("POST", f"/interview/{sid}/answer", {"text": ans, "expected_round": i})
     if d.get("finished"):
         print(f"6.第{i}轮 -> 收卷")
         break
     print(f"6.第{i}轮 得分", d.get("score"), "下一题", (d.get("next") or {}).get("question_type"))
     print("   点评:", (d.get("comment") or "")[:80])
 else:
-    s, d = call("POST", f"/interview/{sid}/answer", {"text": "我想问问团队的数据栈是什么？"})
+    s, d = call("POST", f"/interview/{sid}/answer",
+                {"text": "我想问问团队的数据栈是什么？", "expected_round": len(ANSWERS) + 1})
 
 # 7. 报告
 print("7.总分", d.get("total"), "差距数", len(d.get("gaps") or []))

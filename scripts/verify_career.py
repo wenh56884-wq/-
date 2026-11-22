@@ -29,6 +29,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from app.config import get_settings  # noqa: E402
+
 # 服务端口可配：本机常有多个 uvicorn 同时在跑（8000 后端、8001 前端代理后端），
 # 写死 8000 会验到另一个进程上去，得到「登录 401」这种看似数据坏了、
 # 实际只是打错门的假报警。用 QH_BASE 覆盖，或 --base 传参。
@@ -70,7 +72,7 @@ def _req(method: str, path: str, token: str | None = None, body: Any = None) -> 
 
 
 def _pick_demo_account() -> str | None:
-    """从库里挑一个真实存在的学生学号当演示账号（口令同学号）。
+    """从库里挑一个真实存在的学生学号当演示账号（演示账号用统一口令）。
 
     学号格式会随 seed 规则变（例如 10 位 ABBR+年份+4 位序号），写死会一直失效；
     这里直接读库，拿不到就返回 None，让调用方回落到默认值。
@@ -106,7 +108,7 @@ def _pick_demo_account() -> str | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--account", default=None,
-                    help="学生学号（演示账号口令同学号）；不传则从库里取一个真实学号")
+                    help="学生学号（演示账号用统一口令）；不传则从库里取一个真实学号")
     args = ap.parse_args()
     account = args.account or _pick_demo_account() or "WL20220001"
     args.account = account
@@ -123,12 +125,16 @@ def main() -> int:
         return 1
 
     # ---- 1 登录 ----
+    demo_password = str(get_settings().demo_password or "").strip()
+    demo_accounts = {"AI20230001", "AI20260001", "AI20260004",
+                     "AI20250001", "AI20240004"}
+    password = demo_password if args.account in demo_accounts and demo_password else args.account
     code, login = _req("POST", "/auth/login",
-                       body={"role": "student", "account": args.account, "password": args.account})
+                       body={"role": "student", "account": args.account, "password": password})
     print(f"\n[1] 登录 {args.account}  HTTP {code}")
     if code != 200:
         print(f"  detail: {login}")
-        print("  → 演示账号口令 = 学号本身；确认 seed_mock 已跑过")
+        print("  → 演示账号口令见 .env 的 DEMO_PASSWORD；其余学生初始口令 = 学号")
         return 1
     token = login["access_token"]
     print(f"  role={login.get('role')}  student_no={login.get('student_no')}  actor_id={login.get('actor_id')}")
@@ -182,7 +188,11 @@ def main() -> int:
         print(f"      - {p.get('阶段')}  {p.get('时间范围')}  {p.get('周数')} 周")
     check("匹配接口 200", code == 200, str(rule_out)[:150] if code != 200 else "")
     check("阶段来自模板（4 个）", len(phases) == 4, f"实际 {len(phases)}")
-    check("阶段周数之和等于剩余周数（10 周）", total_weeks == 10, f"实际 {total_weeks}")
+    # 剩余周数随日期滚动（到期滚下学期），不能写死期望值：
+    # 校验本意是「阶段周数之和 == 接口返回的剩余周数」，动态对比
+    weeks_left = int(rule_out.get("weeks_left") or 0)
+    check("阶段周数之和等于剩余周数", total_weeks == weeks_left,
+          f"阶段合计 {total_weeks} / 接口 weeks_left {weeks_left}")
     check("每个阶段都有日期区间", all(p.get("时间范围") for p in phases))
 
     # ---- 7 周复盘 ----

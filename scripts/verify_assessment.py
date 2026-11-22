@@ -15,10 +15,11 @@ if str(_ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 ACCOUNT = "AI20230001"
-PASSWORD = "AI20230001"
+PASSWORD = str(get_settings().demo_password or "")
 
 
 def _login(client: TestClient) -> dict[str, str]:
@@ -55,7 +56,7 @@ def main() -> None:
 
     # 越权验证：教师 token 访问学生测评接口应 403
     t = client.post("/auth/login", json={"role": "teacher", "account": "T001",
-                                         "password": "teacher@123"})
+                                         "password": PASSWORD})
     if t.status_code == 200:
         th = {"Authorization": f"Bearer {t.json()['access_token']}"}
         f = client.get("/assessment/questions", headers=th)

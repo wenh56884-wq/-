@@ -185,10 +185,12 @@ def recommend_competitions(track: str = "就业", direction: str = "",
 
 
 def unread_notices(student_no: str, tenant_id: int, limit: int = 20) -> dict[str, Any]:
-    """未读推送：id 大于水位的通知即未读。
+    """未读推送：id 大于水位的通知即未读（含考证提醒，id 带 10^9 偏移）。
 
     水位用自增 id 而非时间，避免同一秒内发布的新通知被漏掉。
     """
+    from engine import cert_guide as cert_engine
+
     rows = _query(
         "SELECT `已读通知编号` AS last_notice_id, `最后已读时间` AS last_read_at "
         "FROM `学生通知已读` WHERE `租户编号` = %s AND `学号` = %s",
@@ -204,27 +206,37 @@ def unread_notices(student_no: str, tenant_id: int, limit: int = 20) -> dict[str
     )
     total = _query(
         "SELECT COUNT(*) AS n FROM `竞赛通知` WHERE `编号` > %s", (watermark,))
+    comp_unread = int((total[0] or {}).get("n") or 0) if total else len(notices)
     for notice in notices:
         fetched = notice.get("fetched_at")
         notice["fetched_at"] = fetched.strftime("%Y-%m-%d %H:%M:%S") if isinstance(
             fetched, datetime) else (str(fetched) if fetched else "")
+    merged = cert_engine.merge_notices(notices, watermark, limit=limit)
     return {
         "student_no": str(student_no),
         "last_notice_id": watermark,
         "last_read_at": str((rows[0] or {}).get("last_read_at") or "") if rows else "",
-        "unread_cnt": int((total[0] or {}).get("n") or 0) if total else len(notices),
-        "items": notices,
+        "unread_cnt": comp_unread + int(merged.get("cert_unread_cnt") or 0),
+        "items": merged.get("items") or [],
     }
 
 
 def mark_read(student_no: str, tenant_id: int) -> dict[str, Any]:
-    """把水位推到当前最大通知 id：之后发布的新通知才会再次提醒。"""
+    """把水位推到当前最大通知 id（含考证提醒）：之后的新通知才会再次提醒。
+
+    考证提醒的 id 按阶段递增（报名中 → 临近考试），推到当前活跃提醒的最大 id，
+    下一阶段 id 更大，到点仍会再提醒。
+    """
+    from engine import cert_guide as cert_engine
+
     rows = _query("SELECT COALESCE(MAX(`编号`), 0) AS max_id FROM `竞赛通知`")
     max_id = int((rows[0] or {}).get("max_id") or 0) if rows else 0
+    cert_max = cert_engine.watermark_max()
+    watermark = max(max_id, cert_max)
     _execute(
         "INSERT INTO `学生通知已读` (`学号`, `租户编号`, `已读通知编号`, `最后已读时间`) "
         "VALUES (%s, %s, %s, NOW()) ON DUPLICATE KEY UPDATE "
         "`已读通知编号` = VALUES(`已读通知编号`), `最后已读时间` = NOW()",
-        (str(student_no), int(tenant_id), max_id),
+        (str(student_no), int(tenant_id), watermark),
     )
-    return {"student_no": str(student_no), "last_notice_id": max_id, "marked": True}
+    return {"student_no": str(student_no), "last_notice_id": watermark, "marked": True}

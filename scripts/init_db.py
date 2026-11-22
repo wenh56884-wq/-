@@ -38,6 +38,7 @@ _DUCKDB_SQL = _ROOT / "db" / "duckdb_schema.sql"
 # 重复执行 init_db 不会报错也不会重复加列。
 _COLUMN_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     # 表名, 列名, 列定义
+    ("审计日志", "租户编号", "BIGINT NOT NULL DEFAULT 1 COMMENT '审计所属租户'"),
     ("工作流定义", "是否需要审批", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("工作流运行", "步骤快照",
      "JSON NULL COMMENT '提交待审时的步骤快照；审批通过按它执行'"),
@@ -48,6 +49,14 @@ _ENUM_MIGRATIONS: tuple[tuple[str, str, str, str], ...] = (
     # 表名, 列名, 需要包含的取值, 完整列定义
     ("工作流运行", "状态", "pending",
      "ENUM('running','pending','success','failed','rejected') NOT NULL DEFAULT 'running'"),
+)
+
+_INDEX_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        "审计日志",
+        "idx_audit_tenant_action_time",
+        "(`租户编号`, `动作`, `创建时间`)",
+    ),
 )
 
 
@@ -134,6 +143,18 @@ def ensure_mysql_columns(settings) -> None:
                 if row and token not in str(row["t"]):
                     cur.execute(f"ALTER TABLE `{table}` MODIFY COLUMN `{column}` {ddl}")
                     print(f"  [ALTER] {table}.{column} 已扩充 {token}")
+            for table, index, columns in _INDEX_MIGRATIONS:
+                cur.execute(
+                    "SELECT COUNT(*) AS n FROM information_schema.STATISTICS"
+                    " WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s"
+                    " AND INDEX_NAME=%s",
+                    (table, index),
+                )
+                if int(cur.fetchone()["n"]) == 0:
+                    cur.execute(
+                        f"ALTER TABLE `{table}` ADD INDEX `{index}` {columns}"
+                    )
+                    print(f"  [INDEX] {table}.{index} 已新增")
     finally:
         conn.close()
 

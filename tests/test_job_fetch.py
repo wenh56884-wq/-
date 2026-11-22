@@ -106,61 +106,63 @@ def test_skill_bigdata_stack():
         assert kw in hits
 
 
-# ---------------------------------------------------------------- 卡片解析
+# ---------------------------------------------------------------- 卡片解析（mohrss 内嵌 JSON 直采）
+#
+# 创新点：mohrss 把岗位数据以 JSON 内嵌在 <input id="findjoblist" value="..."> 里，
+# 解码即得，无需渲染/DOM 解析。下面直接验证这条链路。
 
-_CARD_HTML = """
-<div class="home-industry-content-item">
-  <div class="seo-jobcard2-common">
-    <a class='jobcard2-detail-box' target='_blank'
-       href="https://www.liepin.com/job/1982427721.shtml" data-jobid="82427721">
-      <div class='jobcard2-detail-top'>
-        <div class="jobcard2-title-group">
-          <span class='jobcard2-title ellipsis-1'>数据开发工程师</span>
-          <span class='jobcard2-location ellipsis-1'>重庆-渝北区</span>
-        </div>
-        <span class='jobcard2-salary'>15-25k·14薪</span>
-      </div>
-      <div class='jobcard2-detail-labels'>
-        <span>3-5年</span>
-        <span>本科</span>
-      </div>
-    </a>
-    <a class='jobcard2-company-box' href="https://www.liepin.com/company/1/">
-      <div class='jobcard2-company-inline'>
-        <span class='jobcard2-company-title'>重庆某数据科技有限公司</span>
-        <i class="jobcard2-company-split"></i>
-        <div class="jobcard2-company-meta">
-          <span>大数据</span>
-          <span>100-499人</span>
-        </div>
-      </div>
-    </a>
-  </div>
-</div>
+_MOHRSS_LIST_HTML = """
+<html><body>
+<input id="findjoblist" name="findjoblist" value="[
+  {&#034;aab001&#034;:37346507,&#034;aab004&#034;:&#034;金城江区钰翎美容馆&#034;,
+   &#034;aca112&#034;:&#034;康养师&#034;,&#034;aab302&#034;:&#034;河池市&#034;,
+   &#034;dxs&#034;:&#034;&#034;,&#034;keyWords&#034;:&#034;&#034;,
+   &#034;md5&#034;:&#034;key0000000000000000000000000001&#034;},
+  {&#034;aab001&#034;:123,&#034;aab004&#034;:&#034;某科技公司&#034;,
+   &#034;aca112&#034;:&#034;店员（3名），综合月薪：2500元+提成&#034;,
+   &#034;aab302&#034;:&#034;重庆市&#034;,&#034;dxs&#034;:&#034;不限&#034;,
+   &#034;keyWords&#034;:&#034;Python&#034;,
+   &#034;md5&#034;:&#034;key0000000000000000000000000002&#034;}
+]">
+</body></html>
 """
 
-
-def test_parse_cards_full_fields():
-    cards = jf.parse_cards(_CARD_HTML)
-    assert len(cards) == 1
-    c = cards[0]
-    assert c["title"] == "数据开发工程师"
-    assert c["company"] == "重庆某数据科技有限公司"
-    assert c["industry"] == "大数据"
-    assert c["city"] == "重庆"
-    assert c["district"] == "渝北区"
-    assert (c["salary_min"], c["salary_max"]) == (15000.0, 25000.0)
-    assert c["education"] == "本科"
-    assert c["experience"] == "3-5年"
-    assert c["job_id"] == "1982427721"
+_MOHRSS_LIST_URL = "http://job.mohrss.gov.cn/cjobs/jobinfolist/listJobinfolist?pageNo=1"
 
 
-def test_parse_cards_dedup_same_url():
-    assert len(jf.parse_cards(_CARD_HTML + _CARD_HTML)) == 1
+def test_mohrss_decode_records_full_fields():
+    recs = jf._mohrss_decode_records(_MOHRSS_LIST_HTML)
+    assert len(recs) == 2
+    assert recs[0]["aab001"] == 37346507
+    assert recs[0]["aab004"] == "金城江区钰翎美容馆"
 
 
-def test_parse_cards_empty_html():
-    assert jf.parse_cards("") == []
+def test_mohrss_card_mapping():
+    recs = jf._mohrss_decode_records(_MOHRSS_LIST_HTML)
+    cards = [jf._mohrss_card(r, _MOHRSS_LIST_URL) for r in recs]
+    c0 = cards[0]
+    assert c0["title"] == "康养师"
+    assert c0["company"] == "金城江区钰翎美容馆"
+    assert c0["city"] == "河池市"
+    assert c0["source_key"] == "key0000000000000000000000000001"
+    assert c0["apply_url"] == _MOHRSS_LIST_URL
+    # 第二张：薪资/人数从岗位名里抽，「不限」是原文真信息
+    c1 = cards[1]
+    assert c1["salary_min"] == 2500.0
+    assert c1["headcount"] == 3
+    assert c1["education"] == "不限"
+    assert c1["skill_tags"] == ["Python"]
+
+
+def test_mohrss_decode_records_empty():
+    assert jf._mohrss_decode_records("") == []
+    assert jf._mohrss_decode_records("<html>no input</html>") == []
+
+
+def test_mohrss_salary_from_title():
+    assert jf._mohrss_salary("综合月薪：2500元") == (2500.0, None)
+    assert jf._mohrss_salary("月薪3000-5000元") == (3000.0, 5000.0)
+    assert jf._mohrss_salary("康养师") == (None, None)
 
 
 # ---------------------------------------------------------------- 详情页
@@ -217,7 +219,7 @@ def test_build_job_keeps_missing_as_none():
         "education": None, "experience": None,
         "apply_url": "https://www.liepin.com/job/1.shtml",
     }
-    row = jf.build_job("liepin-cq", card, None)
+    row = jf.build_job("mohrss", card, None)
     assert row["education"] is None
     assert row["experience"] is None
     assert row["salary_min"] is None
@@ -228,14 +230,14 @@ def test_build_job_keeps_missing_as_none():
 def test_build_job_source_key_is_stable():
     card = {"title": "文员", "company": "A", "apply_url": "https://x/job/1.shtml",
             "city": "重庆"}
-    a = jf.build_job("liepin-cq", card, None)["source_key"]
-    b = jf.build_job("liepin-cq", card, None)["source_key"]
+    a = jf.build_job("mohrss", card, None)["source_key"]
+    b = jf.build_job("mohrss", card, None)["source_key"]
     assert a == b and len(a) == 32
 
 
 def test_build_job_skills_from_title_and_jd():
     card = {"title": "Python数据开发", "company": "A",
             "apply_url": "https://x/job/2.shtml", "city": "重庆"}
-    row = jf.build_job("liepin-cq", card, "职位介绍 熟悉 Hive 与 Spark，本科以上。" * 2)
+    row = jf.build_job("mohrss", card, "职位介绍 熟悉 Hive 与 Spark，本科以上。" * 2)
     assert "Python" in row["skill_tags"]
     assert "Hive" in row["skill_tags"]

@@ -1,5 +1,5 @@
 # scripts/sync_recruit.py
-# 职责：每周抓一次「招考公告 + 企业岗位」，增量入库，标注过期项。
+# 职责：每天抓一次「招考公告 + 企业岗位」，增量入库，标注过期项。
 #
 # 用法：
 #   .venv\Scripts\python.exe scripts\sync_recruit.py            # 抓全部（招考 + 岗位）
@@ -225,8 +225,8 @@ def upsert_jobs(cur, rows: list[dict[str, Any]]) -> tuple[int, int]:
 def close_stale_jobs(cur, days: int = 21) -> int:
     """把「超过 N 天没再被抓到」的岗位标为 closed。
 
-    猎聘不给报名截止日，所以不能用 deadline 判。缺省 21 天：
-    一个还在招的岗位，三周内总会在城市首页重新出现一次；连续三周不见就是下线了。
+    招聘岗不给报名截止日，所以不能用 deadline 判。缺省 21 天：
+    一个还在招的岗位，三周内总会在列表页重新出现一次；连续三周不见就是下线了。
     只用 last_seen_at 这一个可核对的事实，不做「推测已招满」。
     """
     n = cur.execute(
@@ -305,7 +305,7 @@ def sync_source(conn, source_id: str, *, dry_run: bool = False,
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="招考公告 + 企业岗位 周更入库")
+    ap = argparse.ArgumentParser(description="招考公告 + 企业岗位 日更入库")
     ap.add_argument("--target", action="append", default=None,
                     choices=["exam", "job"],
                     help="抓哪类：exam=考公考编考研，job=企业岗位；可多次传，默认两类都抓")
@@ -355,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         ensure_tables(conn)
         print("=" * 64)
-        print("招考公告 + 企业岗位 周更入库")
+        print("招考公告 + 企业岗位 日更入库")
         print("=" * 64)
         total_ins = total_upd = total_fetched = total_closed = 0
         failed: list[str] = []

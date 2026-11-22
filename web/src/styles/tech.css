@@ -1,0 +1,203 @@
+/* web/src/styles/tech.css
+   职责：科技感设计层——在既有浅色体系之上叠加主色渐变 / 数据发光 / 卡片微动效 /
+   数字滚动 / 图表渐变 token 与工具类；深色底仅用于局部展示区（创新点 / 数据大屏）。
+   加载顺序：main.js 最后引入，覆盖 styles.css / bento.css / motion.css 同名规则。
+   硬约束：不改 body 浅色底、不碰业务逻辑，全部是追加式视觉规则。 */
+
+:root {
+  /* ===== 科技层 token（叠在 --cf-* / --qh-* 之上，不替换原语义色）===== */
+  --tech-blue: #1951c3;
+  --tech-cyan: #00c2ff;
+  /* 主色渐变：品牌靛蓝 → 数据青，用于强调块 / 主按钮 / 数字描边 */
+  --tech-gradient: linear-gradient(135deg, #1951c3 0%, #2b7ae0 50%, #00c2ff 100%);
+  --tech-gradient-soft: linear-gradient(135deg, rgba(25, 81, 195, 0.10) 0%, rgba(0, 194, 255, 0.12) 100%);
+  /* 数据发光：外圈发丝 + 双层光晕，hover 时抬升用 */
+  --tech-glow:
+    0 0 0 1px rgba(0, 194, 255, 0.22),
+    0 10px 30px -12px rgba(25, 81, 195, 0.42),
+    0 0 26px -10px rgba(0, 194, 255, 0.30);
+  --tech-glow-text: 0 0 18px rgba(0, 194, 255, 0.22);
+  /* 边光扫过：hover 时沿卡片顶缘掠过的一道青色高光 */
+  --tech-edge: linear-gradient(100deg, transparent 18%, rgba(0, 194, 255, 0.85) 50%, transparent 82%);
+  /* 局部深色展示区专用底：只在创新点 / 数据大屏容器内使用 */
+  --tech-dark: #0a0e1a;
+  --tech-dark-2: #101a2e;
+  --tech-dark-line: rgba(120, 170, 255, 0.18);
+  /* 图表渐变填充 token：组件 option 通过 utils/echarts.js 的 helper 读取 */
+  --tech-chart-from: #1951c3;
+  --tech-chart-to: #00c2ff;
+  --tech-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- 工具类：供第二阶段创新点板块页直接取用 ---------- */
+
+/* 渐变文字：数字 / 关键词高亮 */
+.qh-tech-gradient-text {
+  background: var(--tech-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 数据发光容器 */
+.qh-tech-glow {
+  box-shadow: var(--tech-glow) !important;
+}
+
+/* 渐变描边卡片（浅底，不推翻全局白底） */
+.qh-tech-card {
+  position: relative;
+  border: 1px solid transparent !important;
+  background:
+    var(--tech-gradient-soft) padding-box,
+    var(--tech-gradient) border-box;
+  border-radius: 16px;
+}
+
+/* 局部深色展示区：创新点板块 / 数据大屏专用，禁止套到页面根容器 */
+.qh-tech-panel {
+  position: relative;
+  overflow: hidden;
+  color: #e8f1ff;
+  border: 1px solid var(--tech-dark-line);
+  border-radius: 18px;
+  background:
+    radial-gradient(560px 240px at 88% -10%, rgba(0, 194, 255, 0.20), transparent 66%),
+    radial-gradient(460px 220px at 4% 108%, rgba(25, 81, 195, 0.22), transparent 68%),
+    var(--tech-dark);
+  box-shadow:
+    0 18px 44px rgba(10, 14, 26, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* 深色展示区内的数值：青色发光 */
+.qh-tech-panel .qh-tech-metric {
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 22px rgba(0, 194, 255, 0.35);
+}
+
+/* ---------- 卡片微动效：hover 浮起 + 边光扫过（统一 bento / el-card） ----------
+    specificity 与 motion.css 对齐且本文件后加载，稳定覆盖其 -3px。 */
+.bento-card:not(.hero-card):hover,
+.el-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--tech-glow), 0 18px 40px -18px rgba(16, 24, 40, 0.22);
+}
+
+/* 边光扫过：只给 bento 卡（::after 空闲），卡中卡 / Hero 不参与 */
+@keyframes qh-tech-edge-sweep {
+  0% { transform: translateX(-110%); opacity: 0; }
+  18% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { transform: translateX(110%); opacity: 0; }
+}
+
+.bento-card:not(.hero-card)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 2px;
+  z-index: 2;
+  border-radius: 999px;
+  background: var(--tech-edge);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bento-card:not(.hero-card):hover::after {
+  animation: qh-tech-edge-sweep 900ms var(--tech-ease) 1;
+}
+
+/* 触屏 / 窄屏不做位移（与 motion.css 的降级口径一致） */
+@media (pointer: coarse), (max-width: 1023px) {
+  .bento-card:not(.hero-card):hover,
+  .el-card:hover {
+    transform: none;
+  }
+}
+
+/* ---------- 页面切换过渡：在原 fade + translateY 上加一层轻微失焦 ---------- */
+.qh-page-enter-active {
+  transition:
+    opacity 0.34s var(--tech-ease),
+    transform 0.34s var(--tech-ease),
+    filter 0.34s var(--tech-ease);
+}
+
+.qh-page-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    filter 0.18s ease;
+}
+
+.qh-page-enter-from {
+  opacity: 0;
+  transform: translateY(14px) scale(0.995);
+  filter: blur(4px);
+}
+
+.qh-page-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+  filter: blur(2px);
+}
+
+/* ---------- 顶栏：毛玻璃 + 发丝线升级 ----------
+   ShellLayout 的 .topbar 是 scoped 样式，用 !important 覆盖（仅视觉属性）。 */
+.topbar {
+  background: rgba(247, 250, 255, 0.78) !important;
+  backdrop-filter: saturate(180%) blur(20px) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(20px) !important;
+  border-bottom: 1px solid rgba(25, 81, 195, 0.16) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6),
+    0 6px 24px -12px rgba(25, 81, 195, 0.28) !important;
+}
+
+.topbar.is-scrolled {
+  background: rgba(248, 251, 255, 0.72) !important;
+  backdrop-filter: saturate(180%) blur(26px) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(26px) !important;
+  border-bottom-color: rgba(0, 194, 255, 0.28) !important;
+  box-shadow: 0 8px 30px -14px rgba(25, 81, 195, 0.34) !important;
+}
+
+/* 顶栏底部一道两端消隐的渐变发丝线 */
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(25, 81, 195, 0.45) 28%,
+    rgba(0, 194, 255, 0.70) 50%,
+    rgba(25, 81, 195, 0.45) 72%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* ---------- 减少动态效果：科技层全量降级 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .bento-card:not(.hero-card)::after {
+    animation: none !important;
+    content: none !important;
+  }
+
+  .bento-card:not(.hero-card):hover,
+  .el-card:hover {
+    transform: none !important;
+  }
+
+  .qh-page-enter-from,
+  .qh-page-leave-to {
+    filter: none !important;
+  }
+}

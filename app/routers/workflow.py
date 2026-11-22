@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app import workflow_approval as approval
 from app.audit import audit_event
-from app.auth import get_current_ctx, require_teacher
+from app.auth import get_current_ctx, require_student, require_teacher
 from app.config import get_settings
 from engine import workflow as wf_engine
 from agents.tools import ToolContext
@@ -110,7 +110,8 @@ def create_def(inp: DefIn, ctx: ToolContext = Depends(require_teacher)) -> dict[
                              f"teacher:{ctx.teacher_id}", 1 if inp.needs_approval else 0))
                 did = int(cur.lastrowid)
         conn.commit()
-        audit_event(actor_type="teacher", actor_id=ctx.teacher_id or 0, action="workflow.define",
+        audit_event(tenant_id=ctx.tenant_id, actor_type="teacher",
+                    actor_id=ctx.teacher_id or 0, action="workflow.define",
                     target=str(did),
                     detail={"name": inp.name, "steps": len(steps),
                             "needs_approval": inp.needs_approval})
@@ -175,7 +176,8 @@ def run_definition(ctx: ToolContext, def_id: int, inputs: dict[str, Any] | None 
                          result.get("error"), result["elapsed_ms"]))
             run_id = int(cur.lastrowid)
         conn.commit()
-        audit_event(actor_type=ctx.actor_type, actor_id=ctx.teacher_id or ctx.student_id or 0,
+        audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                    actor_id=ctx.teacher_id or ctx.student_id or 0,
                     action="workflow.run", target=str(def_id),
                     detail={"run_id": run_id, "status": result["status"],
                             "steps": len(result["steps"])})
@@ -213,6 +215,85 @@ def decide_run(run_id: int, inp: DecideIn,
         raise HTTPException(409, str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
+
+
+@router.get("/approvals/history")
+def approval_history(limit: int = 20,
+                     ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
+    """最近已处理的审批（教师回查）：批了谁、批了什么、执行结果如何。"""
+    return approval.list_history(ctx, limit)
+
+
+# 学生侧：只看自己发起的流程申请。学号一律取 JWT，不接受入参指定他人。
+_RUN_STATUS_TEXT = {
+    "pending": "待教师审批",
+    "running": "执行中",
+    "success": "已执行完成",
+    "failed": "执行失败",
+    "rejected": "已驳回",
+}
+
+
+@router.get("/my-runs")
+def my_runs(limit: int = 10, ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """学生查看自己的流程申请：状态、教师驳回意见、逐步结果。
+
+    学生提交后如果只能看到「等待审批」一句话，通过 / 驳回就成了黑盒——
+    被驳回的学生不知道为什么，也不会再试。这个接口把结果反馈闭合。
+    """
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT r.`编号` AS id, d.`名称` AS name, d.`描述` AS description,"
+                " r.`状态` AS status, r.`错误` AS error, r.`耗时毫秒` AS elapsed_ms,"
+                " r.`入参` AS inputs, r.`步骤结果` AS step_results,"
+                " r.`开始时间` AS submitted_at, r.`结束时间` AS finished_at,"
+                " a.`动作` AS action, a.`意见` AS comment, a.`审批时间` AS decided_at"
+                " FROM `工作流运行` r"
+                " JOIN `工作流定义` d ON d.`编号`=r.`定义编号` AND d.`租户编号`=%s"
+                " LEFT JOIN `工作流审批` a ON a.`运行编号`=r.`编号`"
+                " WHERE r.`触发角色`='student' AND r.`触发人编号`=%s"
+                " ORDER BY r.`编号` DESC LIMIT %s",
+                (ctx.tenant_id, ctx.student_id, max(1, min(int(limit), 50))))
+            rows = list(cur.fetchall())
+            # 学生还要知道「有哪些流程可以申请」：没有这个清单，卡片只对
+            # 已经玩过的人可见，新学生永远发现不了这个能力。
+            cur.execute("SELECT `编号` AS id, `名称` AS name, `描述` AS description"
+                        " FROM `工作流定义` WHERE `租户编号`=%s AND `是否启用`=1"
+                        "   AND `是否需要审批`=1 ORDER BY `编号` LIMIT 20",
+                        (ctx.tenant_id,))
+            available = list(cur.fetchall())
+    finally:
+        conn.close()
+
+    items = []
+    for r in rows:
+        status = str(r["status"])
+        step_results = _json_list(r.get("step_results"))
+        items.append({
+            "id": int(r["id"]),
+            "name": r["name"],
+            "description": r.get("description"),
+            "status": status,
+            "status_text": _RUN_STATUS_TEXT.get(status, status),
+            "error": r.get("error"),
+            "elapsed_ms": int(r.get("elapsed_ms") or 0),
+            # pending 状态一步都没跑，别把空 steps 展示成「什么都没执行」吓人
+            "steps": [{"title": st.get("title") or wf_engine.ALLOWED_TOOLS.get(str(st.get("tool")), ""),
+                       "status": str(st.get("status") or "")}
+                      for st in step_results if status != wf_engine.STATUS_PENDING],
+            "submitted_at": r.get("submitted_at").isoformat() if r.get("submitted_at") else None,
+            "finished_at": r.get("finished_at").isoformat() if r.get("finished_at") else None,
+            "decided": ({"action": str(r["action"]),
+                         "comment": r.get("comment"),
+                         "decided_at": r.get("decided_at").isoformat()
+                         if r.get("decided_at") else None}
+                        if r.get("action") else None),
+        })
+    return {"total": len(items), "items": items,
+            "available": [{"id": int(a["id"]), "name": a["name"],
+                           "description": a.get("description")} for a in available]}
 
 
 @router.get("/runs")

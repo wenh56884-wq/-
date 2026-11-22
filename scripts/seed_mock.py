@@ -19,6 +19,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from app.auth import hash_password
 from app.config import get_settings
 from etl import school_cqufe
 
@@ -31,6 +32,10 @@ _SEED = 42
 # 班级差距都要在「几百条记录」下才看出性能表现，40 人的演示数据压力不够。
 _TOTAL_STUDENTS = 10_000
 _TENANT_ID = 1  # 重庆财经学院
+# 登录页 / 答辩演示用账号：统一使用 DEMO_PASSWORD，其余生成账号保持「初始口令=学号」
+_DEMO_STUDENT_NOS = frozenset({
+    "AI20230001", "AI20260001", "AI20260004", "AI20250001", "AI20240004",
+})
 
 # 8 个重点专业各 ≥30 人
 _KEY_MAJORS = [
@@ -188,6 +193,11 @@ def main() -> None:
 
     rng = random.Random(_SEED)
     settings = get_settings()
+    demo_password = str(settings.demo_password or "").strip()
+    if not demo_password:
+        raise SystemExit("DEMO_PASSWORD 未配置：请先在 .env 设置本地演示账号统一口令")
+    # bcrypt 只算一次，所有演示学生复用同一摘要（其余学生仍用原学号摘要）
+    demo_digest = hash_password(demo_password)
 
     # 2. 构建课程目录
     catalog = _build_course_catalog()
@@ -460,7 +470,9 @@ def main() -> None:
         print("灌入学生...")
         student_insert_data = [
             (_TENANT_ID, s["student_no"], s["name"], s["college"], s["major"],
-             s["class_name"], s["grade"], s["enroll_year"], _gen_password_hash(s["student_no"]))
+             s["class_name"], s["grade"], s["enroll_year"],
+             demo_digest if s["student_no"] in _DEMO_STUDENT_NOS
+             else _gen_password_hash(s["student_no"]))
             for s in students
         ]
         cur.executemany(

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 
 import router from '../router'
 
@@ -46,13 +46,28 @@ http.interceptors.request.use((config) => {
 // 403 是“已登录但无权访问该数据”（如跨租户/角色不符），应保留登录态并提示具体原因。
 http.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error?.response?.status
-    const detail = error?.response?.data?.detail || error?.message || '请求失败'
+    let detail = error?.response?.data?.detail || error?.message || '请求失败'
+    // 导出接口用 responseType:'blob'：失败时后端返回的 JSON 也包在 Blob 里，
+    // 直接取 .detail 拿到的是 undefined，用户只会看到一句「请求失败」
+    if (error?.response?.data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await error.response.data.text())
+        if (parsed?.detail) detail = parsed.detail
+      } catch {
+        /* 非 JSON（真的是文件）就保留原提示 */
+      }
+    }
     if (status === 401) {
       ElMessage.error('登录已失效，请重新登录')
       clearSession()
       router.push('/login')
+      return Promise.reject(error)
+    }
+    // 宠物是陪伴层：接口失败由宠物气泡兜底，不弹全局错误
+    // （proactive 每分钟轮询一次，后端不可用时否则会每分钟弹一条）
+    if (String(error?.config?.url || '').startsWith('/pet/')) {
       return Promise.reject(error)
     }
     ElMessage.error(typeof detail === 'string' ? detail : '请求失败')

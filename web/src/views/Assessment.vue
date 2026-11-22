@@ -152,7 +152,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import http from '../api/http'
 
 // 复合能力 label 映射（与后端 engine/assessment.py 的 ABILITY_KEYS 对齐）
@@ -240,7 +240,7 @@ function clampPct(value) {
 function abilityColor(value) {
   const num = Number(value) || 0
   if (num >= 80) return '#16a34a'
-  if (num >= 60) return '#5b5bd6'
+  if (num >= 60) return '#1951c3'
   if (num >= 40) return '#f59e0b'
   return '#ef4444'
 }
@@ -473,7 +473,7 @@ onMounted(loadHistory)
 
 .opt-item:hover {
   transform: translateY(-1px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   background: #fbfbff;
 }
 

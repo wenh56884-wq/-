@@ -169,21 +169,7 @@ function percent(value, total) {
   animation: route-label 0.6s ease forwards;
 }
 
-/* 页头航线条不加叙事标签和入场动画，只做一条安静的结构线 */
-.brand-route--strip {
-  animation: route-strip-in 0.9s ease 0.15s both;
-}
 
-.brand-route--strip .brand-route__line {
-  animation: none;
-  stroke-dashoffset: 0;
-  opacity: 0.5;
-}
-
-.brand-route--strip .brand-route__dash {
-  animation: none;
-  opacity: 0.35;
-}
 
 .brand-route--strip .brand-route__nodes circle {
   animation: none;

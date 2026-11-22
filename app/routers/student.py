@@ -5,31 +5,32 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
+from agents import campus_insight as campus_agent
 from agents import tools
 from agents.tools import ToolContext
-from app.audit import audit_event
 from app.auth import require_student
 
 router = APIRouter(prefix="/student", tags=["学生端"])
 
 
+class CampusInsightIn(BaseModel):
+    """校园行为洞察解读输入：学期可选，身份不在入参里（只从 JWT 取）。"""
+
+    term: str | None = Field(default=None, max_length=20)
+
+
 def _guard(ctx: ToolContext, action: str, target: str, call) -> dict[str, Any]:
-    started = time.perf_counter()
     try:
         result = call()
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    finally:
-        audit_event(actor_type=ctx.actor_type, actor_id=ctx.student_id,
-                    action=f"api.{action}", target=target,
-                    duration_ms=(time.perf_counter() - started) * 1000)
     return result
 
 
@@ -126,3 +127,28 @@ def job_detail(job_id: int, ctx: ToolContext = Depends(require_student)) -> dict
     """岗位详情（含 JD 全文与福利）。"""
     return _guard(ctx, "job_detail", str(job_id),
                   lambda: tools.job_detail(ctx, job_id))
+
+
+# ================================================================
+# 校园行为洞察（事实 GET + 智能体 POST，数值来自 engine.campus_insight）
+# ================================================================
+@router.get("/campus-insight")
+def campus_insight(
+    term: str | None = Query(default=None, max_length=20,
+                             description="学期，缺省回落到最新学期"),
+    ctx: ToolContext = Depends(require_student),
+) -> dict[str, Any]:
+    """事实层：本人图书馆/消费/活动/出勤/岗位兴趣 → 学习投入画像（确定性引擎）。"""
+    return _guard(ctx, "my_campus_insight", term or "",
+                  lambda: tools.my_campus_insight(ctx, term))
+
+
+@router.post("/campus-insight/interpret")
+def campus_insight_interpret(
+    inp: CampusInsightIn,
+    ctx: ToolContext = Depends(require_student),
+) -> dict[str, Any]:
+    """智能体层（主角）：大模型基于事实生成个性化解读与行动建议；critic 回查数值，
+    LLM 不可用/被驳回时降级确定性模板（source=template）。不接收任何「查谁」入参。"""
+    return _guard(ctx, "campus_insight_interpret", "self",
+                  lambda: campus_agent.interpret_student(ctx, inp.term))

@@ -29,8 +29,8 @@ def _mysql_ok() -> bool:
 
 
 requires_mysql = pytest.mark.skipif(not _mysql_ok(), reason="MySQL 不可用")
-STUDENT = ("AI20230001", "AI20230001")
-TEACHER = ("T001", "teacher@123")
+STUDENT = ("AI20230001", "123456h")
+TEACHER = ("T001", "123456h")
 
 
 @pytest.fixture(scope="module")

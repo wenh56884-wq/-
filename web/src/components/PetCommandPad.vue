@@ -150,7 +150,7 @@ onMounted(async () => {
 }
 
 .pad-input input:focus {
-  border-color: #7c6cf8;
+  border-color: #3b6ee5;
   box-shadow: 0 0 0 2px rgba(124, 108, 248, 0.16);
 }
 
@@ -159,7 +159,7 @@ onMounted(async () => {
   padding: 0 12px;
   border: 0;
   border-radius: 8px;
-  background: linear-gradient(135deg, #8f7ffb 0%, #7c6cf8 100%);
+  background: linear-gradient(135deg, #8f7ffb 0%, #3b6ee5 100%);
   color: #fff;
   font-size: 12px;
   cursor: pointer;
@@ -184,7 +184,7 @@ onMounted(async () => {
 .pad-link {
   border: 0;
   background: transparent;
-  color: #7c6cf8;
+  color: #3b6ee5;
   font-size: 12px;
   cursor: pointer;
   padding: 0;

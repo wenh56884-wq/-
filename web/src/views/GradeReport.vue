@@ -25,6 +25,22 @@
               查询成绩
             </el-button>
           </el-form-item>
+          <el-form-item label="导出">
+            <el-dropdown trigger="click" :disabled="!className" @command="exportClassGrades">
+              <el-button :loading="exportingClass" :disabled="!className"
+                title="导出全班成绩：Excel 含「成绩明细」与「个人汇总」两个表">
+                全班成绩 <span class="caret">▾</span>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="xlsx">Excel（.xlsx，明细+汇总）</el-dropdown-item>
+                  <el-dropdown-item command="csv" divided>CSV（.csv，仅明细）</el-dropdown-item>
+                  <el-dropdown-item command="json">JSON（.json，含汇总结构）</el-dropdown-item>
+                  <el-dropdown-item command="pick" divided>自选字段…（只要我要的那几列）</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </el-form-item>
         </el-form>
         <div v-if="err" class="err">{{ err }}</div>
       </section>
@@ -95,6 +111,22 @@
               {{ student.major || '专业未填' }} · {{ student.class_name || '班级未填' }}
               · {{ student.grade || '年级未知' }}
             </p>
+          </div>
+          <div class="export-inline">
+            <el-dropdown trigger="click" @command="exportCurrentGrades">
+              <el-button size="small" type="primary" plain :loading="exportingOne"
+                title="导出当前这份成绩单（与学生端看到的内容完全一致）">
+                下载成绩单 <span class="caret">▾</span>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="xlsx">Excel（.xlsx）</el-dropdown-item>
+                  <el-dropdown-item command="csv" divided>CSV（.csv）</el-dropdown-item>
+                  <el-dropdown-item command="json">JSON（.json）</el-dropdown-item>
+                  <el-dropdown-item command="pick" divided>自选字段…（只要我要的那几列）</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
           <div class="summary-stats">
             <div><span>课程</span><b>{{ summary.course_count ?? 0 }}</b></div>
@@ -229,16 +261,36 @@
       />
       <el-empty v-else-if="!isTeacher && !report && !loading" class="bento-span-4" description="暂无成绩数据" />
     </div>
+
+    <!-- 自选字段导出：字段目录由后端给，勾几列就导几列 -->
+    <ExportDialog
+      v-model="pickOpen"
+      :url="pickUrl"
+      :dataset="pickDataset"
+      :params="pickParams"
+      :fallback-name="pickFallback"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
+import echarts from '../utils/echarts'
 
 import http, { currentRole } from '../api/http'
+import ExportDialog from '../components/export/ExportDialog.vue'
+import { downloadFile } from '../utils/download'
+// 同上：dropdown 三个组件共用一个入口，自动导入会找错路径
+import {
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu
+} from 'element-plus/es/components/dropdown/index.mjs'
+import 'element-plus/es/components/dropdown/style/css'
+import 'element-plus/es/components/dropdown-menu/style/css'
+import 'element-plus/es/components/dropdown-item/style/css'
 
 const role = currentRole()
 const isTeacher = role === 'teacher'
@@ -365,6 +417,84 @@ function onStudentChange() {
   loadGrades()
 }
 
+// ---------------------------------------------------------------- 导出
+// 两个入口分开：全班成绩走教师专属接口，个人成绩单按角色走不同接口
+// （学生只能用 /export/my-grades，学号由 JWT 决定，接口层不接受入参指定他人）
+const exportingOne = ref(false)
+const exportingClass = ref(false)
+
+// 自选字段导出：url / dataset 按角色与当前选择决定，弹窗只负责勾列
+const pickOpen = ref(false)
+const pickUrl = ref('/export/grades')
+const pickDataset = ref('grades')
+const pickParams = ref({})
+const pickFallback = ref('导出')
+
+function openPicker(url, dataset, params, fallback) {
+  pickUrl.value = url
+  pickDataset.value = dataset
+  pickParams.value = params
+  pickFallback.value = fallback
+  pickOpen.value = true
+}
+
+async function exportCurrentGrades(fmt) {
+  const teacher = isTeacher
+  if (teacher && !studentNo.value) {
+    ElMessage.warning('请先选择学生')
+    return
+  }
+  if (fmt === 'pick') {
+    openPicker(
+      teacher ? `/export/student-grades/${encodeURIComponent(studentNo.value)}` : '/export/my-grades',
+      teacher ? 'student-grades' : 'my-grades',
+      { term: '' },
+      teacher ? `成绩单-${studentNo.value}` : '我的成绩单'
+    )
+    return
+  }
+  exportingOne.value = true
+  try {
+    const name = teacher
+      ? await downloadFile(
+          `/export/student-grades/${encodeURIComponent(studentNo.value)}`,
+          { term: '', fmt },
+          `成绩单-${studentNo.value}.${fmt}`
+        )
+      : await downloadFile('/export/my-grades', { term: '', fmt }, `我的成绩单.${fmt}`)
+    ElMessage.success(`已下载：${name}`)
+  } catch {
+    // 具体原因由 http 拦截器提示
+  } finally {
+    exportingOne.value = false
+  }
+}
+
+async function exportClassGrades(fmt) {
+  if (!className.value) {
+    ElMessage.warning('请先选择班级')
+    return
+  }
+  if (fmt === 'pick') {
+    openPicker('/export/grades', 'grades', { class_name: className.value, term: '' },
+      `班级成绩-${className.value}`)
+    return
+  }
+  exportingClass.value = true
+  try {
+    const name = await downloadFile(
+      '/export/grades',
+      { class_name: className.value, term: '', fmt },
+      `班级成绩-${className.value}.${fmt}`
+    )
+    ElMessage.success(`已下载：${name}`)
+  } catch {
+    // 具体原因由 http 拦截器提示
+  } finally {
+    exportingClass.value = false
+  }
+}
+
 async function loadGrades() {
   if (isTeacher && !studentNo.value) return
   loading.value = true
@@ -435,6 +565,18 @@ onMounted(async () => {
   else await loadGrades()
 })
 
+// 学生板块把「学生档案 → 全班成绩」放在同一页，GradeReport 只挂载一次：
+// 教师点了某个学生的「看成绩」只是改了 query，必须跟着 query 重新定位班级与人，
+// 否则页面停在第一次进入时的那个班，白点一次。
+watch(
+  () => route.query.student_no,
+  async (now, before) => {
+    if (!isTeacher || String(now || '') === String(before || '')) return
+    if (!now) return
+    await loadClasses()
+  }
+)
+
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   chart?.dispose()
@@ -443,6 +585,17 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.caret {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+/* 成绩单头部的下载按钮：靠右贴住汇总统计 */
+.export-inline {
+  margin-left: auto;
+  align-self: flex-start;
+}
+
 .filter-card {
   padding: 16px 18px;
 }
@@ -509,6 +662,7 @@ onBeforeUnmount(() => {
   font-weight: 680;
   font-variant-numeric: tabular-nums;
   color: var(--bento-text);
+  white-space: nowrap;
 }
 
 .summary-stats b.fail {
@@ -633,6 +787,8 @@ onBeforeUnmount(() => {
   font-weight: 680;
   font-variant-numeric: tabular-nums;
   color: var(--bento-text);
+  /* 「100 / 48.18」这类长值不许折成两行，否则四块指标高度不齐 */
+  white-space: nowrap;
 }
 
 .rank-note {
@@ -663,6 +819,10 @@ onBeforeUnmount(() => {
 
   .class-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .class-stats b {
+    font-size: 18px;
   }
 }
 

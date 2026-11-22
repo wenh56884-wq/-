@@ -68,7 +68,7 @@ const breatheVar = computed(() => {
 
 const imgStyle = computed(() => ({ height: `${props.size}px`, '--breathe': breatheVar.value }))
 
-const ariaLabel = computed(() => '小航，电子宠物，固定在左下角，点击会回应')
+const ariaLabel = computed(() => '小航，电子宠物，在页面左下角陪伴你')
 
 function onImgLoad(event) {
   const img = event?.target
@@ -127,7 +127,6 @@ defineExpose({ speak, bounce })
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  will-change: transform;
   transition: opacity 220ms ease;
 }
 
@@ -136,10 +135,16 @@ defineExpose({ speak, bounce })
   pointer-events: none;
 }
 
-/* 窄屏：宠物上移到控制条上方避免被 320px 宽控制条遮挡；横向仍在最左、纵向仍是最低一档 */
-@media (max-width: 760px) {
+/* 窄屏：宠物高度由 App 传入的 size 缩到 64px；控制条折叠成右下角圆形入口，
+   两者分居左右下角。手机上宠物只做氛围层，不接收点击——
+   否则它会挡住下层按钮（实测压住教师端「查询」）。AI 入口由右下角控制条承担。 */
+@media (max-width: 1023px) {
   .pet-root {
-    bottom: 104px;
+    pointer-events: none;
+  }
+
+  .pet-badge {
+    pointer-events: none;
   }
 }
 

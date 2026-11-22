@@ -67,6 +67,21 @@
           <el-button type="primary" :loading="listLoading" @click="loadClass">查询</el-button>
           <el-button @click="clearFilter">重置</el-button>
         </el-form-item>
+        <el-form-item label="导出">
+          <el-dropdown trigger="click" :disabled="!className" @command="exportRoster">
+            <el-button :loading="exporting" :disabled="!className" title="导出当前班级的学生档案（跟随上面的学期/等级筛选）">
+              下载名单 <span class="caret">▾</span>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="xlsx">Excel（.xlsx，推荐）</el-dropdown-item>
+                <el-dropdown-item command="csv" divided>CSV（.csv）</el-dropdown-item>
+                <el-dropdown-item command="json">JSON（.json，含结构字段）</el-dropdown-item>
+                <el-dropdown-item command="pick" divided>自选字段…（只要我要的那几列）</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </el-form-item>
         <el-form-item label="自动刷新">
           <el-switch v-model="autoRefresh" />
         </el-form-item>
@@ -113,7 +128,7 @@
                 </template>
               </el-table-column>
               <el-table-column prop="student_no" label="学号" width="120" />
-              <el-table-column prop="name" label="姓名" width="90" />
+              <el-table-column prop="name" label="姓名" min-width="110" />
               <el-table-column prop="risk_score" label="风险分" width="90" sortable />
             </el-table>
             <el-empty v-if="!listLoading && !rows.length" description="该筛选条件下没有学生" />
@@ -206,18 +221,39 @@
           </template>
         </el-card>
     </div>
+
+    <!-- 自选字段导出：跟随当前班级 / 学期 / 等级筛选 -->
+    <ExportDialog
+      v-model="pickOpen"
+      url="/export/students"
+      dataset="students"
+      :params="{ class_name: className, term: term || '', level: level || '' }"
+      :fallback-name="`学生档案-${className || '班级'}`"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
+import echarts from '../utils/echarts'
 
 import http from '../api/http'
 import CountNumber from '../components/CountNumber.vue'
+import ExportDialog from '../components/export/ExportDialog.vue'
 import { useClock } from '../composables/useSystemStatus'
+import { downloadFile } from '../utils/download'
+// ElDropdownMenu / ElDropdownItem 没有独立组件入口（只有 style），
+// 交给 unplugin 自动导入会解析到不存在的 dropdown-menu/index.mjs，必须显式引入
+import {
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu
+} from 'element-plus/es/components/dropdown/index.mjs'
+import 'element-plus/es/components/dropdown/style/css'
+import 'element-plus/es/components/dropdown-menu/style/css'
+import 'element-plus/es/components/dropdown-item/style/css'
 
 const LEVEL_TEXT = { red: '红色', orange: '橙色', yellow: '黄色', none: '正常', unknown: '数据不足' }
 const LEVEL_TYPE = { red: 'danger', orange: 'warning', yellow: 'warning', none: 'success', unknown: 'info' }
@@ -255,7 +291,7 @@ const router = useRouter()
 function openGrades() {
   const no = detail.value?.student_no
   if (!no) return
-  router.push({ path: '/teacher/grades', query: { student_no: no } })
+  router.push({ path: '/teacher', query: { tab: 'grades', student_no: no } })
 }
 const lastLoadAt = ref(null)
 const autoRefresh = ref(false)
@@ -273,7 +309,7 @@ const INTENT_META = [
   { key: '考公', label: '考公', color: '#dc2626' },
   { key: '考研', label: '考研', color: '#d97706' },
   { key: '考编', label: '考编', color: '#16a34a' },
-  { key: '就业', label: '就业', color: '#5b5bd6' },
+  { key: '就业', label: '就业', color: '#1951c3' },
   { key: '未填写', label: '未填写', color: '#9aa1ad' }
 ]
 
@@ -364,6 +400,42 @@ function onMajorChange() {
     className.value = list[0]?.class_name || ''
     rememberClass(className.value)
     loadClass()
+  }
+}
+
+// ---------------------------------------------------------------- 导出
+// 导出跟随当前筛选（学期 + 等级），与左侧名单是同一口径，
+// 避免「页面看的是红橙黄，导出来却是全班」这种对不上的尴尬
+const exporting = ref(false)
+const pickOpen = ref(false)
+
+async function exportRoster(fmt) {
+  if (!className.value) {
+    ElMessage.warning('请先选择班级')
+    return
+  }
+  // 自选字段：字段目录与导出接口同一份定义，勾几列导几列
+  if (fmt === 'pick') {
+    pickOpen.value = true
+    return
+  }
+  exporting.value = true
+  try {
+    const name = await downloadFile(
+      '/export/students',
+      {
+        class_name: className.value,
+        term: term.value || '',
+        level: level.value || '',
+        fmt
+      },
+      `学生档案-${className.value}.${fmt}`
+    )
+    ElMessage.success(`已下载：${name}`)
+  } catch {
+    // 失败原因由 http 拦截器统一提示，这里不重复弹
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -574,6 +646,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 下拉按钮的小三角：不引入图标库，纯文本箭头更轻 */
+.caret {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
 .filter-bar {
   margin-bottom: 0;
   padding: 16px 18px;
@@ -630,7 +709,7 @@ onBeforeUnmount(() => {
   float: right;
   margin-left: 12px;
   font-size: 12px;
-  color: #a9aeb8;
+  color: #6b7280;
 }
 
 .refresh-tip {

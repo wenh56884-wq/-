@@ -163,3 +163,40 @@ def test_diagnose_flags_missing_quantify_and_alignment():
     d = diagnose(p, {"skill_tags": ["Java", "Redis"]})
     kinds = {i["kind"] for i in d["issues"]}
     assert {"quantify", "alignment"} <= kinds
+
+
+# ---------------- 个性化出题（2026-11-19：跨场次防重复 + 弱点靶向 + 模板轮换）----------------
+def test_outline_template_variant_rotates():
+    a = build_outline(_JOB, _RESUME, use_bank=False, variant=0)
+    b = build_outline(_JOB, _RESUME, use_bank=False, variant=1)
+    qa = next(o for o in a if o["type"] == "motivation")["question"]
+    qb = next(o for o in b if o["type"] == "motivation")["question"]
+    assert qa != qb  # 变体轮换后模板题不再永远同一条
+    assert build_outline(_JOB, _RESUME, use_bank=False, variant=0) == a  # 同参可复现
+
+
+def test_outline_weak_type_gets_anchor_and_kept():
+    # max_rounds=3 会裁掉后面的题型；把弱项设为 stress，验证保留 + 锚点前缀
+    weak = {"type": "stress", "score": 52.4}
+    outline = build_outline(_JOB, _RESUME, use_bank=False, max_rounds=3, weak=weak)
+    assert "stress" in [o["type"] for o in outline]
+    q = next(o for o in outline if o["type"] == "stress")["question"]
+    assert "52" in q and "抗压应对" in q
+    # 高分（>=70）不靶向：弱项题型不保留（被正常裁剪），也不会出现锚点前缀
+    outline2 = build_outline(_JOB, _RESUME, use_bank=False, max_rounds=3,
+                             weak={"type": "stress", "score": 88})
+    assert "stress" not in [o["type"] for o in outline2]
+    assert all("上次模拟面试" not in o["question"] for o in outline2)
+
+
+def test_outline_bank_exclude_skips_used_ids():
+    first = build_outline(_JOB, _RESUME)
+    bank_q = next((o for o in first if (o.get("source") or {}).get("kind") == "bank"), None)
+    if bank_q is None:
+        return  # 题库未加载时跳过（CI 环境可无题库）
+    used = {(bank_q["source"]["id"],)}
+    ids = {bank_q["source"]["id"]}
+    second = build_outline(_JOB, _RESUME, exclude_bank_ids=ids)
+    second_bank_ids = {(o["source"]["id"]) for o in second
+                       if (o.get("source") or {}).get("kind") == "bank"}
+    assert bank_q["source"]["id"] not in second_bank_ids  # 做过的题不再出现

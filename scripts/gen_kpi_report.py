@@ -28,6 +28,8 @@ DEFAULT_TERM = "2025-2026-2"
 DEFAULT_TENANT = 1
 DEFAULT_LIMIT = 5000
 HIDDEN_RISK = _ROOT / "data" / "hidden_risk.csv"
+# KPI 的 Critic / 对话口径随 graph 版本演进，升级管线时改这一处即可
+CURRENT_GRAPH_VERSION = "graph-v5"
 
 
 def _connect(settings) -> pymysql.connections.Connection:
@@ -128,9 +130,11 @@ def _audit_rows(settings, action: str, limit: int) -> list[dict[str, Any]]:
                 "ORDER BY `编号` DESC LIMIT %s",
                 (action, int(limit)),
             )
+            # DictCursor 返回中文列名（对象/详情），必须按中文键取，
+            # 否则全部解析成空 dict（此前通过率 0.00% 的根因）
             return [
-                {"target": str(row.get("target") or ""),
-                 "detail": _detail(row.get("detail"))}
+                {"target": str(row.get("对象") or ""),
+                 "detail": _detail(row.get("详情"))}
                 for row in cur.fetchall()
             ]
     finally:
@@ -154,12 +158,13 @@ def _latency_metrics(settings, limit: int) -> dict[str, Any]:
 
     groups: dict[str, list[float]] = {"all": [], "recommendations": [], "chat": [], "teacher": []}
     for row in rows:
-        detail = _detail(row.get("detail"))
+        # DictCursor 返回中文列名（动作/详情），这里必须按中文键取
+        detail = _detail(row.get("详情"))
         duration = detail.get("duration_ms")
         if duration is None:
             continue
         value = float(duration)
-        action = str(row.get("action") or "")
+        action = str(row.get("动作") or "")
         groups["all"].append(value)
         if action == "GET /student/recommendations":
             groups["recommendations"].append(value)
@@ -296,18 +301,18 @@ def render_report(
         "",
         "## 2. Critic 与对话审计",
         "",
-        "口径：全量 `audit_log` 含历史测试与注入幻觉演示；KPI 采用当前 `graph-v2` 且剔除 "
+        f"口径：全量 `audit_log` 含历史测试与注入幻觉演示；KPI 采用当前 `{CURRENT_GRAPH_VERSION}` 且剔除 "
         "`draft_mode=injected` 的口径。一次通过率只看 `attempt=1`。",
         "",
         "| 口径 | 审核次数 | 通过率 | 一次通过率 | 数值不一致/模糊率 |",
         "| - | - | - | - | - |",
         f"| 全量 audit_log | {critic_all['total']} | {_pct(critic_all['pass_rate'])} | "
         f"{_pct(critic_all['first_pass_rate'])} | {_pct(critic_all['hallucination_rate'])} |",
-        f"| 当前 graph-v2（剔除 injected） | {critic_current['total']} | "
+        f"| 当前 {CURRENT_GRAPH_VERSION}（剔除 injected） | {critic_current['total']} | "
         f"{_pct(critic_current['pass_rate'])} | {_pct(critic_current['first_pass_rate'])} | "
         f"{_pct(critic_current['hallucination_rate'])} |",
         "",
-        f"当前 graph-v2 对话降级率：{_pct(chat_current['degraded_rate'])}；"
+        f"当前 {CURRENT_GRAPH_VERSION} 对话降级率：{_pct(chat_current['degraded_rate'])}；"
         f"平均尝试次数：{_num(chat_current['avg_attempts'])}。",
         "",
         "## 3. 接口延迟（audit_log.duration_ms）",
@@ -366,9 +371,9 @@ def render_report(
         "| 推荐岗位投递转化率 | ≥40% | N/A | 缺投递/申请日志表 |",
         "| 简历初筛通过率提升 | ≥20% | N/A | 缺就业系统回填数据 |",
         f"| 推荐理由一次审核通过率 | ≥98% | {_pct(critic_current['first_pass_rate'])} | "
-        f"{_status(critic_current['first_pass_rate'], 0.98)}（graph-v2，剔除 injected） |",
+        f"{_status(critic_current['first_pass_rate'], 0.98)}（{CURRENT_GRAPH_VERSION}，剔除 injected） |",
         f"| 数值幻觉率 | ≤1% | {_pct(critic_current['hallucination_rate'])} | "
-        f"{_status(critic_current['hallucination_rate'], 0.01, '<=')}（graph-v2 草稿级口径） |",
+        f"{_status(critic_current['hallucination_rate'], 0.01, '<=')}（{CURRENT_GRAPH_VERSION} 草稿级口径） |",
         f"| 学生周活跃率 | ≥60% | {_pct(usage['weekly_active_rate'])}"
         f"（{usage['active_students_7d']}/{usage['total_students']}） | "
         f"{weekly_status}（最近 7 天 API 活跃，近似） |",
@@ -415,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
     current_traces = {
         row["target"]
         for row in chat_rows
-        if row["detail"].get("graph_version") == "graph-v2"
+        if row["detail"].get("graph_version") == CURRENT_GRAPH_VERSION
         and row["detail"].get("draft_mode") != "injected"
     }
     critic_all = metrics.summarize_critic([row["detail"] for row in critic_rows])
@@ -449,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"已生成：{out}")
     print(
         f"预警准确率（危机·可评估）={_pct(warning_metrics['crisis_evaluated']['accuracy'])}，"
-        f"Critic 一次通过率（graph-v2）={_pct(critic_current['first_pass_rate'])}，"
+        f"Critic 一次通过率（{CURRENT_GRAPH_VERSION}）={_pct(critic_current['first_pass_rate'])}，"
         f"推荐 P95={_num(latency['recommendations']['p95_ms'])} ms"
     )
     return 0

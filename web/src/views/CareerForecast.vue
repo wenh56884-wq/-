@@ -452,10 +452,10 @@ onMounted(load)
 }
 
 .verdict.tier-a { border-left-color: #16a34a; }
-.verdict.tier-b { border-left-color: #5b5bd6; }
+.verdict.tier-b { border-left-color: #1951c3; }
 .verdict.tier-c { border-left-color: #d97706; }
 .verdict.tier-d { border-left-color: #dc2626; }
-.verdict.tier-u { border-left-color: #9aa1ad; }
+.verdict.tier-u { border-left-color: #6b7280; }
 
 .tier-line {
   display: flex;
@@ -478,7 +478,7 @@ onMounted(load)
 }
 
 .tier-a .tier-badge { background: #16a34a; }
-.tier-b .tier-badge { background: #5b5bd6; }
+.tier-b .tier-badge { background: #1951c3; }
 .tier-c .tier-badge { background: #d97706; }
 .tier-d .tier-badge { background: #dc2626; }
 
@@ -513,7 +513,7 @@ onMounted(load)
 .tier-note {
   margin: 10px 0 0;
   font-size: 13.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .stu-line {
@@ -566,7 +566,7 @@ onMounted(load)
 .win-alt-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .win-alt-row {
@@ -592,7 +592,7 @@ onMounted(load)
 
 .win-alt-row em {
   font-style: normal;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 /* 四维 */
@@ -617,7 +617,7 @@ onMounted(load)
 
 .dim-weight {
   font-size: 13px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .dim-score {
@@ -629,7 +629,7 @@ onMounted(load)
 }
 
 .dim-score.lv-strong { color: #16a34a; }
-.dim-score.lv-fair { color: #5b5bd6; }
+.dim-score.lv-fair { color: #1951c3; }
 .dim-score.lv-weak { color: #d97706; }
 .dim-score.lv-poor { color: #dc2626; }
 
@@ -651,7 +651,7 @@ onMounted(load)
 
 /* 等级色阶用 Apple 系统色纯色：绿/蓝/橙/红承载数据语义，避免渐变 */
 .bar-fill.lv-strong { background: #34c759; }
-.bar-fill.lv-fair { background: #5b5bd6; }
+.bar-fill.lv-fair { background: #1951c3; }
 .bar-fill.lv-weak { background: #ff9500; }
 .bar-fill.lv-poor { background: #ff3b30; }
 
@@ -665,7 +665,7 @@ onMounted(load)
 .dim-source {
   margin: 3px 0 0;
   font-size: 13px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 /* 杠杆 */
@@ -673,13 +673,13 @@ onMounted(load)
 .lev-arrow { margin: 0 6px; color: #d4d4d8; }
 .lev-goal { font-weight: 600; color: #16181d; }
 .lev-delta { color: #16a34a; font-variant-numeric: tabular-nums; }
-.lev-flat { color: #9aa1ad; font-size: 13.5px; }
+.lev-flat { color: #6b7280; font-size: 13.5px; }
 
 .dim-delta {
   display: inline-block;
   margin-right: 8px;
   font-size: 13.5px;
-  color: #5b5bd6;
+  color: #1951c3;
 }
 
 /* 门槛 */
@@ -738,7 +738,7 @@ onMounted(load)
 .gate-note {
   margin-top: 2px;
   font-size: 13px;
-  color: #9aa1ad;
+  color: #6b7280;
   line-height: 1.5;
 }
 
@@ -746,7 +746,7 @@ onMounted(load)
   flex: 0 0 auto;
   font-size: 13.5px;
   font-weight: 600;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .st-pass .gate-status { color: #16a34a; }
@@ -802,13 +802,13 @@ onMounted(load)
 .phase-top em {
   font-style: normal;
   font-size: 13px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .phase-range {
   margin-top: 2px;
   font-size: 13px;
-  color: #9aa1ad;
+  color: #6b7280;
   font-variant-numeric: tabular-nums;
 }
 
@@ -849,7 +849,7 @@ onMounted(load)
 
 .advice-p.p1 { background: #dc2626; }
 .advice-p.p2 { background: #d97706; }
-.advice-p.p3 { background: #5b5bd6; }
+.advice-p.p3 { background: #1951c3; }
 .advice-p.p4 { background: #9aa1ad; }
 
 .advice-main {
@@ -860,7 +860,7 @@ onMounted(load)
 .advice-type {
   font-size: 13px;
   font-weight: 600;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .advice-act {
@@ -898,7 +898,7 @@ onMounted(load)
 }
 
 .src-link {
-  color: #5b5bd6;
+  color: #1951c3;
   text-decoration: none;
 }
 

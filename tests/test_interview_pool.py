@@ -166,9 +166,13 @@ def token(client):
         conn.close()
     if not row:
         pytest.skip("库里没有学生")
-    r = client.post("/auth/login", json={"role": "student",
-                                         "account": str(row["学号"]),
-                                         "password": str(row["学号"])})
+    account = str(row["学号"])
+    demo_password = str(getattr(s, "demo_password", "") or "")
+    r = client.post("/auth/login", json={"role": "student", "account": account,
+                                         "password": demo_password}) if demo_password else None
+    if r is None or r.status_code != 200:
+        r = client.post("/auth/login", json={"role": "student", "account": account,
+                                             "password": account})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
@@ -264,3 +268,75 @@ def test_bank_browse_filters(client, token):
 @DB
 def test_bank_browse_requires_auth(client):
     assert client.get("/interview/bank").status_code == 401
+
+
+# ----------------------------------------------------------------
+# 岗位池：行业分层（diverse=1）
+# ----------------------------------------------------------------
+def _mysql_ok():
+    try:
+        import pymysql
+
+        from app.config import get_settings
+
+        s = get_settings()
+        conn = pymysql.connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
+                               password=s.mysql_password, database=s.mysql_db,
+                               charset="utf8mb4")
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+requires_mysql2 = pytest.mark.skipif(not _mysql_ok(), reason="MySQL 不可用")
+
+
+def _student_ctx():
+    from agents.tools import ToolContext
+
+    import pymysql
+
+    from app.config import get_settings
+
+    s = get_settings()
+    conn = pymysql.connect(host=s.mysql_host, port=s.mysql_port, user=s.mysql_user,
+                           password=s.mysql_password, database=s.mysql_db,
+                           charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT `编号`,`租户编号` FROM `学生` ORDER BY `编号` LIMIT 1")
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    return ToolContext(actor_type="student", tenant_id=int(row["租户编号"]),
+                       student_id=int(row["编号"]))
+
+
+@requires_mysql2
+def test_jobs_diverse_covers_industries_not_head_bias():
+    """diverse=1：每个行业一个代表岗，行业数 = total；不做分层会只剩表头的 IT 岗。"""
+    from app.routers.interview import job_candidates
+
+    ctx = _student_ctx()
+    res = job_candidates(diverse=1, limit=100, ctx=ctx)
+    items = res["items"]
+    assert len(items) >= 30, f"分层样本太小：{len(items)}"
+    industries = [(i.get("industry") or "其他") for i in items]
+    assert len(set(industries)) == len(industries), "分层要求每行业只出现一个代表岗"
+    assert res["total"] == len(set((i.get("industry") or "其他") for i in items))
+    # 不带关键词时 total 就是行业代表岗总数（即去重行业数），且 ≤ 全库岗位数
+    plain = job_candidates(limit=5, ctx=ctx)
+    assert plain["total"] >= res["total"]
+
+
+@requires_mysql2
+def test_jobs_without_diverse_keeps_old_behavior():
+    """不带 diverse：老行为不变（按编号升序、total=全库过滤后总数）。"""
+    from app.routers.interview import job_candidates
+
+    ctx = _student_ctx()
+    res = job_candidates(limit=5, ctx=ctx)
+    ids = [i["id"] for i in res["items"]]
+    assert ids == sorted(ids), "默认仍应按编号升序（分页稳定）"
+    assert res["total"] > len(items_industries := res["items"])

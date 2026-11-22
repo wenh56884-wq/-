@@ -203,5 +203,7 @@ def test_describe_exposes_brain_and_memory(monkeypatch):
     info = brain.describe()
     assert info["brain_version"] == brain.BRAIN_VERSION
     assert info["mode"] == "auto"
-    assert info["memory"] == "memory-v1"
+    # 跟着常量走，不再写死版本号——版本升级不该让能力自检变成假红
+    assert info["memory"] == brain.agent_memory.MEMORY_VERSION
+    assert info["parallel"] >= 1 and info["deadline_s"] > 0
     assert "save_warning_thresholds" in info["blocked_tools"]

@@ -202,3 +202,60 @@ def test_feedback_lists_what_to_fix():
     verdict = verify("均分 90.5。", TOOL_RESULT)
     feedback = verdict.feedback()
     assert "90.5" in feedback and "不在工具返回结果中" in feedback
+
+
+# ----------------------------------------------------------------
+# 8) 列表型结果的序号 / 行引用 / 条数（exam_positions 草稿实测翻车点）
+# ----------------------------------------------------------------
+POSITIONS_RESULT = {
+    'year': 2027, 'position_total': 17061, 'total_headcount': 31821,
+    'positions': [
+        {'dept_name': '外交部', 'position_name': '外交国政和英语',
+         'position_code': '200110001001', 'headcount': 15},
+        {'dept_name': '外交部', 'position_name': '法律',
+         'position_code': '200110001002', 'headcount': 15},
+        {'dept_name': '外交部', 'position_name': '预算和财务管理',
+         'position_code': '200110004001', 'headcount': 12},
+    ],
+}
+
+
+def test_list_ordinals_are_not_claims():
+    # 「1. 外交部…」的行首序号不是数值论断，不得把合格草稿判成编造
+    draft = ("2027 国考职位如下：\n1. 外交部：招 15 人。\n"
+             "2. 外交部：招 15 人。\n3. 外交部：招 12 人。")
+    verdict = verify(draft, POSITIONS_RESULT)
+    assert verdict.passed, verdict.mismatches
+
+
+def test_row_references_within_list_len_pass():
+    # 「第1、3条」是引用返回列表的行号，行数内合法
+    verdict = verify('第1、3条在北京市，第2条要求法律专业。', POSITIONS_RESULT)
+    assert verdict.passed, verdict.mismatches
+
+
+def test_row_reference_beyond_list_len_fails():
+    # 行引用超出返回列表行数（列表只有 3 行却说「第5条」）必须驳回
+    verdict = verify('第5条在深圳市。', POSITIONS_RESULT)
+    assert not verdict.passed
+    assert any('超出返回列表行数' in m for m in verdict.mismatches)
+
+
+def test_list_item_count_is_verifiable():
+    # 「共 3 条」的条数 = len(返回列表)，是引擎事实，应通过；说错仍要驳回
+    assert verify("共命中 3 条职位。", POSITIONS_RESULT).passed
+    assert not verify("共命中 9 条职位。", POSITIONS_RESULT).passed
+
+
+def test_draft_node_exam_positions_no_type_crash(monkeypatch):
+    # 回归：exam_positions 专用草稿分支曾把 attempts 转成 str 再与 int 比较，
+    # 一进该分支必抛 TypeError（用户实测「正在生成回答…→ 智能体处理失败」）。
+    import agents.graph as g
+
+    monkeypatch.setattr(g, '_llm_draft_enabled', lambda: False)
+    state = {'ctx': ToolContext(actor_type='student', tenant_id=1, student_id=1),
+             'tool_name': 'exam_positions', 'tool_result': POSITIONS_RESULT,
+             'attempts': 1, 'feedback': ''}
+    out = g.draft_node(state)
+    assert out['draft'], '模板稿不应为空'
+    assert out['attempts'] == 2

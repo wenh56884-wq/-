@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 
 import pymysql
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents import interviewer
 from agents import llm as llm_client
@@ -368,12 +368,14 @@ def _load_job(cur, job_id: int, pool: str | None = None) -> dict[str, Any] | Non
 @router.get("/jobs")
 def job_candidates(keyword: str | None = None, city: str | None = None,
                    industry: str | None = None, pool: str = "national",
-                   limit: int = 50, offset: int = 0,
+                   diverse: int = 0, limit: int = 50, offset: int = 0,
                    ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     """可练习的岗位池（默认全国 2931 条），支持关键词 / 城市 / 行业过滤与分页。
 
-    返回真实 total（过滤后的总数），前端据此显示「共 N 个岗位」并做远程搜索。
-    排序：有关键词时岗位名称命中优先；其余按编号升序（分页稳定、无随机）。
+    diverse=1：**行业分层抽样**——每个行业取编号最小的那个岗位作代表，按行业名排序。
+    岗位表头部是成片的 IT 岗（种子数据的写入顺序），按编号取前 N 条会「看起来只有
+    计算机岗」；分层抽样保证一屏里 82 个行业都在场。total 返回行业数（分层后的
+    岗位数），前端据此提示。带 keyword 时不需要 diverse——搜索本身就覆盖全库。
     """
     pool = pool if pool in _JOB_POOLS else "national"
     limit = max(1, min(int(limit), 200))
@@ -413,6 +415,18 @@ def job_candidates(keyword: str | None = None, city: str | None = None,
     if keyword and pool == "national":
         order = " ORDER BY (`岗位名称` LIKE %s) DESC, `编号` ASC"
         params = list(params) + [f"%{keyword}%"]
+    elif diverse and pool == "national":
+        # 行业分层：每个行业只留编号最小的代表岗。行业列有空白脏值，统一归到「其他」。
+        # 注意：select = 列清单 + base（FROM...WHERE），改列清单要插在 FROM 之前，
+        # 过滤条件则追加到 base / select 尾部——顺序错了会拼出非法 SQL。
+        industry_expr = "COALESCE(NULLIF(TRIM(`行业`), ''), '其他')"
+        extra = (" AND `编号` IN (SELECT MIN(`编号`) FROM `岗位`"
+                 " GROUP BY " + industry_expr + ")")
+        head, sep, tail = select.partition(" FROM ")
+        select = head + ", " + industry_expr + " AS industry_key" + sep + tail + extra
+        base += extra
+        order = " ORDER BY industry_key ASC, `编号` ASC"
+        params_count = list(params)
 
     conn = _conn()
     try:
@@ -502,7 +516,45 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
             job = _load_job(cur, int(inp.job_id), inp.job_pool) if inp.job_id else None
             if inp.job_id and not job:
                 raise HTTPException(404, f"岗位不存在（池 {inp.job_pool or 'national'}）")
-            outline = build_outline(job, resume, max_rounds=max_rounds)
+            # ---- 个性化出题数据（全部来自该学生的历史问答，取不到就当没有）----
+            # 1) 近 3 场已完成的提纲：题库题编号（防重复）+ 历史场数（模板变体轮换）
+            # 1) 近 3 场已完成的提纲：题库题编号（防重复）+ 历史场数（模板变体轮换）
+            past = _rows(cur, "SELECT `编号`,`提纲` FROM `面试会话` WHERE `租户编号`=%s AND `学生编号`=%s "
+                              "AND `状态`='finished' ORDER BY `编号` DESC LIMIT 3",
+                         (ctx.tenant_id, ctx.student_id))
+            exclude_bank_ids: set[str] = set()
+            for s in past:
+                try:
+                    for it in (json.loads(s.get("提纲") or "[]") or []):
+                        src = (it or {}).get("source") or {}
+                        if src.get("kind") == "bank" and src.get("id"):
+                            exclude_bank_ids.add(str(src["id"]))
+                except Exception:
+                    continue
+            cur.execute("SELECT COUNT(*) AS n FROM `面试会话` WHERE `租户编号`=%s AND `学生编号`=%s",
+                        (ctx.tenant_id, ctx.student_id))
+            variant = int((cur.fetchone() or {}).get("n") or 0)
+            # 2) 最近一场有评分的面试：按题型求平均分，最低且 <70 的题型 → 靶向题
+            weak = None
+            cur.execute(
+                "SELECT a.`问题类型`, AVG(a.`评分`) AS avg_score FROM `面试问答` a "
+                "JOIN `面试会话` s ON a.`会话编号`=s.`编号` "
+                "WHERE s.`租户编号`=%s AND s.`学生编号`=%s AND a.`评分` IS NOT NULL "
+                "AND s.`编号`=(SELECT MAX(`编号`) FROM `面试会话` WHERE `租户编号`=%s AND `学生编号`=%s "
+                "AND `编号` IN (SELECT DISTINCT `会话编号` FROM `面试问答` WHERE `评分` IS NOT NULL)) "
+                "GROUP BY a.`问题类型`",
+                (ctx.tenant_id, ctx.student_id, ctx.tenant_id, ctx.student_id))
+            rows_weak = cur.fetchall() or []
+            scored = [(str(r.get("问题类型") or ""), float(r.get("avg_score") or 0))
+                      for r in rows_weak
+                      if str(r.get("问题类型") or "") in QUESTION_TYPES and r.get("avg_score") is not None]
+            if scored:
+                wtype, wscore = min(scored, key=lambda kv: kv[1])
+                if wscore < 70:
+                    weak = {"type": wtype, "score": round(wscore, 1)}
+            outline = build_outline(job, resume, max_rounds=max_rounds,
+                                    exclude_bank_ids=exclude_bank_ids, weak=weak,
+                                    variant=variant)
             if not outline:
                 raise HTTPException(422, "简历信息不足以出题（连基本经历都没有），请先补全简历")
             # 行业要进快照：追问/题库检索都靠 industry 归族，缺了就只能落 general
@@ -521,14 +573,21 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
                     actor_id=ctx.student_id, action="interview.start",
                     target=str(sid), detail={"job_id": inp.job_id, "rounds": len(outline)})
         q = outline[0]
+        personalized = {
+            "avoided_recent": len(exclude_bank_ids),
+            "weak": weak,
+            "weak_label": QUESTION_TYPES[weak["type"]]["label"] if weak else None,
+        }
         return {"session_id": sid, "total_rounds": len(outline), "round": 1,
                 "question_type": q["type"], "question_label": _rubric_of_q(q, job_snapshot["skill_tags"] if job_snapshot else [])["label"],
-                "question": q["question"], "source": q.get("source")}
+                "question": q["question"], "source": q.get("source"),
+                "personalized": personalized}
     finally:
         conn.close()
 
 
 class AnswerIn(BaseModel):
+    expected_round: int = Field(..., ge=1)
     text: str | None = None   # None=跳过本题
 
 
@@ -605,13 +664,16 @@ def interview_answer(sid: int, inp: AnswerIn,
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            sess = _one(cur, "SELECT * FROM `面试会话` WHERE `编号`=%s AND `租户编号`=%s", (sid, ctx.tenant_id))
+            sess = _one(cur, "SELECT * FROM `面试会话` WHERE `编号`=%s AND `租户编号`=%s FOR UPDATE",
+                        (sid, ctx.tenant_id))
             if not sess or int(sess["学生编号"]) != int(ctx.student_id or 0):
                 raise HTTPException(404, "会话不存在或不属于本人")
             if sess["状态"] != "ongoing":
                 raise HTTPException(409, "该场面试已结束")
             outline = json.loads(sess["提纲"] or "[]")
             rnd = int(sess["当前轮次"])
+            if inp.expected_round != rnd + 1:
+                raise HTTPException(409, "答题轮次已变化，请刷新后重试")
             if rnd >= len(outline):
                 raise HTTPException(409, "已经是最后一题，请查看报告")
             q = outline[rnd]

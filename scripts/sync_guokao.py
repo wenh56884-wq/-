@@ -115,15 +115,18 @@ def upsert_positions(conn, records: list[dict[str, Any]], tenant_id: int) -> tup
 
 
 def log_run(conn, *, year: int, fetched: int, inserted: int, updated: int,
-            ok: bool, error: str = "") -> None:
-    """写一条抓取运行日志（失败也要写，便于前端看数据新鲜度）。"""
+            ok: bool, error: str = "", trigger: str = "manual") -> None:
+    """写一条抓取运行日志（失败也要写，便于前端看数据新鲜度）。
+
+    trigger：manual（命令行）/ schedule（后台守护线程）/ api（接口触发）。
+    """
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO `抓取运行日志` (`触发方式`, `目标`, `来源`, `抓取数`, "
             "`新增数`, `更新数`, `关闭数`, `是否成功`, `错误`) "
-            "VALUES ('manual', 'guokao', %s, %s, %s, %s, 0, %s, %s)",
-            (f"scs-gk-{year}", fetched, inserted, updated, 1 if ok else 0,
-             error[:500] or None),
+            "VALUES (%s, 'guokao', %s, %s, %s, %s, 0, %s, %s)",
+            (trigger, f"scs-gk-{year}", fetched, inserted, updated,
+             1 if ok else 0, error[:500] or None),
         )
 
 
@@ -152,6 +155,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", default=None, help="自定义官方下载地址（未知年度用）")
     parser.add_argument("--tenant", type=int, default=1, help="租户编号，默认 1")
     parser.add_argument("--dry-run", action="store_true", help="只解析打印，不写库")
+    parser.add_argument("--trigger", default="manual",
+                        choices=("manual", "schedule", "api"),
+                        help="运行日志里的触发方式，默认 manual")
     args = parser.parse_args(argv)
 
     year = int(args.year)
@@ -169,7 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 ensure_schema(conn)
                 log_run(conn, year=year, fetched=0, inserted=0, updated=0,
-                        ok=False, error=f"{type(exc).__name__}: {exc}")
+                        ok=False, error=f"{type(exc).__name__}: {exc}",
+                        trigger=args.trigger)
             finally:
                 conn.close()
         except Exception as log_exc:  # 连库都不可用时只提示，不掩盖原始错误
@@ -187,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         ensure_schema(conn)
         inserted, updated = upsert_positions(conn, records, int(args.tenant))
         log_run(conn, year=year, fetched=len(records), inserted=inserted,
-                updated=updated, ok=True)
+                updated=updated, ok=True, trigger=args.trigger)
     finally:
         conn.close()
 

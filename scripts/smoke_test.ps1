@@ -17,6 +17,8 @@ $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 $py = Join-Path $root ".venv\Scripts\python.exe"
+$DemoPassword = (& $py -c "from app.config import get_settings; print(get_settings().demo_password or '')" 2>$null | Select-Object -First 1)
+if ($null -ne $DemoPassword) { $DemoPassword = $DemoPassword.Trim() }
 
 $script:Results = @()
 
@@ -106,7 +108,7 @@ cur.execute("SELECT `编号` FROM `教师` WHERE `工号` = %s", ("T001",))
 if cur.fetchone() is None:
     cur.execute("INSERT INTO `教师` (`租户编号`, `姓名`, `工号`, `角色`, `口令摘要`) "
                 "VALUES (%s,%s,%s,'teacher',%s)",
-                (1, "演示教师", "T001", hash_password("teacher@123")))
+                (1, "演示教师", "T001", hash_password(str(s.demo_password or ""))))
 c.commit()
 c.close()
 print("teacher ready")
@@ -148,6 +150,8 @@ $metaRaw = $metaCmd | & $py - $Term
 $meta = $metaRaw | ConvertFrom-Json
 $Class = $meta.class_name
 $StudentNo = $meta.student_no
+$DemoStudentNos = @("AI20230001", "AI20260001", "AI20260004", "AI20250001", "AI20240004")
+$StudentPassword = if ($StudentNo -in $DemoStudentNos) { $DemoPassword } else { $StudentNo }
 $OtherNo = $meta.other_student_no
 Write-Host ("样品数据：班级={0}  本人={1}  他人={2}" -f $Class, $StudentNo, $OtherNo) -ForegroundColor DarkGray
 
@@ -163,7 +167,7 @@ Invoke-Check -Index "1" -Name "/health 全绿" -Action {
 $script:TeacherToken = ""
 Invoke-Check -Index "2" -Name "教师登录拿 token" -Action {
     $login = Invoke-Api -Method POST -Path "/auth/login" -Body @{
-        role = "teacher"; account = "T001"; password = "teacher@123"
+        role = "teacher"; account = "T001"; password = $DemoPassword
     }
     $script:TeacherToken = $login.access_token
     $ok = [bool]$script:TeacherToken
@@ -209,11 +213,11 @@ Invoke-Check -Index "6" -Name "教师查职业差距" -Action {
 $script:StudentToken = ""
 Invoke-Check -Index "7" -Name "学生登录拿 token" -Action {
     $sl = Invoke-Api -Method POST -Path "/auth/login" -Body @{
-        role = "student"; account = $StudentNo; password = $StudentNo
+        role = "student"; account = $StudentNo; password = $StudentPassword
     }
     $script:StudentToken = $sl.access_token
     $ok = [bool]$script:StudentToken
-    return @{ Status = $(if ($ok) { "PASS" } else { "FAIL" }); Detail = "学号 $StudentNo（初始口令=学号）" }
+    return @{ Status = $(if ($ok) { "PASS" } else { "FAIL" }); Detail = "学号 $StudentNo" }
 }
 $sHeaders = @{ Authorization = "Bearer $script:StudentToken" }
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
@@ -22,7 +23,13 @@ from app.config import Settings, get_settings
 ROLE_TEACHER = "teacher"
 ROLE_STUDENT = "student"
 ALGORITHM = "HS256"
-_DEV_SECRET = "qihang-dev-secret-change-me"
+_MIN_SECRET_LENGTH = 32
+_SECRET_PLACEHOLDERS = {
+    "",
+    "REPLACE_ME",
+    "REPLACE_WITH_32_RANDOM_CHARS",
+    "qihang-dev-secret-change-me",
+}
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer = HTTPBearer(auto_error=False)
@@ -44,7 +51,39 @@ _FORBIDDEN_STUDENT = HTTPException(
 
 def _secret(settings: Settings | None = None) -> str:
     s = settings or get_settings()
-    return s.jwt_secret or _DEV_SECRET
+    secret = str(s.jwt_secret or "").strip()
+    if secret in _SECRET_PLACEHOLDERS or len(secret) < _MIN_SECRET_LENGTH:
+        raise RuntimeError(
+            f"JWT_SECRET 未配置或长度不足 {_MIN_SECRET_LENGTH} 个字符；"
+            "服务拒绝使用默认密钥启动"
+        )
+    return secret
+
+
+def validate_security_config(settings: Settings | None = None) -> None:
+    """启动时校验安全配置；失败即停止，不允许回退到公开默认密钥。"""
+    s = settings or get_settings()
+    _secret(s)
+    if s.public_demo_mode:
+        allow_weak = bool(getattr(s, "public_demo_allow_weak_password", False))
+        if len(str(s.public_demo_password or "")) < 24 and not allow_weak:
+            raise RuntimeError(
+                "PUBLIC_DEMO_PASSWORD 必须至少 24 个字符；"
+                "确需短口令时显式设置 PUBLIC_DEMO_ALLOW_WEAK_PASSWORD=true"
+            )
+        if not _public_demo_accounts(s):
+            raise RuntimeError("PUBLIC_DEMO_ACCOUNTS 必须至少配置一个演示账号")
+
+
+def _public_demo_accounts(settings: Settings | None = None) -> set[tuple[str, str]]:
+    """解析公网演示允许列表；每项格式为 role:account。"""
+    s = settings or get_settings()
+    accounts: set[tuple[str, str]] = set()
+    for raw in str(s.public_demo_accounts or "").split(","):
+        role, separator, account = raw.strip().partition(":")
+        if separator and role in (ROLE_TEACHER, ROLE_STUDENT) and account.strip():
+            accounts.add((role, account.strip()))
+    return accounts
 
 
 # ----------------------------------------------------------------
@@ -92,6 +131,19 @@ def _connect(settings: Settings | None = None) -> pymysql.connections.Connection
 def authenticate(role: str, account: str, password: str,
                  tenant_id: int | None = None) -> dict[str, Any] | None:
     """按角色查对应的账号表；库不可用时返回 None（登录失败，不外泄原因）。"""
+    settings = get_settings()
+    public_demo_login = False
+    if settings.public_demo_mode:
+        # 公网演示模式必须完全禁用旧的学号/工号口令，避免未列入白名单的
+        # 合成账号继续使用可猜测的初始口令登录。
+        if (role, str(account).strip()) not in _public_demo_accounts(settings):
+            return None
+        if not hmac.compare_digest(
+            str(password), str(settings.public_demo_password)
+        ):
+            return None
+        public_demo_login = True
+
     if role == ROLE_TEACHER:
         sql = ("SELECT t.`编号` AS id, t.`租户编号` AS tenant_id, t.`姓名` AS name, "
                "       t.`工号` AS employee_no, t.`口令摘要` AS password_hash "
@@ -128,7 +180,9 @@ def authenticate(role: str, account: str, password: str,
     row = rows[0]
     if tenant_id and int(row["tenant_id"]) != int(tenant_id):
         return None
-    if not verify_password(password, str(row["password_hash"] or ""), str(row["employee_no"])):
+    if not public_demo_login and not verify_password(
+        password, str(row["password_hash"] or ""), str(row["employee_no"])
+    ):
         return None
     return {
         "role": role,

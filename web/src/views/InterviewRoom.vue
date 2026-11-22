@@ -1,20 +1,30 @@
 <template>
   <div class="page bento-page">
+    <!-- 本场说明：原来是一块蓝紫渐变营销横幅（大字 + 光圈装饰），
+         放在后台工作区里像落地页插进控制台，和下面的白卡片是两套语言。
+         现在改成与卡片同族的说明面板：标题说明“这是什么”，右侧三颗状态点说明“能不能开练”。 -->
     <section class="iv-hero">
       <div class="hero-copy">
-        <div class="eyebrow">启航 · AI CAREER AGENT</div>
         <h1>让智能体陪你练到会</h1>
         <p>面试智能体读取你的简历与目标岗位，动态出题、追问薄弱点；每轮点评可核验，最终评分由确定性引擎完成。</p>
       </div>
       <div class="hero-status" aria-label="练习准备情况">
-        <div class="status-item">
-          <span class="status-dot" :class="resume ? 'ready' : 'pending'"></span>
-          <span>{{ resume ? '简历已就绪' : '待录入简历' }}</span>
-        </div>
-        <div class="status-item"><span class="status-dot ready"></span><span>智能体动态追问</span></div>
-        <div class="status-item"><span class="status-dot ready"></span><span>评分结果可追溯</span></div>
+        <span class="status-chip" :class="{ on: resume }">
+          <i class="status-dot" :class="resume ? 'ready' : 'pending'"></i>
+          {{ resume ? '简历已就绪' : '待录入简历' }}
+        </span>
+        <span class="status-chip on"><i class="status-dot ready"></i>智能体动态追问</span>
+        <span class="status-chip on"><i class="status-dot ready"></i>评分可追溯</span>
       </div>
     </section>
+
+    <p class="practice-disclaimer" role="note">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5M12 8h.01" />
+      </svg>
+      简历诊断、AI 润色与面试建议仅供参考，不构成录用承诺；请结合真实经历与岗位要求自行判断。
+    </p>
 
     <el-tabs v-model="tab" class="iv-tabs">
       <!-- ============ 简历 ============ -->
@@ -220,6 +230,12 @@
             <el-tag size="small" type="success" effect="plain">动态面试中</el-tag>
           </div>
           <div class="question-label">{{ session.label || labelOf(session.type) }}<span>请结合具体经历作答</span></div>
+          <div v-if="session.personalized" class="personalized-strip">
+            <el-tag v-if="session.personalized.avoided_recent" size="small" type="info" effect="plain">已避开你近 3 场做过的题</el-tag>
+            <el-tag v-if="session.personalized.weak" size="small" type="warning" effect="plain">
+              重点考察{{ session.personalized.weak_label }}（上次 {{ session.personalized.weak.score }} 分）
+            </el-tag>
+          </div>
           <div class="question">{{ session.question }}</div>
           <div v-if="session.source" class="q-source">
             <template v-if="session.source.kind === 'bank'">
@@ -242,10 +258,11 @@
           <el-input id="interview-answer" v-model="answerText" type="textarea" :rows="6" :maxlength="2000"
             show-word-limit resize="vertical" aria-describedby="answer-hint"
             placeholder="试着按 STAR 结构组织：背景是什么、目标是什么、你采取了哪些行动、结果如何？" />
-          <div id="answer-hint" class="input-hint">尽量写清你亲自采取的行动和可验证的结果。暂时没有思路时，也可以跳过。</div>
+          <div id="answer-hint" class="input-hint">尽量写清你亲自采取的行动和可验证的结果。暂时没有思路时，也可以跳过——卡住约 45 秒，小航会在旁边递一句提示。</div>
           <div class="mt8 head-row">
-            <el-button type="primary" :loading="answering" :disabled="!answerText.trim()" @click="submitAnswer(true)">提交回答</el-button>
-            <el-button :loading="answering" @click="submitAnswer(false)">跳过本题</el-button>
+            <el-button type="primary" :loading="answering" :disabled="answering || !answerText.trim()"
+              @click="submitAnswer(true)">提交回答</el-button>
+            <el-button :loading="answering" :disabled="answering" @click="submitAnswer(false)">跳过本题</el-button>
           </div>
         </el-card>
 
@@ -377,6 +394,10 @@
               </el-table-column>
             </el-table>
           </div>
+
+          <p class="report-disclaimer">
+            本报告由确定性引擎评分 + AI 组织表达，仅供参考，不构成录用承诺。
+          </p>
         </el-card>
 
         <!-- 动态跨列补空位：无点评时与答题卡并排，有点评时占满整行；
@@ -384,20 +405,29 @@
         <el-card shadow="never" class="block-card"
           :class="session && lastComment ? 'bento-span-4' : 'bento-span-2'">
           <template #header><span class="card-title">历史场次</span></template>
-          <el-table :data="history" size="small" @row-click="openHistory">
-            <el-table-column prop="编号" label="场次" width="80" />
-            <el-table-column prop="岗位名称" label="岗位" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="状态" label="状态" width="90" />
-            <el-table-column prop="总分" label="总分" width="80" />
-            <el-table-column prop="当前轮次" label="进度" width="80">
-              <template #default="{ row }">{{ row['当前轮次'] }}/{{ row['最大轮次'] }}</template>
+          <!-- 这张表在半宽卡片里，7 列必然横向溢出（操作列被裁）。
+               合并成 4 列：场次 / 岗位 / 结果（状态 + 分数 + 进度）/ 操作。
+               完整时间等信息在点开的报告里看，列表只承担「找到那一场」的职责。 -->
+          <el-table :data="history" size="small" class="hist-table" @row-click="openHistory">
+            <el-table-column prop="编号" label="场次" width="56" />
+            <el-table-column prop="岗位名称" label="岗位" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">{{ row['岗位名称'] || '未选岗位' }}</template>
             </el-table-column>
-            <el-table-column prop="创建时间" label="时间" width="170" />
-            <el-table-column label="操作" width="110" fixed="right">
+            <el-table-column label="结果" width="104">
+              <template #default="{ row }">
+                <span class="hist-result" :class="row['状态']">
+                  <b v-if="row['总分'] != null">{{ row['总分'] }}</b>
+                  <b v-else>{{ statusText(row['状态']) }}</b>
+                  <i v-if="row['总分'] != null">{{ statusText(row['状态']) }}</i>
+                  <i v-else>{{ row['当前轮次'] }}/{{ row['最大轮次'] }}</i>
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="82">
               <template #default="{ row }">
                 <el-button link type="primary" :loading="openingSession === row['编号']"
                   @click.stop="openHistory(row)">
-                  {{ row['状态'] === 'ongoing' ? '继续面试' : '查看报告' }}
+                  {{ row['状态'] === 'ongoing' ? '继续' : '报告' }}
                 </el-button>
               </template>
             </el-table-column>
@@ -410,9 +440,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import http from '../api/http'
+import { useIdleHint } from '../composables/useIdleHint'
 
 const tab = ref('interview')
 const entryMode = ref('paste')
@@ -477,6 +508,58 @@ const TYPE_LABELS = {
   scenario: '情景模拟', stress: '抗压应对', counter: '反问环节'
 }
 const labelOf = (t) => TYPE_LABELS[t] || t
+
+// ---- 冷场提示：45 秒没动笔，小航递一句结构化抓手（不给答案） ----
+// 确定性模板、不发模型请求；每道题最多 2 条；学生打字/提交会重新计时。
+const IDLE_HINTS = {
+  motivation: [
+    '可以从「为什么是这个岗位、为什么是现在」两句话开场，再落到一个具体细节。',
+    '想想投递那天最打动你的一件事，把它讲成你选择这份工作的理由。'
+  ],
+  major: [
+    '先把核心概念用一句话说清，再接一个课程里做过的例子。',
+    '找一门你考得最好的课，说说它和这道题的关联。'
+  ],
+  project: [
+    '套 STAR：当时的目标、你亲自做的动作、可验证的结果，最后补一句复盘。',
+    '想想项目里最难跨过去的一步，你当时是怎么解决的。'
+  ],
+  scenario: [
+    '先给一句原则表态，再给两步具体做法，最后收一句「什么情况下不这么做」。'
+  ],
+  stress: [
+    '先接住情绪不辩解：承认事实，再讲你会做的改进，最后一句教训收尾。'
+  ],
+  counter: [
+    '可以问岗位最常踩的坑，或新人前 90 天怎么算合格，先别问薪资福利。'
+  ],
+  general: [
+    '先给结论，再给两条理由，最后收一句可执行的建议。',
+    '想想这道题在考察什么能力，用一段真实经历去对上它。'
+  ]
+}
+const idleHint = useIdleHint({
+  timeoutMs: 45000,
+  maxHints: 2,
+  pick: (n) => {
+    if (!session.value || answering.value) return null
+    const pool = IDLE_HINTS[session.value.type] || IDLE_HINTS.general
+    return pool[n % pool.length]
+  }
+})
+
+watch(session, (s) => {
+  if (s && s.question) idleHint.restart()
+  else idleHint.stop()
+})
+
+watch(answerText, (text) => {
+  if (String(text).trim()) idleHint.poke()
+})
+
+// 历史场次的状态由引擎返回英文枚举，界面统一译成中文
+const STATUS_LABELS = { ongoing: '进行中', finished: '已完成', aborted: '已中止', pending: '待开始' }
+const statusText = (status) => STATUS_LABELS[status] || status || '—'
 
 // 报告页的题目出处表：题库题给链接，模板题明确标注，不含糊
 const reportSources = computed(() => (report.value && report.value.sources) || [])
@@ -625,7 +708,8 @@ async function startInterview() {
     jobTitle.value = job ? job.title : ''
     session.value = { round: data.round, total: data.total_rounds, question: data.question,
       type: data.question_type, label: data.question_label, id: data.session_id,
-      source: data.source || null, isProbe: false }
+      source: data.source || null, isProbe: false,
+      personalized: data.personalized || null }
     report.value = null
     evaluation.value = {}
     lastComment.value = null
@@ -636,11 +720,17 @@ async function startInterview() {
   }
 }
 
+// 提交/跳过共用入口：expected_round 取当前展示题号（1-based），服务端据此拒绝双击或
+// 旧页面的过期请求（409）。answering 同时承担按钮 loading 与函数级防重入，先于任何 await 置位。
 async function submitAnswer(real) {
+  if (answering.value) return
+  const sid = session.value?.id
+  const expectedRound = session.value?.round
+  if (!sid || !expectedRound) return
   answering.value = true
   try {
-    const { data } = await http.post(`/interview/${session.value.id}/answer`,
-      { text: real ? answerText.value : null })
+    const { data } = await http.post(`/interview/${sid}/answer`,
+      { text: real ? answerText.value : null, expected_round: expectedRound })
     if (data.finished) {
       report.value = data
       evaluation.value = data.evaluation || {}
@@ -655,8 +745,74 @@ async function submitAnswer(real) {
       isProbe: !!data.next.is_probe, probeOf: data.next.probe_of || null }
     if (data.probed) ElMessage.info('这道题答得比较浅，面试官追加了一道追问')
     answerText.value = ''
+  } catch (e) {
+    if (e?.response?.status === 409) {
+      // 冲突：服务端已不在我们以为的那一轮，按 GET 的真实状态恢复，不让用户猜是否提交成功
+      await recoverFromConflict(sid, expectedRound)
+    }
+    // 普通网络错误 / 5xx：拦截器已提示，原样保留未提交答案与当前题，不做任何复位
   } finally {
     answering.value = false
+  }
+}
+
+// 409 恢复：以 GET /interview/{sid} 为准。服务器确实推进了才清掉过期答案；
+// 仍停在本题（重复请求被拒但尚未推进）则保留学生已写的内容，避免丢答案。
+async function recoverFromConflict(sid, expectedRound) {
+  try {
+    const { data } = await http.get(`/interview/${sid}`)
+    const completed = Number(data.session?.['当前轮次']) || 0
+    const serverRound = completed + 1
+    if (data.session?.['状态'] === 'ongoing') {
+      const next = data.outline?.[completed]
+      if (!next) {
+        ElMessage.warning('冲突已确认，但暂时无法恢复本题，请刷新页面后重试（答案已保留）')
+        return
+      }
+      const previous = data.qa?.at(-1)
+      session.value = {
+        id: sid, round: serverRound,
+        total: data.session['最大轮次'] || data.outline.length,
+        question: next.question, type: next.type, label: labelOf(next.type),
+        source: next.source || null, isProbe: !!next.probe_of, probeOf: next.probe_of || null,
+      }
+      lastComment.value = previous?.点评
+        ? { text: previous['点评'], score: previous['评分'], version: previous['点评版本'] }
+        : null
+      if (serverRound > expectedRound) {
+        answerText.value = ''
+        ElMessage.success(`刚才的回答已提交，已同步到第 ${serverRound} 题，请作答新题`)
+      } else {
+        ElMessage.info('本次提交未生效，已按服务器状态复位到本题，答案已保留可重新提交')
+      }
+      return
+    }
+
+    // 已收卷：加载结构化评估 + 报告，避免学生猜测刚才那次是否提交成功
+    let eva = {}
+    try {
+      const { data: ed } = await http.get(`/interview/${sid}/evaluation`)
+      eva = ed.evaluation || {}
+    } catch {
+      ElMessage.warning('结构化复盘暂时不可用，仍可查看报告原文')
+    }
+    report.value = { total: data.session['总分'], report: data.session['报告'] || '(报告为空)', gaps: [],
+      sources: (data.outline || []).map((o) => ({
+        round: o.round, type: o.type, label: labelOf(o.type),
+        question: o.question, kind: (o.source || {}).kind || 'template',
+        name: (o.source || {}).name || '模板出题', url: (o.source || {}).url, bank_id: (o.source || {}).id,
+        is_probe: !!o.probe_of,
+      })) }
+    evaluation.value = eva
+    session.value = null
+    lastComment.value = null
+    answerText.value = ''
+    jobTitle.value = data.session['岗位名称'] || jobTitle.value
+    ElMessage.success('本场面试已结束，已为你加载评估报告，可在逐题复盘中核对刚才的回答是否已计入')
+    await loadHistory()
+  } catch {
+    // 恢复本身失败（网络等）：保留当前题与未提交答案，提示手动刷新
+    ElMessage.warning('冲突状态恢复失败，未提交答案已保留，请刷新页面后重试')
   }
 }
 
@@ -733,28 +889,31 @@ onMounted(async () => {
 
 <style scoped>
 .page { display: block; }
+/* 说明面板：白底 + 细边，与全站卡片同一容器语言；只保留一层极淡的
+   左上角靛蓝提亮，避免整块纯白显得空。 */
 .iv-hero {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
-  padding: clamp(24px, 4vw, 40px); margin-bottom: 22px; border-radius: 24px;
-  color: #fff; background: linear-gradient(118deg, #143c72 0%, #2465b7 52%, #5489d8 100%);
-  box-shadow: 0 18px 44px rgba(31, 83, 150, .18); position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: 28px;
+  padding: 22px 26px; margin-bottom: 16px; border-radius: 14px;
+  border: 1px solid #e7eaf1;
+  background: linear-gradient(180deg, #fbfcff 0%, #ffffff 68%);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
 }
-.iv-hero::after { content: ''; position: absolute; width: 280px; height: 280px; right: 8%; top: -180px;
-  border: 1px solid rgba(255,255,255,.18); border-radius: 50%; box-shadow: 0 0 0 28px rgba(255,255,255,.05), 0 0 0 56px rgba(255,255,255,.035); }
-.hero-copy, .hero-status { position: relative; z-index: 1; }
-.eyebrow { font-size: 12px; letter-spacing: .14em; font-weight: 700; opacity: .78; }
-.hero-copy h1 { margin: 8px 0 6px; font-size: clamp(26px, 3vw, 36px); line-height: 1.2; }
-.hero-copy p { margin: 0; max-width: 660px; color: rgba(255,255,255,.86); font-size: 16px; line-height: 1.65; }
-.hero-status { display: grid; gap: 10px; min-width: 170px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.2);
-  border-radius: 16px; background: rgba(12,39,78,.2); backdrop-filter: blur(8px); }
+.hero-copy { min-width: 0; }
+.hero-copy h1 { margin: 0 0 6px; font-size: 21px; font-weight: 680; letter-spacing: -.02em; color: var(--qh-text); }
+.hero-copy p { margin: 0; max-width: 660px; color: var(--qh-text-sub); font-size: 13.5px; line-height: 1.7; }
+.hero-status { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 176px; }
+.status-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px;
+  border: 1px solid #e7eaf1; border-radius: 999px; background: #fff;
+  color: var(--qh-text-sub); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.status-chip.on { border-color: #dfe7f7; background: #f6f9ff; color: #1f4fa8; }
+.status-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #e2b04a; }
+.status-dot.ready { background: #14a06f; }
 .setup-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .setup-card-head p { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.5; }
-.status-item { display: flex; align-items: center; gap: 9px; color: #fff; font-size: 14px; }
-.status-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ffc56d; }
-.status-dot.ready { background: #79e2b2; box-shadow: 0 0 0 4px rgba(121,226,178,.16); }
+.status-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #e2b04a; }
+.status-dot.ready { background: #14a06f; }
 .card-title { font-weight: 600; }
 .mt8 { margin-top: 8px; }
-.ml8 { margin-left: 8px; }
 .muted { color: var(--el-text-color-secondary); font-size: 13.5px; }
 .kv { display: flex; gap: 8px; margin: 6px 0; font-size: 14px; align-items: baseline; }
 .kv .k { color: var(--el-text-color-secondary); flex: none; width: 34px; }
@@ -769,7 +928,15 @@ onMounted(async () => {
   overflow-y: auto;
 }
 .head-row { display: flex; align-items: center; gap: 8px; }
+.hist-table { --el-table-text-color: #374151; font-size: 13px; }
+/* 「结果」列：分数为主、状态为辅，两行不换行不撑宽 */
+.hist-result { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.hist-result b { font-weight: 650; color: #111827; font-variant-numeric: tabular-nums; }
+.hist-result i { font-style: normal; font-size: 12px; color: #6b7280; }
+.hist-result.ongoing b { color: #1f4fa8; }
+.hist-table :deep(.el-table__cell) { padding: 8px 0; }
 .question-label { display: flex; align-items: center; gap: 10px; margin: 18px 0 6px; color: #245da6; font-size: 13px; font-weight: 700; }
+.personalized-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
 .question-label span { color: var(--el-text-color-secondary); font-weight: 400; }
 .question { font-size: 18px; font-weight: 650; margin-bottom: 16px; line-height: 1.75; color: var(--el-text-color-primary); }
 .q-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -794,9 +961,6 @@ onMounted(async () => {
 .resume-needed b { color: #8a5a13; font-size: 14px; }
 .resume-needed span { color: #9a7a42; font-size: 13px; }
 .start-button { margin-top: 12px; min-height: 42px; padding-inline: 22px; }
-.interview-hint, .input-hint { color: var(--el-text-color-secondary); font-size: 13.5px; line-height: 1.65; }
-.interview-hint { padding: 12px 14px; border-radius: 12px; background: #f5f8fc; }
-.interview-hint b { color: var(--el-text-color-primary); margin-right: 6px; }
 .agent-flow { padding: 13px 14px; border: 1px solid #dbe7fb; border-radius: 12px; background: linear-gradient(135deg, #f4f8ff, #fbfdff); }
 .agent-flow-title { display: flex; align-items: center; gap: 7px; color: #245da6; font-size: 13.5px; font-weight: 700; }
 .agent-pulse { width: 8px; height: 8px; border-radius: 50%; background: #2d72db; box-shadow: 0 0 0 4px rgba(45,114,219,.14); }
@@ -822,6 +986,41 @@ onMounted(async () => {
 .agent-live-strip > span:nth-child(2) { flex: 1; }
 .agent-live-strip b { color: #245da6; }
 .agent-live-mark { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px; background: #245da6; color: #fff; font-size: 11px; font-weight: 700; }
+.practice-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 0 18px;
+  padding: 9px 12px;
+  border: 1px solid #dce8f5;
+  border-radius: 10px;
+  background: #f7faff;
+  color: #4a5b76;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.practice-disclaimer svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin-top: 2px;
+  fill: none;
+  stroke: #315db1;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.report-disclaimer {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed #e5eaf3;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .iv-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 
 /* ===== 面试评估报告 ===== */
@@ -873,13 +1072,14 @@ onMounted(async () => {
 .qreview-round { font-weight: 600; font-size: 14px; }
 .qreview-question { margin: 8px 0; font-size: 14px; color: #111827; font-weight: 500; }
 .qreview-comment { font-size: 14px; line-height: 1.8; color: #374151;
-  border-left: 3px solid #93c5fd; padding-left: 10px; margin: 6px 0; }
+  border-left: 1px solid #93c5fd; padding-left: 10px; margin: 6px 0; }
 .qreview-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .tag-muted { font-size: 13.5px; color: #6b7280; }
 
 @media (max-width: 768px) {
-  .iv-hero { align-items: flex-start; flex-direction: column; gap: 18px; padding: 24px 20px; border-radius: 20px; }
-  .hero-status { width: 100%; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+  .iv-hero { align-items: flex-start; flex-direction: column; gap: 16px; padding: 18px 16px; border-radius: 14px; }
+  .hero-status { width: 100%; min-width: 0; flex-direction: row; flex-wrap: wrap; }
+  .status-chip { flex: 1 1 auto; justify-content: center; }
   .flow-steps { gap: 6px; }
   .flow-step { gap: 5px; font-size: 12px; }
   .flow-step span { width: 24px; height: 24px; }

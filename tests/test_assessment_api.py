@@ -40,7 +40,7 @@ def test_teacher_cannot_call_student_assessment():
     c = _client()
     # 用教师演示账号登录；若库不可用则登录失败，测试退化为验证「不因库故障而 500」
     login = c.post("/auth/login", json={"role": "teacher", "account": "T001",
-                                        "password": "teacher@123"})
+                                        "password": "123456h"})
     if login.status_code != 200:
         # 库不可用：登录应返回 401 而非 500，这本身就是契约的一部分
         assert login.status_code == 401

@@ -88,7 +88,10 @@ def _norm(text: str) -> str:
 def build_outline(job: Mapping[str, Any] | None,
                   resume: Mapping[str, Any],
                   max_rounds: int = _MAX_ROUNDS,
-                  use_bank: bool = True) -> list[dict[str, Any]]:
+                  use_bank: bool = True,
+                  exclude_bank_ids: set[str] | frozenset[str] | None = None,
+                  weak: Mapping[str, Any] | None = None,
+                  variant: int = 0) -> list[dict[str, Any]]:
     """按证据决定考什么题：有项目经历→项目深挖；岗位有技能→专业+情景。
 
     出题来源两级（题库优先、模板兜底）：
@@ -98,6 +101,11 @@ def build_outline(job: Mapping[str, Any] | None,
     题库题面一律原样使用，不做占位符替换——题库里的题本身就是完整问句，
     任何改写都可能把考点改掉，也会让「可回溯」失效。
 
+    个性化三参数（全部来自该学生的历史问答，路由层负责取数，引擎不碰库）：
+      * exclude_bank_ids：近几场做过的题库题编号——直接跳过，抽下一道；
+      * weak：{"type","score"} 最近一场平均分最低且 <70 的题型——该题型
+        优先保留在提纲里（裁剪阶段不先删它），题面加锚点前缀「上次 X 分」；
+      * variant：模板题变体轮换序号（按历史场数递增）——模板不再永远用第 0 条。
     顺序固定：动机→专业→项目→情景→抗压→反问（真实面试的常规推进），
     不足 max_rounds 时按题型权重从低到高裁剪（反问环节永远保留）。
     """
@@ -108,6 +116,10 @@ def build_outline(job: Mapping[str, Any] | None,
     job_title = str((job or {}).get("title") or "目标岗位")
     job_skills = _list_of((job or {}).get("skill_tags"))
     task = job_skills[0] if job_skills else "一项紧急任务"
+    excluded = {str(x) for x in (exclude_bank_ids or set())}
+    weak_type = str((weak or {}).get("type") or "")
+    weak_score = (weak or {}).get("score")
+    weak_ok = bool(weak_type in QUESTION_TYPES and weak_score is not None and weak_score < 70)
 
     plan: list[str] = ["motivation", "major", "scenario", "stress", "counter"]
     if projects:
@@ -115,6 +127,9 @@ def build_outline(job: Mapping[str, Any] | None,
     if not job_skills and not courses and "major" in plan:
         plan.remove("major")  # 无技能无课程 → 专业题没有抓手，不出（缺失不编题）
     plan = plan[:max(2, max_rounds)]
+    # 弱点题型被裁剪掉了 → 换回权重次低的题型，保证靶向题一定在场
+    if weak_ok and weak_type not in plan:
+        plan[-1] = weak_type if weak_type != "counter" else plan[-1]
 
     outline: list[dict[str, Any]] = []
     used_proj: set[str] = set()
@@ -134,7 +149,7 @@ def build_outline(job: Mapping[str, Any] | None,
             used_proj.add(proj.get("name"))
             placeholders["proj"] = str(proj.get("name") or "项目经历")
 
-        bank_hit = _bank_pick(job, qtype, resume) if use_bank else None
+        bank_hit = _bank_pick(job, qtype, resume, exclude_ids=excluded) if use_bank else None
         if bank_hit:
             raw = bank_hit["question"]
             # 项目深挖题必须锚定学生自己的项目：题库给的是「问法」，
@@ -143,6 +158,8 @@ def build_outline(job: Mapping[str, Any] | None,
             question = raw
             if qtype == "project" and placeholders.get("proj"):
                 question = f"围绕你简历里的「{placeholders['proj']}」来回答：{raw}"
+            if qtype == weak_type and weak_ok:
+                question = f"上次模拟面试你在「{QUESTION_TYPES[qtype]['label']}」类题只得 {round(float(weak_score))} 分，本题重点考察：{question}"
             outline.append({
                 "round": rnd, "type": qtype,
                 "question": question,
@@ -158,13 +175,21 @@ def build_outline(job: Mapping[str, Any] | None,
             })
             continue
 
-        q = _TEMPLATES[qtype][0]
+        variants = _TEMPLATES[qtype]
+        q = variants[int(variant or 0) % len(variants)]
         if qtype == "major":
             # 有岗位技能才问「课程与岗位的关系」；没有就只问掌握程度，
             # 避免把毫不相干的课程硬套到岗位上。
-            q = _TEMPLATES["major"][0 if job_skills else 2]
+            if job_skills:
+                q = variants[0]
+            else:
+                q = variants[2] if len(variants) > 2 else variants[-1]
+            if int(variant or 0) % len(variants) == 1 and job_skills:
+                q = variants[1]
         for k, v in placeholders.items():
             q = q.replace("{" + k + "}", v)
+        if qtype == weak_type and weak_ok:
+            q = f"上次模拟面试你在「{QUESTION_TYPES[qtype]['label']}」类题只得 {round(float(weak_score))} 分，本题重点考察：{q}"
         outline.append({"round": rnd, "type": qtype,
                         "question": q,
                         "rubric": rubric_of(qtype, job_skills),
@@ -239,19 +264,24 @@ def _resume_affinity(hit: Mapping[str, Any], resume: Mapping[str, Any] | None) -
 
 
 def _bank_pick(job: Mapping[str, Any] | None, qtype: str,
-               resume: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+               resume: Mapping[str, Any] | None = None,
+               exclude_ids: set[str] | frozenset[str] | None = None) -> dict[str, Any] | None:
     """从题库取一道题；题库不可用/未覆盖 → None（由模板兜底）。
 
     取回若干候选后按「检索分 + 简历贴合度」二次重排，让题目贴着学生自己
     学过的东西走。重排不改题库题面与考点，只改选哪一道。
     候选窗口取 8：只取 5 时，简历最相关的那道题常常进不了窗口（例如投后端、
     学过 Spring 的人，Spring 题初始排名可能在第 6~8 位），重排就无从发力。
+    exclude_ids：该学生近几场做过的题库题编号——直接跳过（跨场次防重复）。
     """
     try:
         from engine import question_bank as _qb
         hits = _qb.retrieve_for_job(job, qtype, k=8, query_text=_bank_query(job, resume))
     except Exception:  # 题库缺失或依赖异常绝不能阻断面试主流程
         return None
+    excluded = {str(x) for x in (exclude_ids or set())}
+    if excluded:
+        hits = [h for h in hits if str(h.get("id")) not in excluded]
     if not hits:
         return None
     if len(hits) > 1 and resume:

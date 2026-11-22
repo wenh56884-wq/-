@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import pymysql
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from agents import llm
@@ -273,15 +273,12 @@ def _list_memories_full(conn, identity: int, limit: int = 50) -> list[dict[str, 
         return []
 
 
-def _extract_memories(conn, ctx: ToolContext, history: list[pet_engine.Turn], rt: PetRuntime) -> int:
+def _extract_memories(conn, ctx: ToolContext, user_turns: list[str]) -> int:
     """从近期用户对话用 LLM 提取长期事实并落库（表达性提取，失败不阻断）。
 
     铁律 1：提取的是事实文本、不生成数值；存储条数/上限由引擎确定。
     """
-    if conn is None:
-        return 0
-    user_turns = [t.text for t in history[-4:] if t.role == "user"]
-    if not user_turns:
+    if conn is None or not user_turns:
         return 0
     prompt = "\n".join(f"用户说：{t}" for t in user_turns)
     facts = llm.generate_reply(
@@ -309,6 +306,22 @@ def _extract_memories(conn, ctx: ToolContext, history: list[pet_engine.Turn], rt
         except (pymysql.MySQLError, OSError) as exc:
             logger.warning("pet long memory trim failed: %s", exc)
     return added
+
+
+def _extract_memories_bg(ctx: ToolContext, user_turns: list[str]) -> None:
+    """响应返回后再做长期记忆提取：不让第二次 LLM 调用堵住宠物回复。
+
+    后台任务运行在原请求的连接关闭之后，所以这里必须自己开一条连接。
+    """
+    if not user_turns:
+        return
+    conn = _try_db()
+    if conn is None:
+        return
+    try:
+        _extract_memories(conn, ctx, user_turns)
+    finally:
+        conn.close()
 
 
 _LEVEL_CN = {
@@ -374,7 +387,11 @@ def _build_user_prompt(history: list[pet_engine.Turn], current: str,
 
 
 @router.post("/chat")
-def chat_with_pet(body: ChatIn, ctx: ToolContext = Depends(get_current_ctx)) -> dict[str, Any]:
+def chat_with_pet(
+    body: ChatIn,
+    background_tasks: BackgroundTasks,
+    ctx: ToolContext = Depends(get_current_ctx),
+) -> dict[str, Any]:
     """被动应答：用户和宠物说话。LLM 生成文本，失败回退模板（degraded 确定性）。"""
     with _db() as conn:
         rt = _runtime(ctx, conn)
@@ -404,8 +421,9 @@ def chat_with_pet(body: ChatIn, ctx: ToolContext = Depends(get_current_ctx)) -> 
         rt.memory.add("pet", reply, now2)
         _add_memory(conn, key, tenant, "pet", reply, now2)
         _persist(conn, ctx, rt)
-        # 长期记忆提取（LLM 表达，失败不阻断对话）
-        _extract_memories(conn, ctx, rt.memory.recent(), rt)
+        # 长期记忆提取（第二次 LLM 调用）放到响应之后，别堵住宠物回复
+        user_turns = [t.text for t in rt.memory.recent()[-4:] if t.role == "user"]
+        background_tasks.add_task(_extract_memories_bg, ctx, user_turns)
         state = build_state(rt.mood, rt.scheduler, rt.memory, now=now2)
     return {"reply": reply, "mood": state.mood, "degraded": degraded}
 

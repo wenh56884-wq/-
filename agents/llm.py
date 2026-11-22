@@ -1,7 +1,8 @@
 # agents/llm.py
-# 职责：LLM 客户端封装——讯飞星火优先、DeepSeek 兜底，供所有 Agent 节点复用。
+# 职责：LLM 客户端封装——在线（星火/DeepSeek）优先、本地大模型兜底，供所有 Agent 节点复用。
 # 依赖：langchain_openai.ChatOpenAI / app.config.get_settings
-# 说明：api_key 只从 .env 读取，禁止硬编码；两家都是 OpenAI 兼容接口，切换只换 base_url/model。
+# 说明：api_key 只从 .env 读取，禁止硬编码；所有提供方均为 OpenAI 兼容接口，切换只换 base_url/model。
+#      隐私分级：privacy="local" 只走本地大模型（数据不出机），适合学生个人隐私数据。
 
 from __future__ import annotations
 
@@ -22,32 +23,53 @@ SYSTEM_RULES: str = (
 
 _PLACEHOLDERS = {"", "REPLACE_ME", "sk-REPLACE_ME", "ak-REPLACE_ME"}
 
+# 提供方元信息：privacy_tier = online（数据上云）/ local（数据不出机）；requires_key 表示是否需真实密钥
+_PROVIDER_META: dict[str, tuple[str, bool]] = {
+    "spark": ("online", True),
+    "deepseek": ("online", True),
+    "local": ("local", False),
+}
+
 
 def _configured(key: str) -> bool:
     return str(key or "").strip() not in _PLACEHOLDERS
 
 
-def provider_order() -> tuple[str, ...]:
-    """按配置返回提供方尝试顺序；星火优先，DeepSeek 兜底。"""
+def provider_order(*, privacy: str = "any") -> tuple[str, ...]:
+    """按配置返回提供方尝试顺序：在线优先、本地兜底。
+
+    privacy="local" 只返回本地提供方（数据不出机，适合学生隐私数据）；
+    privacy="online" 只返回在线提供方；privacy="any"（默认）返回全部已配置。
+    """
     s = get_settings()
     spark_ok = _configured(s.spark_api_key)
     deepseek_ok = _configured(s.deepseek_api_key)
+    local_ok = bool(str(s.local_llm_base_url or "").strip())
     mode = str(s.llm_provider or "auto").strip().lower()
 
     if mode == "spark":
-        order = ("spark", "deepseek") if deepseek_ok else ("spark",)
+        online = ("spark", "deepseek") if deepseek_ok else ("spark",)
     elif mode == "deepseek":
-        order = ("deepseek", "spark") if spark_ok else ("deepseek",)
+        online = ("deepseek", "spark") if spark_ok else ("deepseek",)
     elif spark_ok:
-        order = ("spark", "deepseek") if deepseek_ok else ("spark",)
+        online = ("spark", "deepseek") if deepseek_ok else ("spark",)
     else:
-        order = ("deepseek",)
-    return tuple(name for name in order
-                 if (name == "spark" and spark_ok) or (name == "deepseek" and deepseek_ok))
+        online = ("deepseek",)
+
+    online = tuple(n for n in online
+                   if (n == "spark" and spark_ok) or (n == "deepseek" and deepseek_ok))
+    order: list[str] = list(online)
+    if local_ok:
+        order.append("local")
+
+    tier = privacy if privacy in ("online", "local") else "any"
+    if tier != "any":
+        order = [n for n in order if _PROVIDER_META[n][0] == tier]
+    return tuple(order)
 
 
 def _build_llm(provider: str, temperature: float) -> ChatOpenAI:
-    """按提供方构建 ChatOpenAI；缺 Key 的提供方由 provider_order 过滤。"""
+    """按提供方构建 ChatOpenAI；本地提供方无需真实密钥，留空则用占位。"""
     s = get_settings()
     if provider == "spark":
         base_url = str(s.spark_base_url or "").strip().rstrip("/")
@@ -55,12 +77,18 @@ def _build_llm(provider: str, temperature: float) -> ChatOpenAI:
         api_key = str(s.spark_api_key or "").strip()
         if not _configured(api_key):
             raise RuntimeError("SPARK_API_KEY 未配置")
-    else:
+    elif provider == "deepseek":
         base_url = str(s.deepseek_base_url or "https://api.deepseek.com").strip().rstrip("/")
         model = str(s.deepseek_model or "").strip() or "deepseek-chat"
         api_key = str(s.deepseek_api_key or "").strip()
         if not _configured(api_key):
             raise RuntimeError("DEEPSEEK_API_KEY 未配置")
+    elif provider == "local":
+        base_url = str(s.local_llm_base_url or "http://127.0.0.1:11434/v1").strip().rstrip("/")
+        model = str(s.local_llm_model or "").strip() or "qwen2.5:7b"
+        api_key = str(s.local_llm_api_key or "").strip() or "ollama"
+    else:
+        raise RuntimeError(f"未知 LLM 提供方: {provider}")
 
     return ChatOpenAI(
         base_url=base_url,
@@ -77,23 +105,38 @@ def _cached_llm(provider: str, temperature: float) -> ChatOpenAI:
     return _build_llm(provider, temperature)
 
 
-def _primary_llm(actor_type: str) -> ChatOpenAI:
-    order = provider_order()
+def get_llm(actor_type: str, *, privacy: str = "any") -> ChatOpenAI:
+    """按 actor_type 取主 LLM；privacy="local" 时只走本地（数据不出机）。"""
+    order = provider_order(privacy=privacy)
     if not order:
         raise RuntimeError(
-            "没有可用的 LLM Key：请在 .env 配置 SPARK_API_KEY 或 DEEPSEEK_API_KEY")
+            "没有可用的 LLM：请在 .env 配置在线 Key 或本地大模型端点")
+    temperature = 0.2 if actor_type == "teacher" else 0.3
+    return _cached_llm(order[0], temperature)
+
+
+def get_private_llm(actor_type: str) -> ChatOpenAI:
+    """隐私数据场景（如学生个人数据）：只走本地大模型，数据不出机。
+
+    未配置本地提供方时抛错，绝不静默回退到在线提供方（避免隐私数据上云）。
+    """
+    order = provider_order(privacy="local")
+    if not order:
+        raise RuntimeError(
+            "未配置本地大模型，无法处理隐私数据；"
+            "请在 .env 配置 LOCAL_LLM_BASE_URL（如 Ollama）")
     temperature = 0.2 if actor_type == "teacher" else 0.3
     return _cached_llm(order[0], temperature)
 
 
 def get_teacher_llm() -> ChatOpenAI:
-    """教师端主 LLM（星火优先，temperature=0.2）。"""
-    return _primary_llm("teacher")
+    """教师端主 LLM（在线优先，temperature=0.2）。"""
+    return get_llm("teacher")
 
 
 def get_student_llm() -> ChatOpenAI:
-    """学生端主 LLM（星火优先，temperature=0.3）。"""
-    return _primary_llm("student")
+    """学生端主 LLM（在线优先，temperature=0.3）。"""
+    return get_llm("student")
 
 
 def _messages(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
@@ -108,13 +151,16 @@ def _temperature(actor_type: str) -> float:
 
 
 def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
-            temperature: float | None = None) -> str:
-    """按提供方顺序尝试一次对话；星火失败自动落 DeepSeek，返回纯文本正文。"""
+            temperature: float | None = None, privacy: str = "any") -> str:
+    """按提供方顺序尝试一次对话；失败自动换下一家，返回纯文本正文。
+
+    privacy="local" 时只尝试本地提供方，数据不出机。
+    """
     from app.audit import audit_event
 
-    order = provider_order()
+    order = provider_order(privacy=privacy)
     if not order:
-        raise RuntimeError("没有可用的 LLM Key")
+        raise RuntimeError("没有可用的 LLM")
     errors: list[str] = []
     temp = _temperature(actor_type) if temperature is None else temperature
     for provider in order:
@@ -139,16 +185,17 @@ def _invoke(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
 
 def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag: str,
                    on_token: Callable[[str], None],
-                   temperature: float | None = None) -> str:
+                   temperature: float | None = None, privacy: str = "any") -> str:
     """流式调用：每收到一块就回调 on_token。
 
     只有「一个字都还没吐」时才允许换提供方；已经输出半截，换家会拼出两段不同回答。
+    privacy="local" 时只尝试本地提供方，数据不出机。
     """
     from app.audit import audit_event
 
-    order = provider_order()
+    order = provider_order(privacy=privacy)
     if not order:
-        raise RuntimeError("没有可用的 LLM Key")
+        raise RuntimeError("没有可用的 LLM")
     errors: list[str] = []
     temp = _temperature(actor_type) if temperature is None else temperature
     for provider in order:
@@ -186,17 +233,20 @@ def _invoke_stream(actor_type: str, system_prompt: str, user_prompt: str, *, tag
 def generate_reply(actor_type: str, *, system_prompt: str, user_prompt: str,
                    tag: str = "draft",
                    on_token: Callable[[str], None] | None = None,
-                   temperature: float | None = None) -> str | None:
+                   temperature: float | None = None,
+                   privacy: str = "any") -> str | None:
     """生成一段回复；所有提供方都不可用时返回 None（上层回退模板，不报错给用户）。
 
     temperature 缺省按 actor_type 取默认值；career 等模块传显式温度保留各自语义。
+    privacy="local" 时只走本地大模型（数据不出机），无本地提供方则返回 None 回退模板。
     """
     try:
         if on_token is None:
             return _invoke(actor_type, system_prompt, user_prompt, tag=tag,
-                           temperature=temperature)
+                           temperature=temperature, privacy=privacy)
         return _invoke_stream(actor_type, system_prompt, user_prompt, tag=tag,
-                              on_token=on_token, temperature=temperature)
+                              on_token=on_token, temperature=temperature,
+                              privacy=privacy)
     except Exception:
         return None
 

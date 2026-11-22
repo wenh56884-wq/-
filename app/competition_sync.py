@@ -5,7 +5,7 @@
 设计要点：
 - 抓的是官方页面原始标题/日期/链接，不做任何推断补全；抓不到就跳过（绝不写编造数据）。
 - 通过 (title, published_at) 唯一键做幂等：重复抓取不会重复入库，只有新通知才落库。
-- 后台任务在 FastAPI 启动时拉起，间隔由环境变量 COMPETITION_SYNC_MINUTES 控制（0 = 关闭）。
+- 后台任务在 FastAPI 启动时拉起，间隔由环境变量 COMPETITION_SYNC_MINUTES 控制（默认 1440 = 每天；0 = 关闭）。
 """
 
 from __future__ import annotations
@@ -17,14 +17,17 @@ from datetime import datetime
 from typing import Any
 
 from app.audit import audit_event
+from app.logging_config import get_logger
 
-# 同步间隔（分钟）：默认 30 分钟；0 或负数表示不启用后台同步
+logger = get_logger("qihang.competition_sync")
+
+# 同步间隔（分钟）：默认 1440 分钟（每天）；0 或负数表示不启用后台同步
 def sync_interval_minutes() -> float:
-    raw = str(os.getenv("COMPETITION_SYNC_MINUTES", "30")).strip()
+    raw = str(os.getenv("COMPETITION_SYNC_MINUTES", "1440")).strip()
     try:
         return max(0.0, float(raw))
     except ValueError:
-        return 30.0
+        return 1440.0
 
 
 def sync_once() -> int:
@@ -37,14 +40,17 @@ def sync_once() -> int:
     try:
         notices = fetch_notices()
     except Exception as exc:  # 断网 / 官网改版只告警，不打断服务
-        audit_event(actor_type="system", actor_id=0, action="competition.sync.failed",
+        logger.warning("competition sync fetch failed", exc_info=True)
+        audit_event(tenant_id=1, actor_type="system", actor_id=0,
+                    action="competition.sync.failed",
                     target="", detail={"error": str(exc)[:200]})
         return 0
     if not notices:
         return 0
     added = save_notices(notices)
     if added:
-        audit_event(actor_type="system", actor_id=0, action="competition.sync",
+        audit_event(tenant_id=1, actor_type="system", actor_id=0,
+                    action="competition.sync",
                     target="", detail={"added": added, "fetched": len(notices)})
     return added
 
@@ -55,7 +61,7 @@ def _loop(interval_seconds: float) -> None:
         try:
             sync_once()
         except Exception:
-            pass
+            logger.exception("competition sync loop failed")
         threading.Event().wait(interval_seconds)
 
 

@@ -12,8 +12,6 @@ import re
 from datetime import date
 from typing import Any, Mapping, Sequence
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from agents import llm as llm_module
 from agents.career import context as cx
 from engine import career_forecast as cf
@@ -66,11 +64,20 @@ def _extract_json(text: str) -> Any:
     return None
 
 
-def _ask(system: str, user: str, temperature: float = 0.2) -> str:
-    """调用 DeepSeek 拿纯文本（student 端单例，temperature 由调用方微调）。"""
-    llm = llm_module.get_student_llm()
-    msg = llm.invoke([SystemMessage(content=system), HumanMessage(content=user)])
-    return str(getattr(msg, "content", "") or "")
+def _ask(system: str, user: str, temperature: float = 0.2) -> str | None:
+    """统一走 generate_reply 双通道（星火失败自动落 DeepSeek）。
+
+    全部提供方不可用时返回 None，由调用方按各自语义降级：
+    parse_plan 转 RuntimeError（路由层转 502），其余节点保留引擎结果
+    只省略模型润色——绝不让上游 403 / 断网穿透成接口 500。
+    """
+    return llm_module.generate_reply(
+        "student",
+        system_prompt=system,
+        user_prompt=user,
+        tag="career",
+        temperature=temperature,
+    )
 
 
 # ================================================================
@@ -119,9 +126,11 @@ def parse_plan(
         f"学院：{facts.get('college') or '未知'}\n\n"
         f"【职业规划原文】\n{raw_text.strip()}\n"
     )
-    parsed = _extract_json(_ask(PLAN_SYSTEM, user, temperature=0.2))
+    answer = _ask(PLAN_SYSTEM, user, temperature=0.2)
+    parsed = _extract_json(answer) if answer else None
     if not isinstance(parsed, Mapping):
-        raise RuntimeError("模型未返回合法 JSON，请重试或检查 DeepSeek 配置")
+        raise RuntimeError(
+            "模型服务暂时不可用或未返回合法结果，请稍后重试")
 
     goal = cr.normalize_goal(parsed.get("目标类型") or raw_text)
     timeline = parsed.get("时间线") if isinstance(parsed.get("时间线"), list) else []
@@ -533,6 +542,16 @@ def coach_chat(
         + f"\n\n【学生本次输入】\n{message.strip()}"
     )
     reply = _ask(COACH_SYSTEM, user, temperature=0.4)
+    if not reply:
+        # 双通道都不可用：给陪伴降级话术，判定与画像数据不受影响
+        return {
+            "reply": "陪伴教练暂时不在线，请稍后再试；你的画像与周报数据都在，不受影响。",
+            "system_record": {
+                "accepted": {}, "ok": True,
+                "reason": "llm_unavailable", "rejected": [],
+            },
+            "engine_version": cr.CAREER_ENGINE_VERSION,
+        }
 
     # 拆出【系统记录】
     record_raw = None

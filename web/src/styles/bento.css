@@ -10,7 +10,7 @@
   --bento-border-strong: #cfd4de;
   --bento-text: #16181d;
   --bento-sub: #5f6672;
-  --bento-mute: #9aa1ad;
+  --bento-mute: #6b7280;
   --bento-accent: #1951c3;
   --bento-accent-soft: #e9efff;
   --bento-radius: 20px;
@@ -61,7 +61,6 @@
     transform 260ms var(--bento-ease),
     box-shadow 260ms var(--bento-ease),
     border-color 260ms var(--bento-ease);
-  will-change: transform;
 }
 
 /* 卡片顶部的细高光让白底在浅灰背景上保留轮廓，避免整站“白板化”。 */
@@ -281,22 +280,25 @@
   transform: scale(0.97);
 }
 
-/* 主按钮统一走品牌靛蓝（含 hover/active，别再残留旧的珊瑚红） */
+/* 主按钮走科技渐变：品牌靛蓝 → 数据青，配同色系发光（不再残留旧紫光） */
 .bento-card .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
   --el-button-bg-color: transparent;
   --el-button-hover-bg-color: transparent;
   --el-button-active-bg-color: transparent;
   border-color: transparent;
-  background-image: linear-gradient(135deg, #2d61dd 0%, #1951c3 52%, #14419c 100%);
+  background-image: var(--tech-gradient, linear-gradient(135deg, #1951c3 0%, #2b7ae0 50%, #00c2ff 100%));
   color: #fff;
   box-shadow:
-    0 6px 14px rgba(79, 70, 229, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    0 6px 16px rgba(25, 81, 195, 0.30),
+    0 0 18px -8px rgba(0, 194, 255, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .bento-card .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
-  background-image: linear-gradient(135deg, #3b6ee5 0%, #1f5ad0 52%, #14419c 100%);
-  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.32);
+  background-image: linear-gradient(135deg, #2b6ee0 0%, #2b8ae8 50%, #22d0ff 100%);
+  box-shadow:
+    0 10px 24px rgba(25, 81, 195, 0.38),
+    0 0 24px -8px rgba(0, 194, 255, 0.55);
 }
 
 /* 避免 Bento 卡片里再套一张有边框/阴影的 Element 卡 */

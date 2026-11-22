@@ -33,6 +33,14 @@ function markInteract() {
   lastInteractAt = Date.now()
 }
 
+// 业务关键时刻让宠物说一句话（面试冷场提示等）。模块级导出：不需要组件生命周期，
+// 在 setup 里随时可调。专注模式下闭嘴（返回 false，调用方可据此决定是否再安排）。
+export function petSay(text) {
+  if (!text || state.focusMode || !state.available) return false
+  state.bubbleText = text
+  return true
+}
+
 async function loadPersonality() {
   try {
     const { data } = await http.get('/pet/personality')
@@ -105,13 +113,16 @@ async function chat(text) {
   if (!text || !text.trim() || state.sending) return
   markInteract()
   state.sending = true
+  // 宠物对话走 LLM，偶尔会慢到 20s+；先给一句“在想”，再设 18s 上限，
+  // 避免输入框一直禁用、用户以为界面卡死。
+  state.bubbleText = '让我想想…'
   try {
-    const { data } = await http.post('/pet/chat', { text })
-    state.bubbleText = data.reply
+    const { data } = await http.post('/pet/chat', { text }, { timeout: 18000 })
+    state.bubbleText = data.reply || '我在听，再说一遍？'
     state.mood = data.mood
     state.available = true
   } catch (e) {
-    // 401 未登录或后端不可用：静默，不弹错误气泡
+    state.bubbleText = '我这边有点慢，稍后再问我一次？'
   } finally {
     state.sending = false
   }

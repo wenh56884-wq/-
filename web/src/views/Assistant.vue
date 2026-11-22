@@ -92,16 +92,11 @@
                 </div>
               </div>
 
-              <details v-if="msg.role === 'assistant' && !msg.streaming
-                             && msg.steps && msg.steps.length" class="trace-box">
-                <summary>执行轨迹 · {{ msg.steps.length }} 步</summary>
-                <div v-for="step in msg.steps" :key="step.index" class="trace-step">
-                  <span class="trace-index">{{ step.index }}</span>
-                  <span class="trace-tool">{{ step.tool }}</span>
-                  <span class="trace-ok" :class="{ bad: !step.ok }">{{ step.ok ? '成功' : '失败' }}</span>
-                  <span class="trace-purpose">{{ step.purpose }}</span>
-                </div>
-              </details>
+              <AgentTracePanel
+                v-if="msg.role === 'assistant' && !msg.streaming && msg.trace_id
+                      && msg.trace_id !== '-' && msg.tool !== 'chitchat'"
+                :trace="msg"
+              />
 
               <div v-if="msg.role === 'assistant' && !msg.streaming" class="bubble-foot">
                 <span v-if="msg.tool" class="chip">{{ msg.tool }}</span>
@@ -221,10 +216,11 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 
 import http, { clearSession, currentRole } from '../api/http'
 import router from '../router'
+import AgentTracePanel from '../components/agent/AgentTracePanel.vue'
 import moyuImg from '../assets/deepseek-mo-yu.webp'
 import WebSearch from './WebSearch.vue'
 
@@ -262,6 +258,15 @@ let seq = 0
 // 会话列表
 const sessions = ref([])
 const sessionsLoading = ref(false)
+
+// 记住最后聊的会话：退出再进自动恢复上一轮对话，不用重新问
+const LAST_SESS_KEY = 'qihang_asst_last_session'
+watch(sessionId, (v) => {
+  try {
+    if (v) localStorage.setItem(LAST_SESS_KEY, String(v))
+    else localStorage.removeItem(LAST_SESS_KEY)
+  } catch (err) { /* 隐私模式等场景存不进就算了，不影响聊天 */ }
+})
 
 // 两个模式开关
 const deepThinking = ref(false)
@@ -521,6 +526,14 @@ async function sendOneShot(pending, content, history, started) {
       tool: data?.tool || '',
       citations: data?.citations || [],
       steps: Array.isArray(data?.steps) ? data.steps : [],
+      verdict: data?.verdict || {},
+      draft_mode: data?.draft_mode || '',
+      planner: data?.planner || '',
+      attempts: Number(data?.attempts || 1),
+      critic_version: data?.critic_version || '',
+      graph_version: data?.graph_version || '',
+      engine_version: data?.engine_version || '',
+      calc_version: data?.calc_version || '',
       cost: Math.round(performance.now() - started),
       streaming: false,
       status: ''
@@ -598,6 +611,14 @@ async function send(text) {
     tool: '',
     citations: [],
     steps: [],
+    verdict: {},
+    draft_mode: '',
+    planner: '',
+    attempts: 1,
+    critic_version: '',
+    graph_version: '',
+    engine_version: '',
+    calc_version: '',
     cost: 0,
     error: ''
   })
@@ -630,6 +651,14 @@ async function send(text) {
         pending.tool = data?.tool || pending.tool
         pending.citations = data?.citations || []
         pending.steps = Array.isArray(data?.steps) ? data.steps : []
+        pending.verdict = data?.verdict || {}
+        pending.draft_mode = data?.draft_mode || ''
+        pending.planner = data?.planner || ''
+        pending.attempts = Number(data?.attempts || 1)
+        pending.critic_version = data?.critic_version || ''
+        pending.graph_version = data?.graph_version || ''
+        pending.engine_version = data?.engine_version || ''
+        pending.calc_version = data?.calc_version || ''
         pending.cost = Math.round(performance.now() - started)
         pending.status = ''
         pending.streaming = false
@@ -678,7 +707,6 @@ function newSession() {
   searchAnswer.value = {}
   searchError.value = ''
 }
-
 function toBubble(m) {
   seq += 1
   return {
@@ -721,7 +749,19 @@ async function loadSessions() {
   }
 }
 
-onMounted(loadSessions)
+onMounted(async () => {
+  await loadSessions()
+  // 进页面自动恢复上次对话：优先回到记住的那个会话，没有就打开最近的会话
+  if (sending.value || sessionId.value) return
+  let saved = 0
+  try {
+    saved = Number(localStorage.getItem(LAST_SESS_KEY) || 0)
+  } catch (err) {
+    saved = 0
+  }
+  const target = sessions.value.find((s) => s.id === saved) || sessions.value[0]
+  if (target) await openSession(target.id)
+})
 </script>
 
 <style scoped>
@@ -1278,48 +1318,6 @@ onMounted(loadSessions)
   color: var(--bento-mute);
 }
 
-.trace-box {
-  margin-top: 8px;
-  font-size: 13.5px;
-  color: var(--bento-sub);
-}
-
-.trace-box summary {
-  cursor: pointer;
-  color: var(--bento-mute);
-}
-
-.trace-step {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  margin-top: 6px;
-  padding-left: 4px;
-}
-
-.trace-index {
-  width: 16px;
-  flex: 0 0 16px;
-  color: var(--bento-mute);
-}
-
-.trace-tool {
-  font-weight: 600;
-  color: var(--bento-text);
-}
-
-.trace-ok {
-  color: #0f9d58;
-}
-
-.trace-ok.bad {
-  color: #cf1322;
-}
-
-.trace-purpose {
-  color: var(--bento-mute);
-}
-
 .bubble-foot {
   display: flex;
   flex-wrap: wrap;
@@ -1666,9 +1664,59 @@ onMounted(loadSessions)
     max-width: 88%;
   }
 
+  /* 输入区：三个开关 + 发送键在 390px 下会互相挤，发送键被压进第二行开关里。
+     窄屏改成「输入框加高 → 开关一行 → 发送整行」。 */
+  .compose-input {
+    min-height: 76px;
+    padding: 10px 12px 6px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .compose-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 4px 10px 10px;
+  }
+
+  .toggles {
+    gap: 6px;
+  }
+
+  .send-btn {
+    width: 100%;
+    min-height: 42px;
+  }
+
   .asst-search {
     position: static;
     width: auto;
+  }
+
+  /* 标题区的长副标题挤占按钮宽度，会把「查看来源」压成两行圆形；
+     给文字块可收缩宽度 + 省略号，按钮保持 nowrap。 */
+  .asst-head {
+    flex-wrap: nowrap;
+  }
+
+  .asst-id {
+    flex: 1 1 0;
+  }
+
+  .asst-id-text {
+    min-width: 0;
+  }
+
+  .asst-sub {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .asst-head > .ghost-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 }
 </style>

@@ -116,4 +116,18 @@ onBeforeUnmount(clearTimers)
   opacity: 0;
   transform: translateX(-50%) translateY(8px) scale(0.86);
 }
+
+/* 平板/手机宠物只剩 64px：气泡改为左对齐，避免以宠物为中心时溢出视口左缘 */
+@media (max-width: 1023px) {
+  .pet-bubble {
+    left: 4px;
+    max-width: min(220px, calc(100vw - 32px));
+    transform: none;
+  }
+
+  .bubble-pop-enter-from,
+  .bubble-pop-leave-to {
+    transform: translateY(8px) scale(0.86);
+  }
+}
 </style>

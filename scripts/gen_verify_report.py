@@ -29,6 +29,14 @@ from app.config import get_settings  # noqa: E402
 BASE_URL = "http://127.0.0.1:8000"
 TERM = "2025-2026-2"
 TENANT = 1
+DEMO_PASSWORD = str(get_settings().demo_password or "").strip()
+DEMO_STUDENT_NOS = frozenset({"AI20230001", "AI20260001", "AI20260004",
+                              "AI20250001", "AI20240004"})
+
+
+def student_password(student_no: str) -> str:
+    """演示学生用统一口令，其余生成学生仍用「初始口令=学号」。"""
+    return DEMO_PASSWORD if str(student_no) in DEMO_STUDENT_NOS else str(student_no)
 STUDENT_SAMPLE = 20  # 数值一致性抽查人数（字典 §5 要求最小值方法）
 _out: list[str] = []
 
@@ -118,7 +126,7 @@ def ensure_teacher() -> None:
             if cur.fetchone() is None:
                 cur.execute("INSERT INTO `教师` (`租户编号`, `姓名`, `工号`, `角色`, `口令摘要`) "
                             "VALUES (%s,%s,%s,'teacher',%s)",
-                            (TENANT, "演示教师", "T001", hash_password("teacher@123")))
+                            (TENANT, "演示教师", "T001", hash_password(DEMO_PASSWORD)))
         conn.commit()
     finally:
         conn.close()
@@ -204,7 +212,7 @@ def run_smoke_items(klass: str, students: list[tuple[str, int]]) -> list[tuple[s
                   f"duckdb={health.get('duckdb')} llm={health.get('llm')}", ""))
 
     code, login = http_json("POST", "/auth/login",
-                            body={"role": "teacher", "account": "T001", "password": "teacher@123"})
+                            body={"role": "teacher", "account": "T001", "password": DEMO_PASSWORD})
     teacher_token = str(login.get("access_token") or "") if code == 200 else ""
     items.append(("2 教师登录拿 token", "PASS" if teacher_token else "FAIL",
                   f"role={login.get('role')} tenant={login.get('tenant_id')}", ""))
@@ -235,7 +243,8 @@ def run_smoke_items(klass: str, students: list[tuple[str, int]]) -> list[tuple[s
                   f"target={gap.get('target_direction')} gaps={len(gap.get('gaps') or [])}", ""))
 
     code, slogin = http_json("POST", "/auth/login",
-                             body={"role": "student", "account": first_no, "password": first_no})
+                             body={"role": "student", "account": first_no,
+                                   "password": student_password(first_no)})
     student_token = str(slogin.get("access_token") or "") if code == 200 else ""
     items.append(("7 学生登录", "PASS" if student_token else "FAIL", f"{first_no}", ""))
 
@@ -258,7 +267,10 @@ def run_smoke_items(klass: str, students: list[tuple[str, int]]) -> list[tuple[s
                            params={"term": TERM, "top_n": 5})
     version = recs.get("recommend_version")
     cnt = len(recs.get("items") or [])
-    items.append(("10 学生推荐接口", "PASS" if version == "v1.0" and cnt > 0 else
+    # 推荐引擎版本随迭代演进（v1.0 → hybrid-v1）：只要是已发布的版本号且有条目即 PASS
+    _KNOWN_VERSIONS = ("v1.0", "hybrid-v1")
+    items.append(("10 学生推荐接口",
+                  "PASS" if (version in _KNOWN_VERSIONS and cnt > 0) else
                   ("SKIP" if version == "pending" else "FAIL"),
                   f"version={version} items={cnt} "
                   f"冷启动={recs.get('cold_start')} 候选池={recs.get('candidate_cnt')}", ""))
@@ -303,10 +315,10 @@ def consistency_checks(students: list[tuple[str, int]], klass: str,
     checked = 0
     for student_no, _sid in students:
         checked += 1
-        # 学生端：用本人身份登录（演示约定：初始口令 = 学号）
+        # 学生端：用本人身份登录（演示学生用统一口令，其余学生初始口令 = 学号）
         _code, slog = http_json("POST", "/auth/login",
                                 body={"role": "student", "account": student_no,
-                                      "password": student_no})
+                                      "password": student_password(student_no)})
         stoken = str(slog.get("access_token") or "")
         if not stoken:
             continue
@@ -382,7 +394,7 @@ def main() -> int:
     emit("| 一致性检查 | 命中率 | 结论 |")
     emit("| - | - | - |")
     code, login = http_json("POST", "/auth/login",
-                            body={"role": "teacher", "account": "T001", "password": "teacher@123"})
+                            body={"role": "teacher", "account": "T001", "password": DEMO_PASSWORD})
     teacher_token = str(login.get("access_token") or "")
     for name, rate, status in consistency_checks(students, klass, teacher_token):
         emit(f"| {name} | {rate} | {status} |")

@@ -35,6 +35,7 @@ def my_forecast(ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
         return forecast.compute_student_forecast(
             ctx.tenant_id, str(prof["student_no"]), profile=prof)
     finally:
-        audit_event(actor_type=ctx.actor_type, actor_id=ctx.student_id,
+        audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                    actor_id=ctx.student_id,
                     action="api.my_forecast", target="self",
                     duration_ms=(time.perf_counter() - started) * 1000)

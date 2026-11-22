@@ -655,9 +655,9 @@ onMounted(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: #dcdcf9;
+  border-color: #baccf0;
   box-shadow:
-    0 2px 6px rgba(91, 91, 214, 0.1),
+    0 2px 6px rgba(25, 81, 195, 0.1),
     0 12px 28px rgba(16, 24, 40, 0.07);
 }
 
@@ -693,7 +693,7 @@ onMounted(() => {
 .qh-arrow {
   font-size: 14px;
   line-height: 1;
-  color: #5b5bd6;
+  color: #1951c3;
   opacity: 0;
   transform: translate(-2px, 2px);
   transition:
@@ -717,15 +717,37 @@ onMounted(() => {
 }
 
 .type-card.active {
-  border-color: #16181d;
+  border-color: var(--bento-accent);
   box-shadow:
-    0 0 0 2px rgba(14, 58, 61, 0.08),
-    var(--bento-shadow);
+    0 0 0 3px rgba(25, 81, 195, 0.1),
+    0 10px 24px rgba(25, 81, 195, 0.1);
 }
 
 .type-card.active .bento-icon {
-  color: #16181d;
-  background: #e4e7ee;
+  color: var(--bento-accent);
+  background: var(--bento-accent-soft);
+}
+
+@media (max-width: 700px) {
+  /* 全部公告 + 三类考试卡改成 2×2，筛选与公告列表保持通栏 */
+  .bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .freshness,
+  .filter-bar,
+  .gk-entry,
+  .list-card {
+    grid-column: 1 / -1;
+  }
+
+  .stat-card {
+    min-height: 112px;
+  }
+
+  .stat-card .bento-stat {
+    font-size: 30px;
+  }
 }
 .notice-item {
   padding: 12px 8px;
@@ -770,10 +792,6 @@ onMounted(() => {
   font-weight: 500;
   margin-right: 2px;
 }
-.req-missing {
-  color: var(--el-color-warning);
-  font-style: normal;
-}
 .pager {
   margin-top: 16px;
   justify-content: flex-end;
@@ -797,7 +815,7 @@ onMounted(() => {
   width: 3px;
   height: 14px;
   border-radius: 2px;
-  background: #5b5bd6;
+  background: #1951c3;
 }
 .req-list {
   display: flex;
@@ -818,7 +836,7 @@ onMounted(() => {
   padding: 2px 10px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
-  color: #5b5bd6;
+  color: #1951c3;
   font-size: 13.5px;
   font-weight: 600;
   line-height: 20px;
@@ -930,7 +948,7 @@ onMounted(() => {
 }
 .gk-source a {
   margin-left: 6px;
-  color: #5b5bd6;
+  color: #1951c3;
 }
 .gk-detail {
   display: flex;

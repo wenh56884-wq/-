@@ -19,7 +19,7 @@
       <template #header>
         <div class="head-row">
           <span class="card-title">以技能为中心的邻接子图</span>
-          <span class="muted">构建于 {{ builtAt || '…' }}</span>
+          <span class="muted">构建于 {{ builtAt ? builtAt.replace('T', ' ').slice(0, 16) : '…' }}</span>
         </div>
       </template>
       <div class="ctrl-row">
@@ -90,6 +90,8 @@
         </div>
       </el-card>
 
+    <SkillGapPath v-if="isStudent" />
+
     <el-card v-if="explain" shadow="never" class="block-card bento-span-4">
       <template #header>
         <div class="head-row"><span class="card-title">解释链：{{ explain.major }} → {{ explain.job }}</span>
@@ -116,7 +118,11 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import http from '../api/http'
+import http, { currentRole } from '../api/http'
+import SkillGapPath from '../components/kg/SkillGapPath.vue'
+
+// 学生端专属卡：教师端保持原有图谱分析功能不变
+const isStudent = currentRole() === 'student'
 
 const stats = ref(null)
 const builtAt = ref('')
@@ -235,7 +241,7 @@ onMounted(async () => {
 .chain-list { max-height: 320px; overflow: auto; }
 .chain-item { margin: 6px 0; font-size: 14px; }
 .via { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 13.5px; }
-.head-row { display: flex; align-items: center; gap: 8px; }
+.head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .explain-flow { display: flex; gap: 14px; flex-wrap: wrap; }
 .flow-node { border: 1px solid var(--el-border-color); border-radius: 8px; padding: 10px 14px; text-align: center; min-width: 150px; }
 .fn-course { font-size: 13.5px; color: var(--el-color-primary); max-width: 170px; }
@@ -244,4 +250,36 @@ onMounted(async () => {
 .fn-arrow { font-size: 12.5px; color: var(--el-text-color-secondary); margin: 2px 0; }
 .mt8 { margin-top: 8px; }
 .muted { color: var(--el-text-color-secondary); font-size: 13.5px; }
+
+/* 手机端：5 张统计卡原先是通栏 + 112px 最小高度，五张就把图谱推到三屏以外。
+   改成「标签在左、数字在右」的单行卡，五张只占约 340px。 */
+@media (max-width: 560px) {
+  .stat-card {
+    gap: 0;
+    min-height: 0;
+    padding: 0;
+    text-align: left;
+  }
+
+  .stat-card :deep(.el-card__body) {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .stat-num {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 13.5px;
+  }
+
+  .sel {
+    width: 100%;
+  }
+}
 </style>

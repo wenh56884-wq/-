@@ -170,7 +170,7 @@ def test_class_rank_api_returns_only_current_class_detail():
     """同专业其他班只用于算名次，明细不能随响应下发。"""
     client = TestClient(create_app())
     r = client.post("/auth/login", json={"role": "teacher", "account": "T001",
-                                         "password": "teacher@123"})
+                                         "password": "123456h"})
     assert r.status_code == 200, r.text[:200]
     headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 

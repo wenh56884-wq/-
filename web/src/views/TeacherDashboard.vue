@@ -84,7 +84,7 @@
         <span>数据于 {{ clock.ago(lastLoadAt) }}</span>
         <span v-if="errorTip" class="err">{{ errorTip }}</span>
         <el-switch v-model="autoRefresh" size="small" active-text="自动刷新" class="auto-switch" />
-        <router-link to="/teacher/students" class="to-files">看学生个人档案 →</router-link>
+        <router-link to="/teacher?tab=roster" class="to-files">看学生个人档案 →</router-link>
       </div>
     </section>
 
@@ -192,9 +192,9 @@
       </div>
 
       <div class="hero-links">
-        <router-link to="/teacher/students" class="hero-link">学生档案</router-link>
-        <router-link to="/teacher/jobs" class="hero-link">岗位库</router-link>
-        <router-link to="/teacher/exams" class="hero-link">招考信息</router-link>
+        <router-link to="/teacher?tab=roster" class="hero-link">学生档案</router-link>
+        <router-link to="/teacher/opportunity" class="hero-link">岗位库</router-link>
+        <router-link to="/teacher/opportunity?tab=exams" class="hero-link">招考信息</router-link>
         <router-link to="/teacher/kg" class="hero-link">知识图谱</router-link>
       </div>
 
@@ -228,6 +228,16 @@
       </ul>
     </section>
 
+    <RiskSandbox
+      class="bento-span-4 sandbox-card qh-reveal"
+      :style="{ '--qh-index': 9 }"
+      :items="warnings.items || []"
+      :class-name="className"
+      :term="warnings.term || term"
+      :loading="loading"
+      @select="openProfile"
+    />
+
     <section class="bento-card bento-span-4 intent-card qh-reveal" :style="{ '--qh-index': 10 }" v-loading="loading">
       <div class="intent-head">
         <span class="card-title" style="margin: 0">职业目标分布</span>
@@ -253,15 +263,22 @@
     <section ref="warningTableCard" class="bento-card bento-span-4 table-card qh-reveal" :style="{ '--qh-index': 11 }">
       <div class="card-title">
         预警名单（点击行看四维画像）
-        <el-tag v-if="!loading" size="small" :type="(warnings.items || []).length ? 'danger' : 'success'"
+        <el-tag v-if="!loading" size="small" :type="warningRows.length ? 'danger' : 'success'"
           effect="plain" class="wl-count">
-          {{ (warnings.items || []).length }} 人
+          {{ warningRows.length }} 人
         </el-tag>
         <span class="wl-hint">仅列出红/橙/黄色预警学生；全班风险分布见上方图表，分数最高者见「高风险 Top5」</span>
       </div>
+      <p class="warning-review-note" role="note">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v5M12 8h.01" />
+        </svg>
+        预警清单由教师复核后跟进；引擎只做风险提示，不替代人工判断。
+      </p>
       <el-table
         v-loading="loading"
-        :data="warnings.items || []"
+        :data="warningRows"
         border
         stripe
         max-height="420"
@@ -300,7 +317,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !(warnings.items || []).length" description="本学期该班暂无红/橙/黄色预警学生（可看上方「高风险 Top5」提前关注）" />
+      <el-empty v-if="!loading && !warningRows.length" description="本学期该班暂无红/橙/黄色预警学生（可看上方「高风险 Top5」提前关注）" />
     </section>
     </div>
 
@@ -408,13 +425,14 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
+import echarts from '../utils/echarts'
 
 import http from '../api/http'
 import router from '../router'
 import CountNumber from '../components/CountNumber.vue'
 import RouteHero from '../components/brand/RouteHero.vue'
+import RiskSandbox from '../components/teacher/RiskSandbox.vue'
 import { useClock } from '../composables/useSystemStatus'
 import { useReveal } from '../composables/useReveal'
 
@@ -453,6 +471,13 @@ let radarChart = null
 
 const dist = computed(() => warnings.value.distribution || {})
 
+// 沙盘用全班散点（含正常）才能看出绩点与风险的关系；表格仍只列红/橙/黄。
+// 分组只按引擎返回的 level 过滤，不在前端重算分数或等级。
+const WARNING_LEVELS = new Set(['red', 'orange', 'yellow'])
+const warningRows = computed(() =>
+  (warnings.value.items || []).filter((row) => WARNING_LEVELS.has(row.level))
+)
+
 // Hero：红/橙/黄合计与一句话结论，全部取自 /teacher/warnings 的分布与 /teacher/class-overview
 const warnTotal = computed(() =>
   ['red', 'orange', 'yellow'].reduce((acc, key) => acc + Number(dist.value[key] || 0), 0)
@@ -468,13 +493,10 @@ const heroConclusion = computed(() => {
   if (!ov.class_name) return '先在上方选择班级，即可看到本学期整体结论与预警名单'
   const total = Number(ov.headcount || 0)
   if (!warnTotal.value) {
-    return `${ov.class_name} 本学期共 ${total} 人、均分 ${gpaText.value}，暂无红/橙/黄色预警学生`
+    return `${ov.class_name} 本学期 ${total} 人、均分 ${gpaText.value}；暂无预警`
   }
   const rate = total ? ((warnTotal.value / total) * 100).toFixed(1) : '-'
-  return (
-    `${ov.class_name} 本学期共 ${total} 人、均分 ${gpaText.value}，` +
-    `红/橙/黄色预警 ${warnTotal.value} 人（占 ${rate}%），建议先看下方名单`
-  )
+  return `${ov.class_name} 本学期 ${total} 人、均分 ${gpaText.value}；预警 ${warnTotal.value} 人（占 ${rate}%）`
 })
 
 const overviewCard = ref(null)
@@ -486,7 +508,7 @@ function scrollToCard(target) {
 }
 
 function goJobs() {
-  router.push('/teacher/jobs')
+  router.push('/teacher/opportunity')
 }
 
 // 预警名单就在本页，主按钮滚动过去，而不是把教师带走
@@ -646,7 +668,15 @@ async function loadClass(reportError = true) {
   try {
     const [ovRes, wnRes] = await Promise.all([
       http.get('/teacher/class-overview', { params: { class_name: klass, term: term.value } }),
-      http.get('/teacher/warnings', { params: { class_name: klass, term: term.value, level: 'red,orange,yellow' } })
+      http.get('/teacher/warnings', {
+        params: {
+          class_name: klass,
+          term: term.value,
+          // 不按等级过滤：沙盘需要全班（含正常）作为绩点 × 风险分基线；
+          // 表格再按引擎 level 只筛红/橙/黄，避免同一班级重复计算两次预警
+          include_metrics: true
+        }
+      })
     ])
     overview.value = ovRes.data || {}
     warnings.value = wnRes.data || {}
@@ -988,7 +1018,7 @@ onBeforeUnmount(() => {
   float: right;
   margin-left: 12px;
   font-size: 12px;
-  color: #a9aeb8;
+  color: #6b7280;
 }
 
 .err {
@@ -1089,24 +1119,6 @@ onBeforeUnmount(() => {
 .stat-orange .bento-stat { color: var(--qh-orange); }
 .stat-yellow .bento-stat { color: #b98900; }
 
-.stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--qh-text);
-  line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (min-width: 1024px) {
-  .stat-value {
-    font-size: 30px;
-  }
-}
-
-.stat-value.small {
-  font-size: 20px;
-  color: var(--qh-text);
-}
 
 .stat-sep {
   margin: 0 6px;
@@ -1447,6 +1459,32 @@ onBeforeUnmount(() => {
   white-space: normal;
 }
 
+.warning-review-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 4px 0 12px;
+  padding: 8px 11px;
+  border: 1px solid #f0e2bd;
+  border-radius: 10px;
+  background: #fffaf0;
+  color: #7a5a13;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.warning-review-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin-top: 2px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .expand-box {
   padding: 4px 12px;
   font-size: 13px;
@@ -1507,40 +1545,40 @@ onBeforeUnmount(() => {
 .tag-item {
   margin-right: 6px;
 }
+
+/* 窄屏 Hero：三块指标压进 358px 卡片内，不再把页面撑出横向滚动 */
+@media (max-width: 700px) {
+  /* 四张预警统计卡在手机改成 2×2，别让 580 人 / 均分这种卡竖排占满四屏 */
+  .bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-slot,
+  .filter-bar,
+  .overview-card,
+  .chart-card,
+  .risk-card,
+  .sandbox-card,
+  .intent-card,
+  .table-card {
+    grid-column: 1 / -1;
+  }
+
+  .overview-card {
+    grid-row: auto;
+  }
+
+  .stat-card .bento-stat {
+    font-size: 26px;
+    white-space: nowrap;
+  }
+}
+
 /* ---------- 入场动效（仅 transform/opacity/filter，不改布局尺寸） ---------- */
-/* Hero 光斑：一道极淡的斜向高光缓慢扫过，本页唯一的无限点缀 */
-.qh-hero::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: -60%;
-  left: -30%;
-  width: 40%;
-  height: 220%;
-  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
-  transform: translateX(-60%) rotate(12deg);
-  animation: hero-sweep 9s ease-in-out infinite;
-  pointer-events: none;
-}
 
-@keyframes hero-sweep {
-  0%, 55% { opacity: 0; transform: translateX(-60%) rotate(12deg); }
-  70% { opacity: 1; }
-  90%, 100% { opacity: 0; transform: translateX(320%) rotate(12deg); }
-}
 
-/* Hero 关键数字：一次性浮入强调，不做数字滚动改写（CountNumber 保持原样） */
-.qh-hero :deep(.route-stat) {
-  animation: stat-in 560ms var(--bento-ease, ease) backwards;
-}
 
-.qh-hero :deep(.route-stat:nth-child(2)) { animation-delay: 100ms; }
-.qh-hero :deep(.route-stat:nth-child(3)) { animation-delay: 200ms; }
 
-@keyframes stat-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
 
 /* 高风险 Top5 / 职业目标格：逐行浮入；fill=backwards 结束后不锁 transform，hover 位移仍生效 */
 .risk-row,
@@ -1555,8 +1593,6 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .qh-hero::after,
-  .qh-hero :deep(.route-stat),
   .risk-row,
   .intent-item {
     animation: none;

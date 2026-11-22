@@ -13,6 +13,7 @@ import re
 import sys
 import threading
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -21,12 +22,16 @@ import pymysql
 from agents.career import context as career_context
 from app.config import Settings, get_settings
 from engine import assessment as assess
-from engine import career_guide, competition, hybrid, job_search, profile, recommend, warning
+from engine import campus_insight as campus_engine   # 校园行为洞察（个人/班级画像纯函数）
+from engine import career_guide, competition, elective, hybrid, job_search, profile, recommend, warning
+from engine import cert_guide as cert_engine            # 考证推荐（官方日期目录 + 规则打分）
 from engine import forecast as forecast_engine      # 学业预测（绩点/挂科/等级走向）
 from engine import grades as grades_engine          # 成绩聚合（纯函数）
+from engine import interview as interview_engine     # 模拟面试出题（题库优先、模板兜底）
 from engine import kb_store, rag
 from engine import kg as kg_engine                  # 知识图谱（专业-课程-岗位-技能）
 from engine import question_bank as qbank           # 面试题库（与出题同源硬校验池）
+from engine import teacher_career as teacher_career_engine  # 班级生涯报告聚合（纯函数）
 from engine import web_search as web_engine
 from engine import workflow as workflow_engine
 from engine.career_rules import CAREER_ENGINE_VERSION
@@ -888,8 +893,12 @@ def _gpa_series(ctx: ToolContext, student_no: str) -> list[dict[str, Any]]:
 
 
 def warning_list(ctx: ToolContext, class_name: str, term: str,
-                 level: str | None = None) -> dict[str, Any]:
-    """班级预警名单（调预警引擎）；level 为空返回全班，非法等级抛 ValueError。"""
+                 level: str | None = None, include_metrics: bool = False) -> dict[str, Any]:
+    """班级预警名单（调预警引擎）；level 为空返回全班，非法等级抛 ValueError。
+
+    include_metrics 默认 False，保持精简返回；教师端风险沙盘需要 metrics.gpa 时显式开启，
+    避免对话/Agent 默认路径携带大字段。数值仍全部来自引擎，工具层只做字段透传。
+    """
     ctx = _check_ctx(ctx)
     _require_teacher(ctx, "warning_list", str(class_name))
     term = _resolve_term(ctx, term)
@@ -905,6 +914,7 @@ def warning_list(ctx: ToolContext, class_name: str, term: str,
             "reasons": r["reasons"], "coverage": r["coverage"],
             "missing": r["missing"],
             **({"handbook": r["handbook"]} if r.get("handbook") is not None else {}),
+            **({"metrics": r.get("metrics")} if include_metrics else {}),
         }
         for r in results
         if levels is None or r["level"] in levels
@@ -997,6 +1007,190 @@ def career_gap(ctx: ToolContext, class_name: str, term: str) -> dict[str, Any]:
         "calc_version": profile.CALC_VERSION,
         "tools_version": TOOLS_VERSION,
     }
+
+
+# ---------------------------------------------------------------- 班级生涯规划（全域数据编排）
+
+# 意图 → 招考类型：考公/考编/考研各有对应招考公告；就业不涉招考，留空
+_INTENT_EXAM_TYPE: dict[str | None, str | None] = {
+    "考公": "civil", "考编": "institution", "考研": "postgraduate",
+    "就业": None, None: None,
+}
+
+
+def _json_row(r: Mapping[str, Any]) -> dict[str, Any]:
+    """DB 行 → JSON 友好 dict：丢 None、日期转 ISO 字符串。"""
+    out: dict[str, Any] = {}
+    for k, v in r.items():
+        if v is None:
+            continue
+        if hasattr(v, "isoformat"):
+            try:
+                v = v.isoformat(sep=" ")
+            except TypeError:        # date.isoformat() 不收 sep
+                v = v.isoformat()
+        out[k] = v
+    return out
+
+
+def _class_interviews(tenant_id: int, student_ids: list[int],
+                      limit: int = 5) -> dict[int, list[dict[str, Any]]]:
+    """班级面试会话：一次查全班，按学生编号分桶（租户隔离）。"""
+    ids = [int(i) for i in student_ids if i]
+    if not ids:
+        return {}
+    ph = ",".join(["%s"] * len(ids))
+    rows = _query(
+        "SELECT `学生编号` AS student_id, `编号` AS id, `岗位名称` AS job_title, "
+        "`状态` AS status, `总分` AS total, `当前轮次` AS cur_round, "
+        "`最大轮次` AS max_round, `创建时间` AS created_at, `完成时间` AS finished_at "
+        f"FROM `面试会话` WHERE `租户编号` = %s AND `学生编号` IN ({ph}) "
+        "ORDER BY `编号` DESC",
+        (tenant_id, *ids))
+    out: dict[int, list[dict[str, Any]]] = {}
+    for r in rows:
+        out.setdefault(int(r["student_id"]), []).append(_json_row(r))
+    for sid in out:
+        out[sid] = out[sid][:limit]
+    return out
+
+
+def _class_exam_notices(tenant_id: int, limit: int = 4) -> dict[str, list[dict[str, Any]]]:
+    """三类招考公告各取前 N 条（租户隔离）；就业无对应招考类型。"""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for et in _EXAM_TYPES:
+        rows = _query(
+            "SELECT `编号` AS id, `考试类型` AS exam_type, `标题` AS title, "
+            "`招录单位` AS org_name, `地区` AS region, `招录人数` AS headcount, "
+            "`报名截止` AS signup_end, `原文链接` AS detail_url, `状态` AS status "
+            "FROM `招考公告` WHERE `租户编号` = %s AND `考试类型` = %s "
+            "ORDER BY (`发布日期` IS NULL), `发布日期` DESC, `编号` DESC LIMIT %s",
+            (tenant_id, et, limit))
+        out[et] = [_json_row(r) for r in rows]
+    return out
+
+
+def _minimal_resume(stu: Mapping[str, Any], grades: Mapping[str, Any],
+                    rec_res: Mapping[str, Any]) -> dict[str, Any]:
+    """给 build_outline 造最小简历：课程名取自成绩单、技能取自 top 推荐岗位。"""
+    courses: list[str] = []
+    for year in grades.get("years") or []:
+        for term in year.get("terms") or []:
+            for c in term.get("courses") or []:
+                name = str(c.get("course_name") or "")
+                if name and name not in courses:
+                    courses.append(name)
+    skills: list[str] = []
+    top = (rec_res.get("items") or [None])[0]
+    if top:
+        skills = [str(s) for s in (top.get("skill_tags") or [])]
+    return {"experiences": [], "courses": courses[:5], "skills": skills}
+
+
+def teacher_career_search(ctx: ToolContext, class_name: str, term: str = "",
+                          intent: str | None = None, limit: int = 20) -> dict[str, Any]:
+    """教师端班级生涯规划搜索：把全班每位学生的全域数据编排成生涯档案。
+
+    全域编排（满足「数据库里所有数据都要运用得到」）：成绩 / 预警 / 学业预测 /
+    岗位推荐 / 面试 / 竞赛 / 测评 / 选课 / 招考 / 图谱，逐生取数后交
+    engine.teacher_career 聚合。数值全部由引擎确定性计算（铁律 1）；
+    身份只来自 ctx（铁律 2）；取数一律带租户（铁律 3）；查无如实报空。
+
+    limit：逐生全域编排开销大（每生约 1~2 秒），班级人数多时按学号截断到
+    limit 人做完整档案，班级摘要基于该样本计算——样本口径在 note 里明示，不冒充全班。
+    """
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "teacher_career_search", str(class_name))
+    term = _resolve_term(ctx, term)
+    _require_class(ctx, class_name, "teacher_career_search")
+    selected_intent = career_guide.normalize_intent(intent)
+    cap = max(1, min(int(limit or 20), 60))
+
+    roster = _query(
+        "SELECT s.`学号` AS student_no, s.`姓名` AS name, s.`专业` AS major, "
+        "       s.`班级` AS class_name, s.`编号` AS student_id, s.`学院` AS college, "
+        "       s.`入学年份` AS enroll_year, COALESCE(ci.`意向`, '') AS intent "
+        "FROM `学生` s "
+        "LEFT JOIN `职业意向` ci "
+        "       ON ci.`学生编号` = s.`编号` AND ci.`租户编号` = s.`租户编号` "
+        "WHERE s.`租户编号` = %s AND s.`班级` = %s "
+        "ORDER BY s.`学号`",
+        (ctx.tenant_id, class_name),
+    )
+    roster = roster[:cap]
+
+    student_ids = [int(r["student_id"]) for r in roster if r.get("student_id")]
+    interview_map = _class_interviews(ctx.tenant_id, student_ids)
+    exam_by_type = _class_exam_notices(ctx.tenant_id)
+    kg_graph = _kg_graph()
+    competition_cache: dict[str, dict[str, Any]] = {}
+
+    students: list[dict[str, Any]] = []
+    for stu in roster:
+        stu = dict(stu)
+        stu["grade"] = career_guide.grade_label(stu.get("enroll_year"))
+        stu_intent = career_guide.normalize_intent(stu.get("intent"))
+        direction = career_guide.resolve_direction("", stu_intent)["name"]
+
+        grades = _grades_report(ctx, stu)
+        gpa = (grades.get("summary") or {}).get("weighted_avg")
+
+        warning_res = warning.compute_student(
+            ctx.tenant_id, stu["student_no"], term, class_name=class_name)
+        forecast_res = forecast_engine.compute_student_forecast(
+            ctx.tenant_id, stu["student_no"])
+        rec_res = recommend.recommend_for_student(
+            ctx.tenant_id, stu["student_no"], term, write_log=False)
+        assessment_res = recommend.load_latest_result(ctx.tenant_id, stu["student_no"])
+        elective_res = elective.elective_advice_for_student(
+            ctx.tenant_id, int(stu["student_id"]), stu["student_no"], term)
+
+        track = "考公" if stu_intent == "考公" else "就业"
+        if track not in competition_cache:
+            competition_cache[track] = competition.recommend_competitions(
+                track=track, direction=direction)
+        competitions = competition_cache[track]
+
+        exam_type = _INTENT_EXAM_TYPE.get(stu_intent)
+        exam = exam_by_type.get(exam_type, []) if exam_type else []
+
+        kg = kg_engine.query_skills_by_major(kg_graph, stu.get("major") or "")
+
+        sid = int(stu["student_id"])
+        top_job = (rec_res.get("items") or [None])[0]
+        outline = (interview_engine.build_outline(
+            top_job, _minimal_resume(stu, grades, rec_res)) if top_job else None)
+        interview_sec = {"sessions": interview_map.get(sid, []), "outline": outline}
+
+        students.append({
+            "student_no": stu["student_no"],
+            "name": stu["name"],
+            "grade": stu["grade"],
+            "intent": stu_intent,
+            "direction": direction,
+            "major": stu.get("major") or "",
+            "gpa": gpa,
+            "grades": grades,
+            "warning": warning_res,
+            "forecast": forecast_res,
+            "recommendations": rec_res,
+            "interview": interview_sec,
+            "competitions": competitions,
+            "assessment": assessment_res,
+            "elective": elective_res,
+            "exam": exam,
+            "kg": kg,
+        })
+
+    report = teacher_career_engine.build_class_career_report(
+        tenant_id=ctx.tenant_id, class_name=class_name, term=term,
+        intent=selected_intent, students=students)
+
+    _audit_call(ctx, "teacher_career_search", f"{class_name}/{term}",
+                {"intent": selected_intent, "student_total": report["student_total"],
+                 "filtered_total": report["filtered_total"]})
+    report["tools_version"] = TOOLS_VERSION
+    return report
 
 
 def _avg(rows: Sequence[Mapping[str, Any]], key: str) -> float | None:
@@ -1253,6 +1447,34 @@ def mark_notices_read(ctx: ToolContext) -> dict[str, Any]:
     _require_student(ctx, "mark_notices_read", "self")
     me = _resolve_self(ctx, "mark_notices_read")
     return competition.mark_read(me["student_no"], ctx.tenant_id)
+
+
+# ================================================================
+# 考证推荐与提醒（数据来自官方公告入库，每条带来源链接与核实日期）
+# ================================================================
+def cert_catalog(limit: int = 20) -> dict[str, Any]:
+    """考证目录 + 实时报名状态：师生通用、公开只读，不依赖登录身份（不写审计）。"""
+    result = cert_engine.catalog(limit=limit)
+    return {**result, "tools_version": TOOLS_VERSION}
+
+
+def cert_guide(ctx: ToolContext, limit: int = 6) -> dict[str, Any]:
+    """本人考证推荐：按目标去向/专业/年级/已持证书排序，纯规则、理由可解释。"""
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "cert_guide", "self")
+    me = _resolve_self(ctx, "cert_guide")
+    grade = career_guide.grade_label(me.get("enroll_year"))
+    try:
+        intent = career_context.fetch_intent(ctx.tenant_id, int(ctx.student_id or 0))
+    except Exception:
+        intent = ""
+    result = cert_engine.recommend(
+        student_id=int(ctx.student_id or 0),
+        major=str(me.get("major") or ""), grade=grade, intent=str(intent or ""),
+        limit=limit)
+    _audit_call(ctx, "cert_guide", me["student_no"],
+                {"returned": len(result.get("items") or [])})
+    return {"student_no": me["student_no"], **result, "tools_version": TOOLS_VERSION}
 
 
 # ================================================================
@@ -1552,11 +1774,219 @@ def job_facets(ctx: ToolContext) -> dict[str, Any]:
     return out
 
 
+# ---------------------------------------------------------------- 校园行为洞察（全域行为取数）
+def _campus_value(value: Any) -> Any:
+    """DB 值归一化：Decimal→float、date/datetime→ISO 字符串；None 原样保留。"""
+    if isinstance(value, Decimal):
+        return float(value)
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat(sep=" ")
+        except TypeError:            # date.isoformat() 不收 sep
+            return value.isoformat()
+    return value
+
+
+def _campus_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """行列表归一化（保留 None 键，聚合口径由引擎决定）。"""
+    return [{k: _campus_value(v) for k, v in r.items()} for r in rows]
+
+
+def _campus_facts(tenant_id: int, student_id: int) -> dict[str, Any]:
+    """校园行为洞察全域原始行取数（全部带租户过滤；只取数与归一化，不做聚合）。
+
+    聚合/打分/定级全部在 engine.campus_insight（铁律 1）；考勤表无租户列，
+    JOIN 学生表过滤（铁律 3）；岗位浏览按 (学生编号,学期,动作) 索引聚合，不全表 COUNT。
+    周快照的判定结果是 JSON 字符串：容错解析后只取 overall，输出按 (年,周) 升序。
+    """
+    ts = (tenant_id, student_id)
+    library = _campus_rows(_query(
+        "SELECT `学期` AS term, `到馆次数` AS visits, `借阅册数` AS borrows "
+        "FROM `图书馆记录` WHERE `租户编号` = %s AND `学生编号` = %s ORDER BY `学期`", ts))
+    consumption = _campus_rows(_query(
+        "SELECT `学期` AS term, `消费笔数` AS count, `活跃天数` AS active_days, "
+        "`日均金额` AS daily_avg FROM `消费记录` "
+        "WHERE `租户编号` = %s AND `学生编号` = %s ORDER BY `学期`", ts))
+    activity_counts = _campus_rows(_query(
+        "SELECT `学期` AS term, `活动类型` AS type, COUNT(*) AS cnt "
+        "FROM `学生活动` WHERE `租户编号` = %s AND `学生编号` = %s "
+        "GROUP BY `学期`, `活动类型` ORDER BY `学期`", ts))
+    activity_recent = _campus_rows(_query(
+        "SELECT `名称` AS name, `活动类型` AS type, `级别` AS level, "
+        "DATE_FORMAT(`获得时间`, '%%Y-%%m-%%d') AS date FROM `学生活动` "
+        "WHERE `租户编号` = %s AND `学生编号` = %s "
+        "ORDER BY `获得时间` DESC LIMIT 10", ts))
+    attendance = _campus_rows(_query(
+        "SELECT a.`学期` AS term, a.`应到次数` AS expected, a.`缺勤次数` AS absent, "
+        "a.`出勤率` AS rate FROM `考勤` a "
+        "JOIN `学生` s ON s.`编号` = a.`学生编号` AND s.`租户编号` = %s "
+        "WHERE a.`学生编号` = %s ORDER BY a.`学期`", ts))
+    job_view_counts = _campus_rows(_query(
+        "SELECT `学期` AS term, `动作` AS action, COUNT(*) AS cnt "
+        "FROM `岗位浏览日志` WHERE `租户编号` = %s AND `学生编号` = %s "
+        "GROUP BY `学期`, `动作` ORDER BY `学期`", ts))
+    job_top_cities = _campus_rows(_query(
+        "SELECT j.`城市` AS city, COUNT(*) AS cnt FROM `岗位浏览日志` v "
+        "JOIN `岗位` j ON j.`编号` = v.`岗位编号` "
+        "WHERE v.`租户编号` = %s AND v.`学生编号` = %s "
+        "AND j.`城市` IS NOT NULL AND j.`城市` <> '' "
+        "GROUP BY j.`城市` ORDER BY cnt DESC, j.`城市` LIMIT 8", ts))
+    job_top_industries = _campus_rows(_query(
+        "SELECT j.`行业` AS industry, COUNT(*) AS cnt FROM `岗位浏览日志` v "
+        "JOIN `岗位` j ON j.`编号` = v.`岗位编号` "
+        "WHERE v.`租户编号` = %s AND v.`学生编号` = %s "
+        "AND j.`行业` IS NOT NULL AND j.`行业` <> '' "
+        "GROUP BY j.`行业` ORDER BY cnt DESC, j.`行业` LIMIT 8", ts))
+    extra_rows = _campus_rows(_query(
+        "SELECT `四级分数` AS cet4, `六级分数` AS cet6, `政治面貌` AS politics, "
+        "`意向城市` AS target_city, `每周学时` AS weekly_hours "
+        "FROM `学生扩展信息` WHERE `租户编号` = %s AND `学生编号` = %s", ts))
+    extra = dict(extra_rows[0]) if extra_rows else None
+
+    snap_rows = _query(
+        "SELECT `ISO年` AS year, `ISO周` AS week, `判定结果` AS verdict, `摘要` AS summary "
+        "FROM `周快照` WHERE `租户编号` = %s AND `学生编号` = %s "
+        "ORDER BY `ISO年` DESC, `ISO周` DESC LIMIT 8", ts)
+    snapshots: list[dict[str, Any]] = []
+    for row in snap_rows:
+        raw = row.get("verdict")
+        parsed: Any = raw
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                parsed = None
+        overall = parsed.get("overall") if isinstance(parsed, Mapping) else None
+        snapshots.append({
+            "year": _campus_value(row.get("year")),
+            "week": _campus_value(row.get("week")),
+            "overall": str(overall) if overall is not None else None,
+            "summary": _campus_value(row.get("summary")),
+        })
+    snapshots.sort(key=lambda s: (int(s.get("year") or 0), int(s.get("week") or 0)))
+    return {
+        "library": library, "consumption": consumption,
+        "activity_counts": activity_counts, "activity_recent": activity_recent,
+        "attendance": attendance, "job_view_counts": job_view_counts,
+        "job_top_cities": job_top_cities, "job_top_industries": job_top_industries,
+        "extra": extra, "snapshots": snapshots,
+    }
+
+
+def my_campus_insight(ctx: ToolContext, term: str | None = None) -> dict[str, Any]:
+    """本人校园行为洞察（学生端）：图书馆/消费/活动/出勤/岗位兴趣 → 学习投入画像。
+
+    数值全部来自 engine.campus_insight（铁律 1）；身份只用 ctx.student_id（铁律 2）；
+    取数一律带租户（铁律 3）；查无如实报 note。个性化解读由 agents.campus_insight 生成。
+    """
+    ctx = _check_ctx(ctx)
+    _require_student(ctx, "my_campus_insight", "self")
+    me = _resolve_self(ctx, "my_campus_insight")
+    term = _resolve_term(ctx, term)
+    facts = _campus_facts(ctx.tenant_id, int(ctx.student_id or 0))
+    result = campus_engine.build_student_insight(
+        student_no=me["student_no"], name=str(me.get("name") or ""),
+        class_name=str(me.get("class_name") or ""), term=term, **facts)
+    result["tools_version"] = TOOLS_VERSION
+    _audit_call(ctx, "my_campus_insight", "self",
+                {"student_no": me["student_no"], "term": term,
+                 "study_style": (result.get("study_style") or {}).get("label"),
+                 "has_data": not result.get("note")})
+    return result
+
+
+def class_campus_insight(ctx: ToolContext, class_name: str, term: str = "",
+                         limit: int = 30) -> dict[str, Any]:
+    """教师端班级校园行为洞察：逐生取全域行为行 → 个人画像 → 班级聚合。
+
+    limit 夹 1..60：班级人数多时按学号截断做样本，headcount 大于样本数时
+    在 note 里明示样本口径，不冒充全班。任教范围校验走 _require_class（铁律 2/3）。
+    """
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "class_campus_insight", str(class_name))
+    info = _require_class(ctx, class_name, "class_campus_insight")
+    term = _resolve_term(ctx, term)
+    cap = max(1, min(int(limit if limit is not None else 30), 60))
+    roster = _query(
+        "SELECT `编号` AS student_id, `学号` AS student_no, `姓名` AS name "
+        "FROM `学生` WHERE `租户编号` = %s AND `班级` = %s "
+        "ORDER BY `学号` LIMIT %s",
+        (ctx.tenant_id, class_name, cap))
+    students: list[dict[str, Any]] = []
+    for stu in roster:
+        facts = _campus_facts(ctx.tenant_id, int(stu["student_id"]))
+        students.append(campus_engine.build_student_insight(
+            student_no=str(stu["student_no"]), name=str(stu.get("name") or ""),
+            class_name=class_name, term=term, **facts))
+    report = campus_engine.build_class_insight(
+        tenant_id=ctx.tenant_id, class_name=class_name, term=term, students=students)
+    headcount = int(info.get("headcount") or 0)
+    if headcount > len(students):
+        sample_note = (f"班级共 {headcount} 人，本次按学号取前 {len(students)} 人样本，"
+                       "摘要为样本口径")
+        report["note"] = (f"{report['note']}；{sample_note}"
+                          if report.get("note") else sample_note)
+    report["tools_version"] = TOOLS_VERSION
+    _audit_call(ctx, "class_campus_insight", f"{class_name}/{term}",
+                {"student_total": report["student_total"], "headcount": headcount,
+                 "limit": cap})
+    return report
+
+
+def student_campus_insight(ctx: ToolContext, student_no: str,
+                           term: str = "") -> dict[str, Any]:
+    """教师端单个学生的校园行为洞察：不受班级样本截断限制，逐生取全域行为行。
+
+    任教范围校验走 _fetch_student（租户 + 班级双过滤，铁律 2/3）；
+    数值全部来自 engine.campus_insight（铁律 1）；查无如实报 note。
+    """
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "student_campus_insight", str(student_no))
+    stu = _fetch_student(ctx, str(student_no or "").strip(), "student_campus_insight")
+    term = _resolve_term(ctx, term)
+    facts = _campus_facts(ctx.tenant_id, int(stu["student_id"]))
+    result = campus_engine.build_student_insight(
+        student_no=stu["student_no"], name=str(stu.get("name") or ""),
+        class_name=str(stu.get("class_name") or ""), term=term, **facts)
+    result["tools_version"] = TOOLS_VERSION
+    _audit_call(ctx, "student_campus_insight", f"{stu['student_no']}/{term}",
+                {"study_style": (result.get("study_style") or {}).get("label"),
+                 "has_data": not result.get("note")})
+    return result
+
+
+def class_roster(ctx: ToolContext, class_name: str) -> dict[str, Any]:
+    """教师端全班名册（学号/姓名/专业，不截断）：供前端定位任意一个学生。
+
+    只取名册不做行为聚合，人数再多也是一次索引查询；任教范围校验走 _require_class。
+    """
+    ctx = _check_ctx(ctx)
+    _require_teacher(ctx, "class_roster", str(class_name))
+    _require_class(ctx, class_name, "class_roster")
+    rows = _query(
+        "SELECT `学号` AS student_no, `姓名` AS name, `专业` AS major "
+        "FROM `学生` WHERE `租户编号` = %s AND `班级` = %s ORDER BY `学号`",
+        (ctx.tenant_id, class_name))
+    roster = [{"student_no": str(r["student_no"]), "name": str(r.get("name") or ""),
+               "major": str(r.get("major") or "")} for r in rows]
+    result: dict[str, Any] = {"class_name": class_name, "total": len(roster),
+                              "roster": roster, "tools_version": TOOLS_VERSION}
+    if not roster:
+        result["note"] = "该班级暂无学生记录"
+    _audit_call(ctx, "class_roster", class_name, {"total": len(roster)})
+    return result
+
+
 # 对外工具清单：便于 FastAPI / LangGraph 统一注册与自检
 # 「智能体统一入口」注册表（agent-entry-v1）：覆盖系统全部板块的只读工具，
 # 铁律不变——数值全部由 engine 确定性计算，工具层只做校验、取数与审计。
 TEACHER_TOOLS: tuple[str, ...] = (
     "class_overview", "class_list", "student_profile", "warning_list", "career_gap",
+    "teacher_career_search",
+    # 校园行为洞察（班级口径，样本截断 + 任教范围校验在工具内）
+    "class_campus_insight",
+    # 校园行为洞察（逐生口径，不受样本截断）+ 全班名册定位
+    "student_campus_insight", "class_roster",
     "get_warning_thresholds", "save_warning_thresholds",
     # 成绩 / 预测（教师按学号查，任教范围校验在工具内）
     "student_grades", "student_forecast", "class_grades_rank",
@@ -1572,10 +2002,14 @@ STUDENT_TOOLS: tuple[str, ...] = (
     "my_grades", "my_forecast", "my_career_forecast",
     # 技能缺口选课推荐（本人视角，数值来自 engine.elective）
     "my_elective_advice",
+    # 校园行为洞察（本人视角，数值来自 engine.campus_insight）
+    "my_campus_insight",
     # 软技能测评（本人最新一次画像）
     "my_assessment",
     # 通知 / 竞赛 / 规划
     "my_notices", "mark_notices_read", "competition_guide", "my_career_guide",
+    # 考证推荐（官方日期目录 + 规则打分）
+    "cert_guide",
     # 岗位 / 图谱
     "search_jobs", "job_facets", "kg_major_skills", "kg_skill_jobs", "kg_path",
     # agent-entry-v2：招考公告 / 模拟面试历史（只本人）/ 面试题库

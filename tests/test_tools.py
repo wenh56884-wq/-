@@ -237,6 +237,28 @@ def test_illegal_level_raises_value_error(monkeypatch):
         tools.warning_list(_teacher(), CLASS, TERM, "purple")
 
 
+def test_warning_list_metrics_are_opt_in(monkeypatch, audit_sink):
+    """metrics 默认不下发；include_metrics=True 才透传引擎原始指标（含 gpa）。"""
+    _offline_query(monkeypatch, [{"cnt": 1}, {"class_name": CLASS}])
+    metrics = {
+        "fail_count": 1, "gpa": 76.5, "gpa_drop": None,
+        "attendance_rate": 0.9, "class_rank_pct": 0.2,
+    }
+    monkeypatch.setattr(tools.warning, "compute_class", lambda *a, **k: [{
+        "student_no": "RJ2022001", "name": "张三", "risk_score": 45, "level": "orange",
+        "reasons": ["本学期挂科1门"], "coverage": 3, "missing": [], "metrics": metrics,
+    }])
+
+    compact = tools.warning_list(_teacher(), CLASS, TERM)
+    assert "metrics" not in compact["items"][0], "默认路径不得携带 metrics 大字段"
+    assert compact["items"][0]["risk_score"] == 45
+
+    full = tools.warning_list(_teacher(), CLASS, TERM, include_metrics=True)
+    assert full["items"][0]["metrics"] == metrics
+    assert full["items"][0]["metrics"]["gpa"] == 76.5
+    assert full["count"] == compact["count"] == 1
+
+
 # ----------------------------------------------------------------
 # 5. 返回结构完整
 # ----------------------------------------------------------------

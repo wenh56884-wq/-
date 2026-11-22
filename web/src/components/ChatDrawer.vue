@@ -74,22 +74,11 @@
                 <span v-else-if="c.chunk_no" class="cite-pos">第 {{ c.chunk_no }} 段</span>
               </div>
             </div>
-            <details v-if="msg.role === 'assistant' && !msg.streaming
-                           && msg.steps && msg.steps.length" class="trace-box">
-              <summary>执行轨迹 · {{ msg.steps.length }} 步</summary>
-              <div v-for="step in msg.steps" :key="step.index" class="trace-step">
-                <div class="trace-head">
-                  <span class="trace-index">{{ step.index }}</span>
-                  <span class="trace-tool">{{ step.tool }}</span>
-                  <span class="trace-ok" :class="{ bad: !step.ok }">
-                    {{ step.ok ? '成功' : '失败' }}
-                  </span>
-                  <span class="trace-purpose">{{ step.purpose }}</span>
-                </div>
-                <div v-if="traceArgs(step)" class="trace-args">参数：{{ traceArgs(step) }}</div>
-                <div v-if="step.observation" class="trace-obs">{{ step.observation }}</div>
-              </div>
-            </details>
+            <AgentTracePanel
+              v-if="msg.role === 'assistant' && !msg.streaming && msg.trace_id
+                    && msg.trace_id !== '-' && msg.tool !== 'chitchat'"
+              :trace="msg"
+            />
             <div v-if="msg.role === 'assistant' && !msg.streaming" class="bubble-foot">
               <span v-if="msg.tool" class="chip">{{ msg.tool }}</span>
               <span class="chip">trace {{ msg.trace_id }}</span>
@@ -184,6 +173,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import http from '../api/http'
 import { clearSession, currentRole } from '../api/http'
 import router from '../router'
+import AgentTracePanel from './agent/AgentTracePanel.vue'
 import moyuImg from '../assets/deepseek-mo-yu.webp'
 
 const props = defineProps({
@@ -287,17 +277,6 @@ function push(roleName, text, extra = {}) {
   seq += 1
   messages.value.push({ id: seq, role: roleName, text, ...extra })
   scrollBottom()
-}
-
-// 执行轨迹里的参数展示（模板里不直接调 JSON，避免表达式沙箱限制）
-function traceArgs(step) {
-  const args = step?.args
-  if (!args || typeof args !== 'object' || !Object.keys(args).length) return ''
-  try {
-    return JSON.stringify(args)
-  } catch {
-    return ''
-  }
 }
 
 async function scrollBottom() {
@@ -407,6 +386,14 @@ async function sendOneShot(pending, content, history, started) {
       citations: data?.citations || [],
       followups: Array.isArray(data?.suggested_followups) ? data.suggested_followups : [],
       steps: Array.isArray(data?.steps) ? data.steps : [],
+      verdict: data?.verdict || {},
+      draft_mode: data?.draft_mode || '',
+      planner: data?.planner || '',
+      attempts: Number(data?.attempts || 1),
+      critic_version: data?.critic_version || '',
+      graph_version: data?.graph_version || '',
+      engine_version: data?.engine_version || '',
+      calc_version: data?.calc_version || '',
       cost: Math.round(performance.now() - started),
       streaming: false,
       status: ''
@@ -448,6 +435,14 @@ async function send(text) {
     citations: [],
     followups: [],
     steps: [],
+    verdict: {},
+    draft_mode: '',
+    planner: '',
+    attempts: 1,
+    critic_version: '',
+    graph_version: '',
+    engine_version: '',
+    calc_version: '',
     feedback: '',
     cost: 0
   })
@@ -482,6 +477,14 @@ async function send(text) {
         pending.followups = Array.isArray(data?.suggested_followups)
           ? data.suggested_followups : []
         pending.steps = Array.isArray(data?.steps) ? data.steps : []
+        pending.verdict = data?.verdict || {}
+        pending.draft_mode = data?.draft_mode || ''
+        pending.planner = data?.planner || ''
+        pending.attempts = Number(data?.attempts || 1)
+        pending.critic_version = data?.critic_version || ''
+        pending.graph_version = data?.graph_version || ''
+        pending.engine_version = data?.engine_version || ''
+        pending.calc_version = data?.calc_version || ''
         pending.cost = Math.round(performance.now() - started)
         pending.status = ''
         pending.streaming = false
@@ -623,7 +626,7 @@ async function vote(msg, rating) {
 
 .chat-sub {
   font-size: 11px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .icon-btn {
@@ -658,9 +661,9 @@ async function vote(msg, rating) {
   margin: 12px 16px 0;
   padding: 8px 10px;
   font-size: 12px;
-  color: #5b5bd6;
-  background: #ececfb;
-  border: 1px solid #dcdcf9;
+  color: #1951c3;
+  background: #e9efff;
+  border: 1px solid #baccf0;
   border-radius: 10px;
 }
 
@@ -684,7 +687,7 @@ async function vote(msg, rating) {
 .chat-empty-sub {
   margin-top: 4px;
   font-size: 12px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .example-btn {
@@ -733,7 +736,7 @@ async function vote(msg, rating) {
   height: 28px;
   flex: 0 0 28px;
   border-radius: 8px;
-  background: #5b5bd6;
+  background: #1951c3;
   color: #fff;
   font-size: 11px;
   display: inline-flex;
@@ -742,7 +745,7 @@ async function vote(msg, rating) {
 }
 
 .msg-row.user .avatar {
-  background: #5b5bd6;
+  background: #1951c3;
   color: #ffffff;
 }
 
@@ -758,10 +761,10 @@ async function vote(msg, rating) {
 
 .msg-row.user .bubble {
   /* 用户气泡：Apple 蓝实底，与 AI 白底气泡拉开视觉层级 */
-  background: #5b5bd6;
+  background: #1951c3;
   border-color: transparent;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(91, 91, 214, 0.2);
+  box-shadow: 0 2px 8px rgba(25, 81, 195, 0.2);
 }
 
 .bubble-text {
@@ -775,14 +778,14 @@ async function vote(msg, rating) {
   height: 1em;
   margin-left: 2px;
   vertical-align: -0.15em;
-  background: #5b5bd6;
+  background: #1951c3;
   animation: caret-blink 1s steps(2, start) infinite;
 }
 
 .stream-status {
   margin-top: 6px;
   font-size: 11px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .bubble-foot {
@@ -795,78 +798,17 @@ async function vote(msg, rating) {
 .cite-list {
   margin-top: 10px;
   padding: 8px 10px;
-  border-left: 2px solid #bfdbfe;
+  border-left: 1px solid #bfdbfe;
   background: #f8fafc;
   border-radius: 6px;
 }
 .cite-title { font-size: 11px; color: #64748b; margin-bottom: 4px; }
 .cite-item { font-size: 12px; color: #334155; line-height: 1.7; }
-.cite-no { color: #5b5bd6; margin-right: 4px; }
+.cite-no { color: #1951c3; margin-right: 4px; }
 .cite-doc { font-weight: 600; }
 .cite-pos { color: #64748b; margin-left: 6px; }
-.cite-item a { color: #5b5bd6; text-decoration: none; }
+.cite-item a { color: #1951c3; text-decoration: none; }
 .cite-item a:hover { text-decoration: underline; }
-
-/* 自主大脑执行轨迹 */
-.trace-box {
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-left: 2px solid #d8b4fe;
-  background: #faf5ff;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #3f3f46;
-}
-.trace-box summary {
-  cursor: pointer;
-  color: #7e22ce;
-  font-weight: 600;
-  user-select: none;
-}
-.trace-step {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px dashed #e9d5ff;
-}
-.trace-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.trace-index {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #f3e8ff;
-  color: #7e22ce;
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.trace-tool {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-weight: 600;
-  color: #5f6672;
-}
-.trace-ok { color: #15803d; font-size: 11px; }
-.trace-ok.bad { color: #b91c1c; }
-.trace-purpose { color: #64748b; }
-.trace-args {
-  margin-top: 3px;
-  color: #0058b0;
-  word-break: break-all;
-}
-.trace-obs {
-  margin-top: 3px;
-  max-height: 90px;
-  overflow: auto;
-  color: #71717a;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
 .chip {
   padding: 1px 6px;
@@ -901,8 +843,8 @@ async function vote(msg, rating) {
   cursor: pointer;
   color: #71717a;
 }
-.vote-btn:hover:not(:disabled) { border-color: #9aa1ad; }
-.vote-btn.active { background: #ececfb; border-color: #93c5fd; color: #4a4ac0; }
+.vote-btn:hover:not(:disabled) { border-color: #6b7280; }
+.vote-btn.active { background: #e9efff; border-color: #93c5fd; color: #14419c; }
 .vote-btn:disabled { opacity: 0.55; cursor: default; }
 
 .followups {
@@ -913,15 +855,15 @@ async function vote(msg, rating) {
 }
 
 .followup-btn {
-  border: 1px solid #dcdcf9;
+  border: 1px solid #baccf0;
   border-radius: 14px;
   background: #f8fafc;
-  color: #4a4ac0;
+  color: #14419c;
   font-size: 12px;
   padding: 4px 10px;
   cursor: pointer;
 }
-.followup-btn:hover:not(:disabled) { background: #ececfb; }
+.followup-btn:hover:not(:disabled) { background: #e9efff; }
 .followup-btn:disabled { opacity: 0.5; cursor: default; }
 
 .bubble-err {
@@ -955,7 +897,7 @@ async function vote(msg, rating) {
 .typing-text {
   margin-left: 6px;
   font-size: 12px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .chat-foot {
@@ -1023,7 +965,7 @@ async function vote(msg, rating) {
   padding: 0 14px;
   border: 0;
   border-radius: 8px;
-  background: #5b5bd6;
+  background: #1951c3;
   color: #ffffff;
   font-size: 13px;
   font-weight: 500;
@@ -1033,7 +975,7 @@ async function vote(msg, rating) {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #4a4ac0;
+  background: #14419c;
 }
 
 .send-btn:disabled {
@@ -1087,13 +1029,13 @@ async function vote(msg, rating) {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 .memory-empty {
   padding: 32px 12px;
   text-align: center;
   font-size: 13px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 .memory-list {
   display: flex;
@@ -1114,14 +1056,14 @@ async function vote(msg, rating) {
 .memory-kind {
   padding: 1px 8px;
   border-radius: 999px;
-  background: #ececfb;
-  color: #5b5bd6;
+  background: #e9efff;
+  color: #1951c3;
   font-size: 11px;
   font-weight: 600;
 }
 .memory-importance {
   font-size: 11px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 .memory-del {
   margin-left: auto;
@@ -1141,7 +1083,7 @@ async function vote(msg, rating) {
 .memory-time {
   margin-top: 6px;
   font-size: 11px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 .memory-back {
   flex: 0 0 auto;
@@ -1150,7 +1092,7 @@ async function vote(msg, rating) {
   border: 1px solid #e4e7ee;
   border-radius: 10px;
   background: #fff;
-  color: #5b5bd6;
+  color: #1951c3;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;

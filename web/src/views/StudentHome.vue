@@ -54,29 +54,120 @@
     <section class="twin-panel bento-span-4 qh-reveal" :style="{ '--qh-index': 3 }" aria-labelledby="twin-title">
       <div class="twin-visual" aria-hidden="true">
         <div class="twin-visual-top"><span>QH / DIGITAL TWIN</span><i></i></div>
-        <svg class="twin-sphere" viewBox="0 0 240 200" role="presentation">
-          <defs>
-            <radialGradient id="twinGlow" cx="48%" cy="42%" r="60%">
-              <stop offset="0" stop-color="#71d8ef" stop-opacity=".82" />
-              <stop offset=".42" stop-color="#4385ef" stop-opacity=".34" />
-              <stop offset="1" stop-color="#172b66" stop-opacity="0" />
-            </radialGradient>
-            <linearGradient id="twinStroke" x1="0" y1="0" x2="1" y2="1">
-              <stop stop-color="#8deaff" />
-              <stop offset="1" stop-color="#7c8fff" />
-            </linearGradient>
-          </defs>
-          <circle cx="120" cy="96" r="75" fill="url(#twinGlow)" />
-          <circle cx="120" cy="96" r="55" fill="none" stroke="url(#twinStroke)" stroke-opacity=".58" />
-          <ellipse cx="120" cy="96" rx="55" ry="21" fill="none" stroke="#8deaff" stroke-opacity=".72" />
-          <ellipse cx="120" cy="96" rx="25" ry="55" fill="none" stroke="#8deaff" stroke-opacity=".55" />
-          <path d="M69 80c28 19 74 19 102 0M69 112c28-19 74-19 102 0M120 41v110" fill="none" stroke="#b7c6ff" stroke-opacity=".38" />
-          <path d="M38 96h23m118 0h23M120 18v15m0 126v20" stroke="#7ce4ee" stroke-opacity=".82" />
-          <circle cx="120" cy="41" r="3.5" fill="#a5f3fc" />
-          <circle cx="69" cy="80" r="3" fill="#a5f3fc" />
-          <circle cx="171" cy="112" r="3" fill="#a5f3fc" />
-          <circle cx="120" cy="151" r="3.5" fill="#a5f3fc" />
-        </svg>
+        <div class="twin-stage">
+          <svg class="twin-sphere" viewBox="0 0 240 200" role="presentation">
+            <defs>
+              <radialGradient id="twinGlow" cx="50%" cy="46%" r="55%">
+                <stop offset="0" stop-color="#8ff0ff" stop-opacity=".55" />
+                <stop offset=".38" stop-color="#4a8cf7" stop-opacity=".3" />
+                <stop offset="1" stop-color="#172b66" stop-opacity="0" />
+              </radialGradient>
+              <radialGradient id="twinCoreFill" cx="38%" cy="32%" r="72%">
+                <stop offset="0" stop-color="#ffffff" />
+                <stop offset=".45" stop-color="#c9ecff" />
+                <stop offset="1" stop-color="#6aa6ff" />
+              </radialGradient>
+              <linearGradient id="twinStroke" x1="0" y1="0" x2="1" y2="1">
+                <stop stop-color="#9df1ff" />
+                <stop offset="1" stop-color="#7c8fff" />
+              </linearGradient>
+              <radialGradient id="twinSweepR" cx="50%" cy="50%" r="50%">
+                <stop offset="0" stop-color="#7ce4ee" stop-opacity=".55" />
+                <stop offset="1" stop-color="#7ce4ee" stop-opacity="0" />
+              </radialGradient>
+              <path id="twinOrbA" d="M 42 96 a 78 25 0 1 0 156 0 a 78 25 0 1 0 -156 0" fill="none" />
+              <path id="twinOrbB" d="M 64 96 a 56 46 0 1 1 112 0 a 56 46 0 1 1 -112 0" fill="none" />
+              <path id="twinOrbC" d="M 38 96 a 82 82 0 1 0 164 0 a 82 82 0 1 0 -164 0" fill="none" />
+            </defs>
+
+            <!-- 中心辉光 -->
+            <circle class="twin-glow" cx="120" cy="96" r="94" fill="url(#twinGlow)" />
+
+            <!-- 星尘：三组不同相位闪烁 -->
+            <g class="twin-dust d1">
+              <circle cx="46" cy="42" r="1.5" /><circle cx="188" cy="60" r="1.2" />
+              <circle cx="72" cy="158" r="1.4" /><circle cx="196" cy="142" r="1.1" />
+            </g>
+            <g class="twin-dust d2">
+              <circle cx="30" cy="112" r="1.1" /><circle cx="150" cy="24" r="1.5" />
+              <circle cx="102" cy="178" r="1.2" /><circle cx="214" cy="98" r="1.3" />
+            </g>
+            <g class="twin-dust d3">
+              <circle cx="58" cy="76" r="1" /><circle cx="176" cy="172" r="1.3" />
+              <circle cx="132" cy="12" r="1.1" /><circle cx="16" cy="66" r="1" />
+            </g>
+
+            <!-- 雷达扫描扇面 -->
+            <g class="twin-radar">
+              <path d="M120 96 L120 12 A84 84 0 0 1 193 54 Z" fill="url(#twinSweepR)" />
+              <path d="M120 96 L120 12" stroke="#a5f3fc" stroke-opacity=".55" stroke-width="1.2" />
+            </g>
+
+            <!-- 外圈虚线光环（慢旋） -->
+            <g class="twin-halo">
+              <circle cx="120" cy="96" r="90" fill="none" stroke="#7c9dff" stroke-opacity=".5" stroke-dasharray="2 10" />
+              <circle cx="120" cy="96" r="97" fill="none" stroke="#59e0c8" stroke-opacity=".18" />
+            </g>
+
+            <!-- 球面经纬网 -->
+            <g class="twin-wire" stroke="#8deaff" fill="none">
+              <ellipse cx="120" cy="96" rx="78" ry="25" stroke-opacity=".2" />
+              <ellipse cx="120" cy="96" rx="56" ry="46" stroke-opacity=".14" />
+              <ellipse cx="120" cy="96" rx="26" ry="78" stroke-opacity=".16" />
+              <ellipse cx="120" cy="96" rx="58" ry="82" stroke-opacity=".1" />
+              <path d="M69 78c28 20 74 20 102 0M69 114c28-20 74-20 102 0" stroke-opacity=".12" />
+            </g>
+
+            <!-- 陀螺仪双环（异速反向旋转） -->
+            <g class="twin-ring ring-a">
+              <ellipse cx="120" cy="96" rx="78" ry="25" fill="none" stroke="url(#twinStroke)" stroke-opacity=".85" stroke-width="1.4" />
+            </g>
+            <g class="twin-ring ring-b">
+              <ellipse cx="120" cy="96" rx="56" ry="46" fill="none" stroke="#59e0c8" stroke-opacity=".6" stroke-width="1.2" />
+            </g>
+
+            <!-- 扩散脉冲（双相位） -->
+            <circle class="twin-pulse p1" cx="120" cy="96" r="27" fill="none" stroke="#9fe6ff" />
+            <circle class="twin-pulse p2" cx="120" cy="96" r="27" fill="none" stroke="#59e0c8" />
+
+            <!-- 能量核心 -->
+            <circle cx="120" cy="96" r="29" fill="rgba(88,140,255,.24)" />
+            <circle cx="120" cy="96" r="21" fill="url(#twinCoreFill)" fill-opacity=".8" />
+            <circle class="twin-core-halo" cx="120" cy="96" r="21" fill="none" stroke="#d9f4ff" stroke-opacity=".7" />
+            <circle class="twin-core-dot" cx="120" cy="96" r="5.5" fill="#ffffff" fill-opacity=".9" />
+
+            <!-- 沿轨道运行的粒子 -->
+            <circle class="twin-mote" r="4" fill="#a5f3fc">
+              <animateMotion dur="26s" repeatCount="indefinite"><mpath href="#twinOrbC" /></animateMotion>
+            </circle>
+            <circle class="twin-mote" r="3" fill="#7ce4ee">
+              <animateMotion dur="26s" begin="-8.67s" repeatCount="indefinite"><mpath href="#twinOrbC" /></animateMotion>
+            </circle>
+            <circle class="twin-mote" r="3.5" fill="#8affd9">
+              <animateMotion dur="13s" repeatCount="indefinite"><mpath href="#twinOrbB" /></animateMotion>
+            </circle>
+
+            <!-- 随轨道漂移的三枚数据标签 -->
+            <g class="twin-chip">
+              <animateMotion dur="26s" repeatCount="indefinite"><mpath href="#twinOrbC" /></animateMotion>
+              <rect x="-18" y="-11" width="36" height="22" rx="11" fill="rgba(11,26,58,.9)" stroke="#7ce4ee" stroke-opacity=".8" />
+              <text y="4" text-anchor="middle" fill="#d8f2ff" font-size="10">学业</text>
+            </g>
+            <g class="twin-chip">
+              <animateMotion dur="26s" begin="-8.67s" repeatCount="indefinite"><mpath href="#twinOrbC" /></animateMotion>
+              <rect x="-18" y="-11" width="36" height="22" rx="11" fill="rgba(11,26,58,.9)" stroke="#7ce4ee" stroke-opacity=".8" />
+              <text y="4" text-anchor="middle" fill="#d8f2ff" font-size="10">岗位</text>
+            </g>
+            <g class="twin-chip">
+              <animateMotion dur="26s" begin="-17.33s" repeatCount="indefinite"><mpath href="#twinOrbC" /></animateMotion>
+              <rect x="-18" y="-11" width="36" height="22" rx="11" fill="rgba(9,32,52,.9)" stroke="#59e0c8" stroke-opacity=".8" />
+              <text y="4" text-anchor="middle" fill="#d6fff2" font-size="10">生涯</text>
+            </g>
+
+            <!-- 十字准轴（虚线流动） -->
+            <path class="twin-axis" d="M28 96h20m144 0h40M120 6v16m0 146v18" stroke="#7ce4ee" stroke-opacity=".45" />
+          </svg>
+        </div>
         <div class="twin-visual-bottom"><strong>STUDENT MODEL</strong><span>学业 · 生涯 · 岗位</span></div>
       </div>
       <div class="twin-content">
@@ -187,18 +278,13 @@
           </el-button>
         </div>
 
-        <div class="guide-steps">
-          <div v-for="(step, index) in guide.steps || []" :key="index" class="guide-step">
-            <div class="step-head">
-              <span class="step-index">{{ index + 1 }}</span>
-              <span class="step-stage">{{ step.阶段 }}</span>
-            </div>
-            <div class="step-goal">{{ step.目标 }}</div>
-            <ul class="step-actions">
-              <li v-for="(action, i) in step.行动 || []" :key="i">{{ action }}</li>
-            </ul>
-          </div>
-        </div>
+        <CareerRoute
+          :all-steps="guide.all_steps || []"
+          :steps="guide.steps || []"
+          :stage="guide.stage || 'unknown'"
+          :grade="guide.grade || ''"
+          :direction="guide.direction?.name || ''"
+        />
         <!-- 底部补齐：本周行动（取规划第一步前 3 条）+ 两个落地 CTA，左侧不留空槽 -->
         <div v-if="weekActions.length" class="week-box">
           <div class="week-head">
@@ -212,10 +298,10 @@
         </div>
 
         <div class="guide-cta">
-          <router-link to="/student/grades" class="guide-cta-btn">
+          <router-link to="/student/academic" class="guide-cta-btn">
             去看成绩单<span class="cta-arrow" aria-hidden="true">↗</span>
           </router-link>
-          <router-link to="/student/jobs" class="guide-cta-btn">
+          <router-link to="/student/opportunity" class="guide-cta-btn">
             去看岗位库<span class="cta-arrow" aria-hidden="true">↗</span>
           </router-link>
         </div>
@@ -253,7 +339,7 @@
             毕业最低总学分 {{ guide.elective.credits.total_required }} · 已修 {{ guide.elective.credits.earned }} · 已选 {{ guide.elective.credits.elected }} · 剩余 {{ guide.elective.credits.remaining }} 学分
           </div>
           <div class="elective-link-cta">
-            <router-link to="/student/elective" class="guide-cta-btn">
+            <router-link to="/student/academic?tab=elective" class="guide-cta-btn">
               让智能体规划选课<span class="cta-arrow" aria-hidden="true">↗</span>
             </router-link>
             <a
@@ -321,6 +407,47 @@
           <span class="quick-name">{{ q.name }}</span>
           <span class="quick-desc">{{ q.desc }}</span>
         </router-link>
+      </div>
+    </el-card>
+
+    <!-- 流程申请：AI 助手里触发的「需要审批」工作流，提交后不是黑盒——
+         状态、教师驳回意见、执行结果都在这里闭环。 -->
+    <el-card v-if="wfRuns.length || wfAvailable.length" shadow="never"
+             class="wf-card bento-span-4 qh-reveal" :style="{ '--qh-index': 7 }">
+      <template #header>
+        <div class="wf-head">
+          <span class="card-title" style="margin: 0">流程申请</span>
+          <span class="wf-hint">点下面的流程即可提交；需教师审批，通过后才执行（只用你自己的数据）</span>
+        </div>
+      </template>
+      <div v-if="wfRuns.length" class="wf-list">
+        <div v-for="r in wfRuns" :key="r.id" class="wf-item">
+          <div class="wf-item-main">
+            <span class="wf-name">{{ r.name }}</span>
+            <el-tag :type="wfTone(r.status)" size="small">{{ r.status_text }}</el-tag>
+            <span v-if="r.error" class="wf-err" :title="r.error">{{ r.error }}</span>
+          </div>
+          <div class="wf-item-sub">
+            <span>提交于 {{ fmtTs(r.submitted_at) }}</span>
+            <span v-if="r.steps?.length">执行：{{ r.steps.map(x => x.title).join(' → ') }}</span>
+            <span v-if="r.decided?.action === 'reject'" class="wf-reject">
+              教师意见：{{ r.decided.comment || '（未填写）' }}
+            </span>
+            <span v-else-if="r.decided?.action === 'approve' && r.decided.comment" class="wf-ok">
+              教师意见：{{ r.decided.comment }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 可申请的流程：没有这块，卡片只对「已经玩过的人」可见，新学生永远发现不了 -->
+      <div v-if="wfAvailable.length" class="wf-apply" :class="{ 'has-runs': wfRuns.length }">
+        <span class="wf-apply-label">可申请的流程</span>
+        <button v-for="w in wfAvailable" :key="w.id" type="button" class="wf-chip"
+                :title="w.description || ''" @click="applyWorkflow(w)">
+          <b>{{ w.name }}</b>
+          <span v-if="w.description" class="wf-chip-desc">{{ w.description }}</span>
+        </button>
       </div>
     </el-card>
 
@@ -520,10 +647,12 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
+import { ElMessageBox } from 'element-plus/es/components/message-box/index.mjs'
 
 import http from '../api/http'
 import router from '../router'
+import CareerRoute from '../components/career/CareerRoute.vue'
 import FreshmanGuide from '../components/FreshmanGuide.vue'
 import RouteHero from '../components/brand/RouteHero.vue'
 import { useClock } from '../composables/useSystemStatus'
@@ -567,13 +696,13 @@ const FRESHMAN_GUIDE_STORAGE_VERSION = 'v1'
 // 快捷入口：6 个刚好填满 2 列网格，与侧栏可见页面一一对应（不新增不存在的路由）
 const QUICK_LINKS = [
   {
-    to: '/student/grades',
+    to: '/student/academic',
     name: '成绩单',
     desc: '每学年课程成绩',
     icon: 'M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM14 3v4h4M9 13h6M9 17h4'
   },
   {
-    to: '/student/forecast',
+    to: '/student/academic?tab=forecast',
     name: '学业预测',
     desc: '下学期绩点与风险',
     icon: 'M4 18V9M10 18V5M16 18v-6M2 18h20'
@@ -585,13 +714,13 @@ const QUICK_LINKS = [
     icon: 'M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3'
   },
   {
-    to: '/student/jobs',
+    to: '/student/opportunity',
     name: '岗位库',
     desc: '按方向筛选岗位',
     icon: 'M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18'
   },
   {
-    to: '/student/exams',
+    to: '/student/opportunity?tab=exams',
     name: '招考信息',
     desc: '考公 / 考编 / 考研',
     icon: 'M12 4l9 4-9 4-9-4 9-4zM5 11v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5'
@@ -639,10 +768,50 @@ const weekActions = computed(() => {
 })
 
 function goJobs() {
-  router.push('/student/jobs')
+  router.push('/student/opportunity')
 }
 
 // 预警明细就在本页，主按钮直接滚过去，而不是把用户带走
+// ---------- 流程申请（工作流）----------
+// 只取自己发起的记录；教师通过 / 驳回后这里能看到结果与意见
+const wfRuns = ref([])
+const wfAvailable = ref([])
+
+function wfTone(status) {
+  return { pending: 'warning', running: 'primary', success: 'success',
+           failed: 'danger', rejected: 'info' }[status] || 'info'
+}
+
+function fmtTs(iso) {
+  return iso ? String(iso).replace('T', ' ').slice(0, 16) : ''
+}
+
+async function loadWfRuns() {
+  try {
+    const { data } = await http.get('/workflow/my-runs', { params: { limit: 5 } })
+    wfRuns.value = data?.items || []
+    wfAvailable.value = data?.available || []
+  } catch {
+    wfRuns.value = []
+    wfAvailable.value = []
+  }
+}
+
+// 点流程 = 在 AI 助手里发出「帮我跑一遍 X」。走同一条链路，不在页面另开接口，
+// 保证「页面点的」和「嘴上说的」是同一件事。
+async function applyWorkflow(w) {
+  try {
+    await ElMessageBox.confirm(
+      `「${w.name}」会提交给教师审批，通过后才执行，且只读取你自己的数据。`,
+      '确认提交申请？',
+      { type: 'info', confirmButtonText: '提交申请', cancelButtonText: '再看看' }
+    )
+  } catch {
+    return
+  }
+  askAI(`帮我跑一遍${w.name}`)
+}
+
 function goWarning() {
   const node = warningCard.value?.$el || warningCard.value
   node?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
@@ -893,7 +1062,7 @@ watch(autoRefresh, (on) => {
 onMounted(async () => {
   queueReveal()
   const guideTask = loadGuide().then(maybeOpenFreshmanGuide)
-  const pageTask = Promise.all([reloadAll(), loadNotices()])
+  const pageTask = Promise.all([reloadAll(), loadNotices(), loadWfRuns()])
   await Promise.all([guideTask, pageTask])
   // 每 60 秒查一次未读：官方发布新通知后，这里会自己亮红点
   noticeTimer = setInterval(loadNotices, 60000)
@@ -906,6 +1075,129 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* ---- 流程申请 ---- */
+.wf-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wf-hint {
+  font-size: 12px;
+  color: var(--bento-sub, #6b7280);
+}
+
+/* 可申请的流程：一行小胶囊，说明它是什么、点了会发生什么 */
+.wf-apply {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wf-apply.has-runs {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--bento-border, #e4e7ee);
+}
+
+.wf-apply-label {
+  font-size: 12px;
+  color: var(--bento-sub, #6b7280);
+}
+
+.wf-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  padding: 7px 14px;
+  border: 1px solid #cfe3df;
+  border-radius: 999px;
+  background: #f4fbf9;
+  color: #0f7a6b;
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.wf-chip:hover {
+  border-color: #0f9d8a;
+  background: #ecf8f5;
+}
+
+.wf-chip b {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wf-chip-desc {
+  color: #6b8f89;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 420px;
+}
+
+@media (max-width: 760px) {
+  .wf-chip-desc {
+    display: none;
+  }
+}
+
+.wf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wf-item {
+  padding: 10px 14px;
+  border: 1px solid var(--bento-border, #e4e7ee);
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.wf-item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wf-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.wf-err {
+  font-size: 12px;
+  color: #c2604f;
+  overflow: hidden;
+  max-width: 420px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-item-sub {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--bento-sub, #6b7280);
+}
+
+.wf-reject {
+  color: #c2604f;
+}
+
+.wf-ok {
+  color: #0f9d8a;
+}
+
 .trust-bar {
   margin-bottom: 0;
   font-weight: 600;
@@ -922,10 +1214,6 @@ onBeforeUnmount(() => {
   border: 1px solid #eef0f5;
   border-radius: 14px;
   padding: 8px 14px;
-}
-
-.live-tip {
-  margin-left: auto;
 }
 
 /* 参考站卡片三件套：白卡 + 左上角淡紫图标块 + 右上角 ↗ */
@@ -1031,10 +1319,6 @@ onBeforeUnmount(() => {
 
 /* 生涯规划卡占左侧两行：有步骤数据时撑满，底部两块贴底，中间不留空槽；
    大一待选方向（内容本身很短）时退回 start，避免卡内出现大片空白 */
-.guide-self-start {
-  align-self: start;
-}
-
 .guide-stretch {
   /* 规划内容按自身高度收拢，避免为了匹配右侧卡片而制造大片空白 */
   align-self: start;
@@ -1073,12 +1357,6 @@ onBeforeUnmount(() => {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 12px;
-}
-
-.intent-desc {
-  font-size: 13.5px;
-  color: #5f6672;
-  margin-top: 8px;
 }
 
 /* 新生引导：大一且未选方向时展示，取代原来那句纯文字提示 */
@@ -1199,13 +1477,6 @@ onBeforeUnmount(() => {
 
   .quick-name { font-size: 14px; }
   .quick-desc { font-size: 12.5px; }
-}
-
-.guide-steps {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
 }
 
 /* 本周行动：卡片底部占位，内容直接取规划第一步，缺数据则整块不渲染 */
@@ -1380,49 +1651,6 @@ onBeforeUnmount(() => {
 
 .guide-cta .cta-arrow {
   opacity: 0.6;
-}
-
-.guide-step {
-  border: 1px solid #e4e7ee;
-  border-radius: 6px;
-  padding: 10px 12px;
-  background: #fff;
-}
-
-.step-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.step-index {
-  width: 20px;
-  height: 20px;
-  border-radius: 8px;
-  background: var(--qh-red);
-  color: #fff;
-  font-size: 13.5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.step-stage {
-  font-weight: 600;
-}
-
-.step-goal {
-  font-size: 13.5px;
-  color: #4e5969;
-  margin: 6px 0;
-}
-
-.step-actions {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 13.5px;
-  color: #4e5969;
-  line-height: 1.8;
 }
 
 .muted {
@@ -1695,7 +1923,7 @@ onBeforeUnmount(() => {
 
 .detail-sub {
   font-size: 13.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .icon-btn {
@@ -1746,7 +1974,7 @@ onBeforeUnmount(() => {
 
 .kpi-label {
   font-size: 13.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .kpi-value {
@@ -1846,7 +2074,7 @@ onBeforeUnmount(() => {
 
 .comp-loading {
   font-size: 13.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .comp-list {
@@ -1879,12 +2107,6 @@ onBeforeUnmount(() => {
   line-height: 18px;
 }
 
-.comp-cat.cat-a {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
-}
-
 .comp-name {
   font-size: 14px;
   font-weight: 600;
@@ -1897,7 +2119,7 @@ onBeforeUnmount(() => {
 .comp-org {
   margin-top: 2px;
   font-size: 13.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .comp-why {
@@ -1909,7 +2131,7 @@ onBeforeUnmount(() => {
 .comp-reward {
   margin-top: 4px;
   font-size: 12.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .comp-link {
@@ -1934,7 +2156,7 @@ onBeforeUnmount(() => {
 
 .notice-date {
   font-size: 12.5px;
-  color: #9aa1ad;
+  color: #6b7280;
 }
 
 .notice-title {
@@ -1967,46 +2189,15 @@ onBeforeUnmount(() => {
   isolation: isolate;
 }
 
-.twin-orbit {
-  position: absolute;
-  width: 176px;
-  height: 176px;
-  border: 1px solid rgba(57, 104, 207, 0.22);
-  border-radius: 50%;
-}
-
-.orbit-one { transform: scaleY(0.42) rotate(-26deg); }
-.orbit-two { transform: scaleY(0.58) rotate(55deg); border-color: rgba(20, 156, 141, 0.28); }
-
-.twin-core {
-  display: grid;
-  width: 104px;
-  height: 104px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 25%, #ffffff, #dce8ff 50%, #b4c8f2);
-  box-shadow: 0 12px 40px rgba(53, 93, 177, 0.2), inset 0 0 22px rgba(255, 255, 255, 0.8);
-}
-
-.twin-core svg { width: 54px; fill: none; stroke: #315db1; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.2; }
-
-.twin-node {
-  position: absolute;
+.twin-stage {
+  position: relative;
   z-index: 1;
-  padding: 5px 10px;
-  border: 1px solid rgba(202, 216, 244, 0.9);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 4px 12px rgba(34, 56, 102, 0.08);
-  color: #34558f;
-  font-size: 12px;
-  font-weight: 650;
+  width: min(100%, 218px);
+  margin: -2px 0;
+  filter: drop-shadow(0 0 14px rgba(87, 201, 238, 0.22));
 }
 
-.node-top { top: 6px; }
-.node-right { right: 4px; top: 48%; }
-.node-bottom { bottom: 6px; }
+.twin-sphere { display: block; width: 100%; }
 
 .twin-content { min-width: 0; }
 .twin-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -2025,27 +2216,6 @@ onBeforeUnmount(() => {
 .twin-ask { min-height: 40px; border-color: #cbd9f4; color: #315db1; }
 .twin-ask:hover, .twin-ask:focus-visible { border-color: #315db1; background: #f4f7ff; color: #244b98; }
 .twin-ask:focus-visible { outline: 2px solid #315db1; outline-offset: 2px; }
-
-@media (max-width: 900px) {
-  .twin-panel { grid-template-columns: 190px minmax(0, 1fr); gap: 14px; padding: 20px; }
-  .twin-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (max-width: 560px) {
-  .twin-panel { grid-template-columns: 1fr; gap: 2px; padding: 18px 16px; }
-  .twin-visual { min-height: 172px; }
-  .twin-orbit { width: 148px; height: 148px; }
-  .twin-core { width: 88px; height: 88px; }
-  .twin-core svg { width: 46px; }
-  .twin-heading { align-items: flex-start; }
-  .twin-heading h2 { font-size: 21px; }
-  .twin-intro { font-size: 13px; }
-  .twin-facts { gap: 8px; margin-top: 15px; }
-  .twin-fact { padding: 10px; }
-  .twin-fact strong { font-size: 18px; }
-  .twin-foot { align-items: flex-start; flex-direction: column; }
-  .twin-ask { width: 100%; }
-}
 
 /* Digital-twin visual refresh: a compact dark identity core with a clearer data surface. */
 .twin-panel {
@@ -2095,7 +2265,6 @@ onBeforeUnmount(() => {
 
 .twin-visual-top { color: #c0d4f4; font-size: 10px; font-weight: 750; letter-spacing: 0.16em; }
 .twin-visual-top i { width: 7px; height: 7px; border-radius: 50%; background: #63e3c1; box-shadow: 0 0 12px #63e3c1; }
-.twin-sphere { position: relative; z-index: 1; width: min(100%, 210px); margin: -2px 0; filter: drop-shadow(0 0 14px rgba(87, 201, 238, 0.22)); }
 .twin-visual-bottom { align-items: flex-end; color: #d3def1; }
 .twin-visual-bottom strong { font-size: 11px; letter-spacing: 0.12em; }
 .twin-visual-bottom span { color: #b4c6e2; font-size: 11px; }
@@ -2131,7 +2300,7 @@ onBeforeUnmount(() => {
 @media (max-width: 560px) {
   .twin-panel { grid-template-columns: 1fr; gap: 0; padding: 6px; }
   .twin-visual { min-height: 192px; padding: 14px 17px 13px; }
-  .twin-sphere { width: 172px; }
+  .twin-stage { width: 172px; }
   .twin-content { padding: 20px 13px 12px; }
   .twin-heading { align-items: flex-start; gap: 8px; }
   .twin-heading h2 { font-size: 21px; }
@@ -2159,42 +2328,65 @@ onBeforeUnmount(() => {
     transition: none;
   }
 }
+
+/* 窄屏 Hero：三块指标压进 358px 卡片内，不再把页面撑出横向滚动 */
+@media (max-width: 700px) {
+  /* 实时条在 390px 下把「30 秒自动刷新」「竞赛通知」挤成竖排单字，
+     换成可换行布局并让标签保持整词。 */
+  .live-bar {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .live-bar > span:first-child,
+  .bell-btn {
+    white-space: nowrap;
+  }
+
+  .live-bar :deep(.el-switch__label) {
+    white-space: nowrap;
+  }
+
+  /* 两个操作按钮在窄屏取等分宽度：flex 自适应会让「立即刷新」「竞赛通知」
+     宽度随字数变化，视觉上像两个不同层级的控件 */
+  .live-bar :deep(.el-button),
+  .live-bar .bell-btn {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    justify-content: center;
+  }
+}
+
+/* 推荐卡头：标题 + 数量 + 刷新按钮在 360px 下把按钮文字挤掉，
+   窄屏让标题独占一行、按钮保持整词 */
+@media (max-width: 560px) {
+  .rec-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .rec-head .card-title {
+    flex: 1 1 100%;
+  }
+
+  .rec-head :deep(.el-button) {
+    flex: 1 1 auto;
+    white-space: nowrap;
+  }
+
+  .rec-head :deep(.el-input-number) {
+    width: 118px;
+  }
+}
+
 /* ---------- 入场动效（仅 transform/opacity/filter，不改布局尺寸） ---------- */
-/* Hero 光斑：一道极淡的斜向高光缓慢扫过，本页两处无限点缀之一 */
-.qh-hero::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: -60%;
-  left: -30%;
-  width: 40%;
-  height: 220%;
-  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
-  transform: translateX(-60%) rotate(12deg);
-  animation: hero-sweep 9s ease-in-out infinite;
-  pointer-events: none;
-}
+/* 页头改为浅色说明面板后，扫光带（.qh-hero::after）在浅底上是一条脏白痕，
+   连同指标浮入动画一起去掉——页面内容的入场已由 .qh-reveal 统一负责。 */
 
-@keyframes hero-sweep {
-  0%, 55% { opacity: 0; transform: translateX(-60%) rotate(12deg); }
-  70% { opacity: 1; }
-  90%, 100% { opacity: 0; transform: translateX(320%) rotate(12deg); }
-}
+/* ---------- 数字孪生：动态全息核心 ---------- */
+/* 双层编排：SVG 元素用 CSS 关键帧（旋转/脉冲/扫描），
+   轨道粒子与数据标签用 SMIL animateMotion 沿椭圆路径运行。 */
 
-/* Hero 关键数字：一次性浮入强调，不做数字滚动改写 */
-.qh-hero :deep(.route-stat) {
-  animation: stat-in 560ms var(--bento-ease, ease) backwards;
-}
-
-.qh-hero :deep(.route-stat:nth-child(2)) { animation-delay: 100ms; }
-.qh-hero :deep(.route-stat:nth-child(3)) { animation-delay: 200ms; }
-
-@keyframes stat-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
-
-/* 数字孪生星球：呼吸微光，本页两处无限点缀之二 */
 .twin-sphere {
   animation: twin-breathe 7s ease-in-out infinite;
 }
@@ -2204,10 +2396,118 @@ onBeforeUnmount(() => {
   50% { opacity: 1; transform: scale(1.02); }
 }
 
+/* 光晕呼吸 */
+.twin-glow {
+  animation: twin-glow 5s ease-in-out infinite;
+}
+
+@keyframes twin-glow {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+
+/* 外圈虚线光环 + 双陀螺环 */
+.twin-halo,
+.twin-ring {
+  transform-origin: 120px 96px;
+}
+
+.twin-halo { animation: twin-spin 30s linear infinite; }
+.ring-a { animation: twin-spin 16s linear infinite; }
+.ring-b { animation: twin-spin-rev 22s linear infinite; }
+
+@keyframes twin-spin { to { transform: rotate(360deg); } }
+@keyframes twin-spin-rev { to { transform: rotate(-360deg); } }
+
+/* 能量核心 */
+.twin-core-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twin-core 3.2s ease-in-out infinite;
+}
+
+@keyframes twin-core {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.22); opacity: 1; }
+}
+
+/* 扩散脉冲：两相位交替 */
+.twin-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: twin-pulse 3.2s ease-out infinite;
+}
+
+.p2 { animation-delay: 1.6s; }
+
+@keyframes twin-pulse {
+  0% { transform: scale(0.55); opacity: 0.75; }
+  70% { opacity: 0; }
+  100% { transform: scale(2.3); opacity: 0; }
+}
+
+/* 准轴虚线流动 */
+.twin-axis { stroke-dasharray: 4 5; animation: twin-dash 24s linear infinite; }
+
+@keyframes twin-dash { to { stroke-dashoffset: -216; } }
+
+/* 雷达扇面：9 秒一圈 */
+.twin-radar {
+  transform-origin: 120px 96px;
+  animation: twin-spin 9s linear infinite;
+}
+
+/* 星尘闪烁：三组相位错开 */
+.twin-dust circle {
+  fill: #bdf1ff;
+  animation: twin-twinkle 4.2s ease-in-out infinite;
+}
+
+.d2 circle { animation-delay: 1.4s; }
+.d3 circle { animation-delay: 2.8s; }
+
+@keyframes twin-twinkle {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.85; }
+}
+
+/* 核心外圈光环轻微收放 */
+.twin-core-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twin-core-halo 3.2s ease-in-out infinite;
+}
+
+@keyframes twin-core-halo {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.13); opacity: 0.95; }
+}
+
+/* 数据标签随轨道漂移时轻微增亮 */
+.twin-chip text {
+  font-family: inherit;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .qh-hero::after,
   .twin-sphere,
-  .qh-hero :deep(.route-stat) {
+  .twin-glow,
+  .twin-halo,
+  .twin-ring,
+  .twin-core-dot,
+  .twin-pulse,
+  .twin-axis,
+  .twin-radar,
+  .twin-dust circle,
+  .twin-core-halo {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .twin-sphere {
     animation: none;
   }
 

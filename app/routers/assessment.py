@@ -115,7 +115,8 @@ def submit_answers(body: AnswersIn,
     finally:
         conn.close()
 
-    audit_event(actor_type=ctx.actor_type, actor_id=ctx.student_id,
+    audit_event(tenant_id=ctx.tenant_id, actor_type=ctx.actor_type,
+                actor_id=ctx.student_id,
                 action="assessment.submit", target=str(result_id),
                 detail={"answered": result["answered"]})
 

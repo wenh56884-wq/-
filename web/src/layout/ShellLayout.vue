@@ -6,7 +6,7 @@
         <span class="brand-mark">启</span>
         <span class="brand-text">
           <span class="brand-title">启航</span>
-          <span class="brand-sub">生涯与岗位匹配</span>
+          <span class="brand-sub">重庆财经学院</span>
         </span>
       </router-link>
 
@@ -107,9 +107,12 @@
 
           <button
             v-if="isMobile"
+            ref="menuBtn"
             class="icon-btn"
             type="button"
             aria-label="打开导航"
+            aria-controls="mobile-nav"
+            :aria-expanded="drawer ? 'true' : 'false'"
             @click="drawer = true"
           >
             <span class="hamburger" />
@@ -118,7 +121,7 @@
         </div>
       </header>
 
-      <main class="page-main">
+      <main class="page-main" :inert="isMobile && drawer ? '' : null">
         <!-- 桌面端标题已上移到顶栏；移动端顶栏塞不下，仍放在正文顶部 -->
         <div v-if="isMobile" class="page-head">
           <h1 class="page-title">{{ currentLabel }}</h1>
@@ -135,13 +138,30 @@
     <!-- 移动端导航抽屉：不保留常驻侧栏 -->
     <template v-if="isMobile">
       <div v-if="drawer" class="scrim" @click="drawer = false" />
-      <aside class="nav-drawer" :class="{ 'is-open': drawer }" aria-label="主导航">
+      <aside
+        id="mobile-nav"
+        ref="drawerEl"
+        class="nav-drawer"
+        :class="{ 'is-open': drawer }"
+        role="dialog"
+        aria-modal="true"
+        aria-label="主导航"
+        :inert="drawer ? null : ''"
+      >
         <div class="drawer-brand">
           <span class="brand-mark">启</span>
           <div class="brand-text">
             <span class="brand-title">启航</span>
-            <span class="brand-sub">生涯与岗位匹配</span>
+            <span class="brand-sub">重庆财经学院</span>
           </div>
+          <button
+            class="drawer-close"
+            type="button"
+            aria-label="关闭导航"
+            @click="drawer = false"
+          >
+            ×
+          </button>
         </div>
         <nav class="drawer-nav">
           <router-link
@@ -226,6 +246,8 @@ const ICONS = {
   graph: 'M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 17l3.5-2M17 9.5l-3.5 8M17.5 8 8 17',
   // 预测：折线上扬 + 箭头
   trend: 'M3 17l6-6 4 4 7-7M17 8h4M17 8v4',
+  // 校园洞察：行为脉搏（心电波形），对应到馆/消费/考勤等行为信号
+  pulse: 'M22 12h-4l-3 9L9 3l-3 9H2',
   // 报考分析：靶心 + 箭，对应「按指标评估能打到哪」
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   // 职业测评：剪贴板（板夹 + 纸 + 勾）
@@ -244,57 +266,56 @@ const role = currentRole()
 
 // 智能助手是右下角悬浮入口（抽屉），不占导航位
 const MENUS = {
+  // 11 → 8：学生总览 / 档案 / 成绩合并成「学生」，岗位库 / 招考合并成「机会库」。
+  // 侧栏做减法比做加法难——每多一项，演示时被点开的概率就被摊薄一点。
   teacher: [
-    { path: '/teacher', label: '班级总览', hint: '全班预警与概貌', icon: 'grid' },
+    { path: '/teacher', label: '学生', hint: '班级总览 · 学生档案 · 全班成绩', icon: 'users' },
     { path: '/teacher/assistant', label: 'AI 助手', hint: '联网搜索 + 深度思考', icon: 'chat' },
-    { path: '/teacher/students', label: '学生档案', hint: '全班 → 个人详情', icon: 'users' },
-    { path: '/teacher/grades', label: '成绩单', hint: '按学年看全部成绩', icon: 'doc' },
-    { path: '/teacher/jobs', label: '岗位库', hint: '企业岗位周更', icon: 'briefcase' },
-    { path: '/teacher/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
+    { path: '/teacher/agent-quality', label: '智能体质量', hint: '回查 / 降级 / 能力自检', icon: 'trend' },
+    { path: '/teacher/career', label: '生涯规划', hint: '十域数据全景档案', icon: 'target' },
+    { path: '/teacher/campus', label: '校园洞察', hint: '图书馆 / 消费 / 考勤 / 活动', icon: 'pulse' },
+    { path: '/teacher/opportunity', label: '机会库', hint: '企业岗位 + 招考公告', icon: 'briefcase' },
     { path: '/teacher/approvals', label: '工作流审批', hint: '人工审核执行申请', icon: 'doc' },
     { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
   ],
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
     { path: '/student/assistant', label: 'AI 助手', hint: '联网搜索 + 深度思考', icon: 'chat' },
-    { path: '/student/grades', label: '成绩单', hint: '每学年课程成绩', icon: 'doc' },
-    { path: '/student/jobs', label: '岗位库', hint: '企业岗位搜索', icon: 'briefcase' },
-    { path: '/student/elective', label: '选课推荐', hint: '技能缺口 → 智能体选课', icon: 'target' },
-    { path: '/student/exams', label: '招考信息', hint: '考公 / 考编 / 考研', icon: 'doc' },
-    { path: '/student/career', label: '报考分析', hint: '按你的指标算竞争力', icon: 'target' },
-    { path: '/student/interview', label: '模拟面试', hint: '简历诊断 + 多轮演练', icon: 'mic' },
+    { path: '/student/academic', label: '学业', hint: '成绩明细 · 学业预测 · 选课建议', icon: 'doc' },
+    { path: '/student/opportunity', label: '机会库', hint: '企业岗位 + 招考公告', icon: 'briefcase' },
+    { path: '/student/plan', label: '生涯规划', hint: '报考分析 + 职业测评', icon: 'target' },
+    { path: '/student/interview', label: '模拟面试', hint: '实战演练 + 复盘实验室', icon: 'mic' },
     { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
-    { path: '/student/forecast', label: '学业预测', hint: '下学期成绩与风险', icon: 'trend' },
-    { path: '/student/assessment', label: '职业测评', hint: '软技能五维画像', icon: 'clipboard' }
+    { path: '/student/campus', label: '校园洞察', hint: '校园行为五域洞察', icon: 'pulse' }
   ]
 }
 
 const menus = computed(() => MENUS[role] || MENUS.student)
 const drawer = ref(false)
+const menuBtn = ref(null)
+const drawerEl = ref(null)
 // 抽屉开关与宠物共用同一份状态：宠物点开后，这里的抽屉会立即响应
 const { open: chatOpen, seed: chatSeed, ask } = useAssistant()
 
 // 每个板块的专属 AI 问法（与后端智能体真实能力一一对应，不是装饰）。
 // askAI() 不带参数 = 只开抽屉，由用户自由提问。
 const PAGE_AI = {
-  'teacher-overview': [
+  'teacher-students-hub': [
     { q: 'AI2301 这学期整体情况怎么样', note: '班级概貌：人数、绩点、挂科率、意向分布' },
-    { q: 'AI2301 班的预警名单有哪些人', note: '预警名单，可追问红色/橙色等级' }
+    { q: 'AI2301 班的预警名单有哪些人', note: '预警名单，可追问红色 / 橙色等级' },
+    { q: '查一个学生的四维画像', note: '输入姓名即可看单个学生的画像与标签' }
   ],
-  'teacher-students': [
-    { q: '查一个学生的四维画像', note: '输入姓名即可看单个学生的画像与标签' },
-    { q: 'AI2301 的预警阈值是多少', note: '当前班级的预警判定标准' }
+  'teacher-career': [
+    { q: '按班级查看全班的生涯规划档案', note: '十域数据全景：成绩/预警/预测/岗位/面试/竞赛/测评/选课/招考/图谱' },
+    { q: 'AI2301 就业方向的学生有哪些，岗位匹配如何', note: '按方向过滤学生档案并看岗位匹配前列' }
   ],
-  'teacher-grades': [
-    { q: 'AI2301 上学期红色预警有哪些人', note: '按学期 + 等级过滤的预警名单' },
-    { q: 'AI2301 全班的成绩排名怎么样', note: '班级与同专业名次，引擎按加权均分实算' }
+  'teacher-campus': [
+    { q: 'AI2301 哪些学生校园投入偏低，原因是什么', note: '低投入名单：出勤 / 到馆 / 消费规律触发项' },
+    { q: 'AI2301 的图书馆到馆和考勤整体情况怎么样', note: '班级五域行为聚合，数值由引擎实算' }
   ],
-  'teacher-jobs': [
-    { q: 'AI2301 和岗位要求的差距在哪', note: '班级能力 vs 目标岗位的缺口分析' }
-  ],
-  'teacher-exams': [
-    { q: '联网查一下最新的公开招聘信息', note: '联网搜索，带原文链接' },
-    { q: '2027 国考职位表里有哪些计算机类岗位', note: '国家公务员局职位表逐职位明细，带官方链接' }
+  'teacher-opportunity': [
+    { q: 'AI2301 和岗位要求的差距在哪', note: '班级能力 vs 目标岗位的缺口分析' },
+    { q: '联网查一下最新的公开招聘信息', note: '联网搜索招考公告，带原文链接' }
   ],
   'teacher-approvals': [
     { q: '帮我跑一遍班级周报', note: '工作流：多步流程一键执行，结果可送审' }
@@ -306,31 +327,27 @@ const PAGE_AI = {
     { q: '我这学期的学业预警情况怎么样', note: '你的预警状态与原因' },
     { q: '有哪些岗位适合我？为什么？', note: '基于你的画像推荐岗位' }
   ],
-  'student-grades': [
-    { q: '我这学期有什么挂科风险', note: '按你的真实成绩实算' }
-  ],
-  'student-jobs': [
-    { q: '有哪些岗位适合我？为什么？', note: '岗位推荐 + 推荐理由' }
-  ],
-  'student-elective': [
+  'student-academic': [
+    { q: '我这学期有什么挂科风险', note: '按你的真实成绩实算' },
     { q: '我选什么课能补技能缺口', note: '引擎算缺口，选课规划智能体给个性化方案' }
+  ],
+  'student-opportunity': [
+    { q: '有哪些岗位适合我？为什么？', note: '岗位推荐 + 推荐理由' },
+    { q: '2027 国考职位表里有哪些计算机类岗位', note: '职位表实抓，含学历与专业要求' }
+  ],
+  'student-plan': [
+    { q: '根据我的成绩，我适合考公还是考研', note: '结合你的指标给方向建议' },
+    { q: '考公、考编、考研分别要准备多少学时', note: '投入维度怎么算，一句话讲清' }
   ],
   'student-interview': [
     { q: '帮我跑一遍求职体检', note: '工作流：简历→差距→演练一站式体检' }
   ],
-  'student-exams': [
-    { q: '联网查一下最新的公开招聘信息', note: '联网搜索招考公告，带原文链接' },
-    { q: '2027 国考职位表里有哪些计算机类岗位', note: '职位表实抓，含学历与专业要求' }
-  ],
   'student-kg': [
     { q: '公司制度里报销的住宿标准是多少', note: '知识库检索，给文档名和页码' }
   ],
-  'student-forecast': [
-    { q: '我这学期有什么挂科风险', note: '学业预警：按你的真实成绩实算' },
-    { q: '根据我的成绩，我适合考公还是考研', note: '结合你的指标给方向建议' }
-  ],
-  'student-career': [
-    { q: '考公、考编、考研分别要准备多少学时', note: '投入维度怎么算，一句话讲清' }
+  'student-campus': [
+    { q: '我的学习投入分是怎么算出来的', note: '到馆 40% + 出勤 30% + 消费规律 30%，引擎实算' },
+    { q: '我这学期的到馆和出勤情况怎么样', note: '图书馆 / 考勤按学期序列展示' }
   ]
 }
 
@@ -409,6 +426,23 @@ function onScroll() {
   scrolled.value = window.scrollY > 4
 }
 
+function onKeydown(event) {
+  if (event.key === 'Escape' && drawer.value) drawer.value = false
+}
+
+// 移动端抽屉打开时锁住页面滚动，并把焦点移进抽屉；关闭后把焦点还给汉堡按钮
+watch(drawer, async (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+  // 宠物与控制条也是 fixed 层，抽屉打开时让位，避免压住菜单和底部用户卡
+  document.body.classList.toggle('nav-open', open)
+  await nextTick()
+  if (open) {
+    drawerEl.value?.querySelector('.drawer-item')?.focus()
+  } else if (isMobile.value) {
+    menuBtn.value?.focus?.()
+  }
+})
+
 const identityText = computed(() => {
   if (role === 'teacher') {
     const tenant = localStorage.getItem('qh_tenant_id')
@@ -446,6 +480,7 @@ onMounted(() => {
   isMobile.value = media.matches
   media.addEventListener('change', syncViewport)
   window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('keydown', onKeydown)
   onScroll()
   nextTick(syncIndicator)
 })
@@ -453,6 +488,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   media?.removeEventListener('change', syncViewport)
   window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('keydown', onKeydown)
+  document.body.style.overflow = ''
+  document.body.classList.remove('nav-open')
 })
 </script>
 
@@ -586,11 +624,12 @@ onBeforeUnmount(() => {
 }
 
 /* 页标题是这一屏的最大标题，必须压过卡片标题（20px 的 .bento-title 除外，
-   它只出现在卡片内做区块名）。原来 15px 比卡片标题还小，层级是反的。 */
+   它只出现在卡片内做区块名）。原来 15px 比卡片标题还小，层级是反的；
+   17px 在 1680px 宽画布上仍偏小，抬到 19px 并加重到 680。 */
 .topbar-title-main {
   margin: 0;
-  font-size: 17px;
-  font-weight: 650;
+  font-size: 19px;
+  font-weight: 680;
   letter-spacing: -0.02em;
   color: var(--cf-ink);
   white-space: nowrap;
@@ -598,7 +637,8 @@ onBeforeUnmount(() => {
 
 .topbar-title-sub {
   margin: 0;
-  font-size: 12px;
+  padding-left: 2px;
+  font-size: 12.5px;
   color: var(--cf-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -912,6 +952,8 @@ onBeforeUnmount(() => {
   align-items: stretch;
   gap: 8px;
   min-width: 0;
+  /* 不能压到底：侧栏底部是宠物立绘的固定位置，问法压下去会被整个盖住。
+     菜单减到 8 项后下方留白是正常的，宁可空着也不要藏起来。 */
   margin-top: 16px;
   padding: 14px 12px 4px;
   border-top: 1px solid #272d3c;
@@ -1080,13 +1122,36 @@ onBeforeUnmount(() => {
 }
 
 .drawer-brand {
+  position: relative;
   height: 60px;
   flex: 0 0 60px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px;
+  padding: 0 64px 0 16px;
   border-bottom: 1px solid #272d3c;
+}
+
+.drawer-close {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c8d3e8;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.drawer-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .drawer-nav {
@@ -1273,6 +1338,15 @@ onBeforeUnmount(() => {
   .page-main {
     width: 100%;
     padding-top: 0;
+    /* 左下宠物（64px）+ 右下 AI 入口（fixed）会盖住正文末尾，
+       统一预留一条安全区，避免最后一张卡或按钮被压住 */
+    padding-bottom: 104px;
+  }
+
+  /* 顶栏状态点只保留绿点信息时，手机上会成为一个没有语义的孤立圆点，
+     运维细节不属于学生/教师主路径，窄屏直接收起（抽屉里仍有入口价值不大） */
+  .status-btn {
+    display: none;
   }
 
   .page-head {
@@ -1303,11 +1377,11 @@ onBeforeUnmount(() => {
 
 /* ---------- 统一壳层的高级化收口 ---------- */
 .sidebar {
-  padding: 20px 16px;
-  background:
-    radial-gradient(260px 220px at 10% 0%, rgba(71, 112, 223, 0.22), transparent 72%),
-    linear-gradient(180deg, #111827 0%, #161c2b 52%, #101827 100%);
-  border-right-color: rgba(148, 163, 184, 0.14);
+  padding: 20px 16px 16px;
+  /* 去掉左上角那团蓝色径向光斑：它在深底上形成一块与品牌无关的亮区，
+     和主区已经清干净的画布不再呼应。只留极轻的上下明暗，保证列有层次。 */
+  background: linear-gradient(180deg, #151c29 0%, #111722 100%);
+  border-right-color: rgba(255, 255, 255, 0.07);
 }
 
 .side-nav {
@@ -1325,14 +1399,31 @@ onBeforeUnmount(() => {
 }
 
 .side-item:hover {
-  background: rgba(59, 130, 246, 0.18);
-  border-color: rgba(147, 197, 253, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: transparent;
+  color: #fff;
 }
 
+/* 选中态：只留「一层淡蓝底色 + 左缘 3px 指示条」。
+   之前是渐变实块 + 右缘内阴影 + 独立滑动指示条三重强调，同一处说了三遍；
+   淡底比实块安静，和浅色主区的强调程度也对得上。 */
 .side-item.is-active {
-  background: linear-gradient(100deg, rgba(49, 91, 213, 0.92), rgba(30, 64, 175, 0.82));
-  border-color: rgba(147, 197, 253, 0.22);
-  box-shadow: inset 3px 0 0 #bfdbfe, 0 8px 18px rgba(2, 6, 23, 0.18);
+  background: rgba(93, 134, 232, 0.18);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+
+/* 菜单项只做颜色过渡；原先悬停右移 2px 会让整列菜单“跟着鼠标晃”，
+   在固定的导航上属于噪音，去掉位移。 */
+.side-item {
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+@media (pointer: coarse) {
+  .side-item:hover {
+    transform: none;
+  }
 }
 
 .topbar {
@@ -1347,7 +1438,7 @@ onBeforeUnmount(() => {
 }
 
 .topbar-title-main {
-  font-size: 19px;
+  font-size: 22px;
   letter-spacing: -0.025em;
 }
 
@@ -1396,6 +1487,13 @@ onBeforeUnmount(() => {
     padding-inline: 14px;
   }
 
+  /* 手机上 34px 的图标按钮低于 44px 触控红线，统一放大 */
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
   .nav-drawer {
     width: min(320px, 88vw);
     background:
@@ -1406,6 +1504,11 @@ onBeforeUnmount(() => {
   .drawer-item {
     min-height: 48px;
     border: 1px solid transparent;
+  }
+
+  .drawer-foot .logout-btn {
+    min-height: 44px;
+    padding: 10px 14px;
   }
 
   .drawer-item.is-active {

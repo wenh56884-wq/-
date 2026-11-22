@@ -7,8 +7,12 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from agents import tools
+from agents.tools import ToolContext
+from app.audit import audit_event
+from app.auth import require_student, require_teacher
 from engine import kg
 
 router = APIRouter(prefix="/kg", tags=["kg"])
@@ -32,12 +36,20 @@ def stats() -> dict[str, Any]:
 
 
 @router.post("/rebuild")
-def rebuild() -> dict[str, Any]:
+def rebuild(ctx: ToolContext = Depends(require_teacher)) -> dict[str, Any]:
     with _lock:
         _graph_cache["graph"] = kg.build_graph()
         from datetime import datetime
         _graph_cache["built_at"] = datetime.now().isoformat(timespec="seconds")
-    return {"ok": True, **kg.graph_stats(_graph_cache["graph"])}
+    result = {"ok": True, **kg.graph_stats(_graph_cache["graph"])}
+    audit_event(
+        tenant_id=ctx.tenant_id,
+        actor_type=ctx.actor_type,
+        actor_id=ctx.teacher_id or 0,
+        action="kg.rebuild",
+        detail={"nodes": result.get("nodes"), "edges": result.get("edges")},
+    )
+    return result
 
 
 @router.get("/jobs-by-skill")
@@ -58,6 +70,22 @@ def explain(major: str = Query(min_length=1, max_length=60),
     if not r.get("found"):
         raise HTTPException(404, r.get("reason", "未找到"))
     return r
+
+
+@router.get("/path/my")
+def my_path(job_id: int = Query(ge=1),
+            ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """学生端：本人专业 → 课程 → 技能 → 岗位的达成路径。
+
+    身份与专业只从登录态解析（tools.kg_path 学生端强制用本人专业），
+    不接受专业入参；required/covered/missing/chain/summary 全部由 engine.kg 计算。
+    """
+    try:
+        return tools.kg_path(ctx, job_id=job_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
 
 
 @router.get("/facets")

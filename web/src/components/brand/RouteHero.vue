@@ -1,13 +1,5 @@
 <template>
-  <section class="route-hero" :class="`route-hero--${tone}`">
-    <div class="route-hero__ambient" aria-hidden="true" />
-    <BrandRoute
-      variant="strip"
-      :tone="tone === 'student' ? 'teal' : 'gold'"
-      class="route-hero__line"
-      style="inset: auto 0 0 0; height: 46px"
-    />
-
+  <section class="route-hero">
     <div class="route-hero__content">
       <div class="route-hero__copy">
         <p v-if="eyebrow" class="route-hero__eyebrow">{{ eyebrow }}</p>
@@ -20,11 +12,10 @@
 
       <div v-if="stats.length" class="route-hero__stats">
         <div
-          v-for="(stat, index) in stats"
+          v-for="stat in stats"
           :key="stat.label"
           class="route-stat"
           :class="stat.tone ? `route-stat--${stat.tone}` : ''"
-          :style="{ '--qh-index': index }"
         >
           <span class="route-stat__label">{{ stat.label }}</span>
           <b class="route-stat__value">
@@ -37,14 +28,17 @@
 </template>
 
 <script setup>
-// RouteHero：教师/学生首页的「航线页头」。
-// 登录页用完整叙事场景；进入工作台后只保留一条安静的品牌航线 + 结论 + 指标，
-// 不再重复整块视频 hero，把首屏让给业务结论。
-
-import BrandRoute from './BrandRoute.vue'
+// RouteHero：教师/学生首页的「本页结论」面板。
+//
+// 设计口径（2026-11-19 统一）：
+// 原先是深色渐变横幅 + 漂移光斑 + 胶囊 eyebrow + 扫光动画 + 白字按钮，
+// 学生首页、教师首页、校园洞察、职业搜索各有一块，且色相各不相同（墨绿/藏青/金色）。
+// 结果是「每个页面都像另一个产品的落地页」，与浅色工作区、靛蓝品牌色互相打架。
+// 现在改为与全站卡片同一族的说明面板：白底 + 1px 中性边 + 12px 圆角，
+// 标题用墨色、指标用等宽数字、语义色只作用在数值上。信息不变，装饰去掉。
 
 defineProps({
-  tone: { type: String, default: 'teacher' },
+  tone: { type: String, default: 'teacher' }, // 保留兼容：仅影响未指定 tone 的指标配色
   eyebrow: { type: String, default: '' },
   title: { type: String, default: '' },
   desc: { type: String, default: '' },
@@ -55,65 +49,18 @@ defineProps({
 
 <style scoped>
 .route-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 160px;
-  padding: 26px 30px 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  color: #f4fffd;
-  box-shadow: 0 18px 44px rgba(8, 24, 28, 0.16);
-}
-
-.route-hero--teacher {
-  --hero-glow-a: rgba(43, 123, 120, 0.22);
-  --hero-glow-b: rgba(111, 201, 193, 0.12);
-  background:
-    radial-gradient(520px 240px at 86% 0%, rgba(43, 123, 120, 0.3), transparent 66%),
-    linear-gradient(118deg, #071a20 0%, #0b2830 58%, #0a1e27 100%);
-}
-
-.route-hero--student {
-  --hero-glow-a: rgba(216, 180, 90, 0.16);
-  --hero-glow-b: rgba(241, 213, 143, 0.1);
-  background:
-    radial-gradient(520px 240px at 88% 6%, rgba(216, 180, 90, 0.2), transparent 66%),
-    linear-gradient(118deg, #071a20 0%, #0b2a30 58%, #0a1e27 100%);
-}
-
-/* 极淡品牌色氛围光斑：只动 transform/opacity，缓慢漂移不抢内容 */
-.route-hero__ambient {
-  position: absolute;
-  inset: -18%;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(38% 46% at 22% 28%, var(--hero-glow-a), transparent 70%),
-    radial-gradient(30% 40% at 76% 72%, var(--hero-glow-b), transparent 72%);
-  animation: hero-ambient-drift 28s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-@keyframes hero-ambient-drift {
-  from {
-    transform: translate3d(-2%, -1.5%, 0) scale(1);
-  }
-  to {
-    transform: translate3d(2%, 2%, 0) scale(1.06);
-  }
-}
-
-.route-hero__line {
-  opacity: 0.72;
+  padding: 20px 24px;
+  border: 1px solid #e7eaf1;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
 .route-hero__content {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 28px;
   flex-wrap: wrap;
   width: 100%;
 }
@@ -123,267 +70,132 @@ defineProps({
   min-width: 0;
 }
 
+/* 期次信息（如「本学期结论 · 2025-2026-2」）：普通小字，不再做成胶囊标签，
+   也不加字距——它不是装饰性的眉标，是一行数据注解。 */
 .route-hero__eyebrow {
-  position: relative;
-  overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  margin: 0 0 10px;
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(236, 248, 244, 0.8);
-  font-family: var(--cf-font-mono);
-  font-size: 11px;
+  margin: 0 0 6px;
+  color: var(--cf-faint);
+  font-size: 12.5px;
   font-weight: 500;
-  letter-spacing: 0.04em;
-  animation: hero-rise 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) 0.05s both;
-}
-
-/* eyebrow 一次性扫光：低亮度，不霓虹 */
-.route-hero__eyebrow::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.24) 50%, transparent 68%);
-  transform: translateX(-130%);
-  animation: hero-shimmer 1.1s ease 0.55s forwards;
-  pointer-events: none;
 }
 
 .route-hero__title {
   margin: 0;
   max-width: 62ch;
-  color: #f6fffd;
-  font-size: clamp(17px, 1.5vw, 22px);
-  font-weight: 650;
+  color: var(--cf-ink);
+  font-size: 21px;
+  font-weight: 680;
   line-height: 1.5;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   text-wrap: balance;
   /* 允许在空格/标点处换行，但不把「预警」这类中文词拆成两行 */
   word-break: keep-all;
   overflow-wrap: anywhere;
-  animation: hero-title-in 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) 0.16s both;
 }
 
 .route-hero__desc {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   max-width: 68ch;
-  color: rgba(226, 244, 242, 0.64);
-  font-size: 13px;
+  color: var(--qh-text-sub);
+  font-size: 13.5px;
   line-height: 1.7;
-  animation: hero-rise 0.65s ease 0.34s both;
 }
 
 .route-hero__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 15px;
-  animation: hero-rise 0.65s ease 0.62s both;
+  margin-top: 14px;
 }
 
-/* 暗底上的按钮：主按钮白底深字，次按钮玻璃底白字 */
-.route-hero__actions :deep(.el-button) {
-  border-radius: 10px;
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
-  color: #f4fffd;
-}
-
-.route-hero__actions :deep(.el-button:hover) {
-  border-color: rgba(255, 255, 255, 0.32);
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-}
-
-.route-hero__actions :deep(.el-button--primary:not(.is-plain):not(.is-text):not(.is-link)) {
-  --el-button-bg-color: #f4fffd;
-  --el-button-border-color: #f4fffd;
-  --el-button-hover-bg-color: #ffffff;
-  --el-button-hover-border-color: #ffffff;
-  --el-button-active-bg-color: #e4f5f1;
-  --el-button-active-border-color: #e4f5f1;
-  border-color: #f4fffd;
-  background-color: #f4fffd;
-  background-image: none;
-  color: #0b2830;
-  box-shadow: 0 8px 20px rgba(3, 12, 16, 0.24);
-}
-
-.route-hero__actions :deep(.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover) {
-  border-color: #fff;
-  background-color: #fff;
-  background-image: none;
-  color: #0b2830;
-  transform: translateY(-1px);
-}
-
+/* 指标：浅灰底小方片，数值等宽，语义色只染色数字 */
 .route-hero__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 10px;
-  flex: 0 0 auto;
-  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .route-stat {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 108px;
+  min-width: 104px;
   padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.07);
-  /* 逐个 stagger 浮入；数值本身原样渲染，不做数字滚动 */
-  animation: hero-rise 0.6s cubic-bezier(0.22, 0.61, 0.36, 1)
-    calc(0.46s + var(--qh-index, 0) * 0.09s) both;
-  transition: transform 220ms var(--qh-ease);
-}
-
-.route-stat::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  opacity: 0;
-  transition: opacity 220ms var(--qh-ease);
-  pointer-events: none;
-}
-
-.route-stat:hover {
-  transform: translateY(-2px);
-}
-
-.route-stat:hover::after {
-  opacity: 1;
+  border: 1px solid #ecf0f6;
+  border-radius: 10px;
+  background: #f8f9fc;
 }
 
 .route-stat__label {
-  color: rgba(236, 248, 244, 0.62);
-  font-size: 11.5px;
-  white-space: nowrap;
+  display: block;
+  color: var(--cf-faint);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .route-stat__value {
-  color: #f6fffd;
-  font-size: 22px;
-  font-weight: 650;
+  display: block;
+  margin-top: 2px;
+  color: var(--cf-ink);
+  font-size: 24px;
+  font-weight: 680;
   line-height: 1.25;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .route-stat__value small {
   margin-left: 2px;
-  color: rgba(236, 248, 244, 0.62);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
+  color: var(--cf-faint);
 }
 
-.route-stat--red .route-stat__value { color: #ff7b72; }
-.route-stat--orange .route-stat__value { color: #ffa94d; }
-.route-stat--yellow .route-stat__value { color: #f5d33f; }
-.route-stat--good .route-stat__value { color: #7ce3c4; }
-.route-stat--unknown .route-stat__value { color: rgba(246, 255, 253, 0.7); }
+.route-stat--red .route-stat__value { color: #c0392b; }
+.route-stat--orange .route-stat__value { color: #b45f06; }
+.route-stat--yellow .route-stat__value { color: #9a6a05; }
+.route-stat--good .route-stat__value { color: #0f7a5a; }
+.route-stat--unknown .route-stat__value { color: var(--cf-mid); }
 
-/* ---------- 入场编排 keyframes（只动 transform/opacity/clip-path） ---------- */
-@keyframes hero-rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes hero-title-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-@keyframes hero-shimmer {
-  to {
-    transform: translateX(130%);
-  }
-}
-
-@media (pointer: coarse) {
-  /* 触屏设备不做持续漂移，省电且避免滚动掉帧 */
-  .route-hero__ambient {
-    animation: none;
-  }
-
-  .route-stat:hover {
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .route-hero__ambient,
-  .route-hero__eyebrow,
-  .route-hero__eyebrow::after,
-  .route-hero__title,
-  .route-hero__desc,
-  .route-hero__actions,
-  .route-stat {
-    animation: none;
-  }
-
-  .route-hero__eyebrow::after {
-    display: none;
-  }
-
-  .route-stat,
-  .route-stat::after {
-    transition: none;
-  }
-
-  .route-stat:hover {
-    transform: none;
-  }
-}
-
-@media (max-width: 700px) {
+@media (max-width: 1023px) {
   .route-hero {
-    min-height: 0;
-    padding: 20px 20px 30px;
-  }
-
-  .route-hero__content {
-    align-items: stretch;
-    gap: 18px;
-  }
-
-  .route-hero__copy {
-    flex-basis: 100%;
+    padding: 18px 18px;
   }
 
   .route-hero__title {
-    font-size: 17px;
+    font-size: 19px;
   }
 
-  .route-hero__desc {
-    font-size: 12.5px;
+  .route-stat {
+    flex: 1 1 96px;
+  }
+}
+
+/* 手机端：按钮竖排等宽、三个指标三等分。
+   之前 flex-wrap 让第二个按钮换行、第三个指标独占一行，视觉上参差不齐。 */
+@media (max-width: 560px) {
+  .route-hero {
+    padding: 16px;
+  }
+
+  .route-hero__content {
+    gap: 14px;
+  }
+
+  .route-hero__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .route-hero__actions :slotted(*) {
+    width: 100%;
+    margin-left: 0;
   }
 
   .route-hero__stats {
-    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+    width: 100%;
   }
 
   .route-stat {
@@ -392,8 +204,10 @@ defineProps({
   }
 
   .route-stat__label {
-    font-size: 11px;
-    white-space: normal;
+    overflow: hidden;
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .route-stat__value {

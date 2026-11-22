@@ -450,7 +450,7 @@ def test_approval_routes_roundtrip():
 
     client = TestClient(create_app())
     login = client.post("/auth/login", json={"role": "teacher", "account": "T001",
-                                            "password": "teacher@123"})
+                                            "password": "123456h"})
     assert login.status_code == 200, login.text[:200]
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 

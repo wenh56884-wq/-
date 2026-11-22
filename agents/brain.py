@@ -19,11 +19,21 @@ from agents import auto_plan, critic, llm
 from agents.tools import ToolContext, _check_ctx, _connect
 from engine import agent_memory
 
-BRAIN_VERSION = "brain-v1"
+BRAIN_VERSION = "brain-v2"
 MAX_ROUNDS = 3
 MAX_STEPS = 6
 MAX_STEPS_PER_PLAN = 4
 OBSERVATION_CHARS = 1600
+# v2 执行参数（都可用环境变量覆盖，方便现场按机器性能调）
+#   STEP_TIMEOUT：单步上限。某一工具卡住（外部检索/大班聚合）不该拖垮整轮
+#   DEADLINE    ：整轮上限。到点不再发起新步骤，用已有结果出稿
+#   PARALLEL    ：同批步骤并发度。同一批步骤的 args 在规划时就已固定、
+#                 相互没有数据依赖，天然可以并发——这是 v2 最大的一笔时延优化
+STEP_TIMEOUT = float(os.getenv("BRAIN_STEP_TIMEOUT", "25"))
+DEADLINE = float(os.getenv("BRAIN_DEADLINE", "70"))
+PARALLEL = max(1, int(os.getenv("BRAIN_PARALLEL", "3")))
+# 反思开关：auto = 只在「有失败/有空洞」时补计划；always = 每轮都问；never = 不问
+REFLECT_MODE = str(os.getenv("BRAIN_REFLECT", "auto")).strip().lower()
 # 有副作用的工具不交给大脑自动执行：必须走页面/用户明确确认
 _BLOCKED_TOOLS: frozenset[str] = frozenset({
     "save_warning_thresholds", "save_career_intent", "mark_notices_read",
@@ -70,6 +80,8 @@ class ExecutedStep:
     ok: bool
     result: dict[str, Any] = field(default_factory=dict)
     observation: str = ""
+    elapsed_ms: int = 0
+    error: str = ""
 
 
 def _brain_enabled() -> str:
@@ -238,8 +250,8 @@ _DRAFT_SYSTEM = (
     "不能把示例条数写成总数。\n"
     "3. 不要出现「工具」「步骤」「系统」这类词；不要用 Markdown 标记（**、-、#、```）。\n"
     "4. 先给结论，再给 1~2 条依据；事实不足就直说没查到。\n"
-    "5. 中文口语，200 字以内；**但如果事实是逐条列表（如国考职位明细），"
-    "必须像 periodista 那样按条列出具体条目（部门/职位/人数/学历/地点等照抄），"
+    "5. 中文口语，200 字以内；但如果事实是逐条列表（如国考职位明细），"
+    "必须像清单那样按条列出具体条目（部门/职位/人数/学历/地点等照抄），"
     "此时篇幅不受 200 字限制，一条一行、不再压缩。"
 )
 
@@ -354,16 +366,115 @@ def _execute(ctx: ToolContext, step: Mapping[str, Any]) -> ExecutedStep:
     tool = str(step.get("tool") or "")
     args = dict(step.get("args") or {})
     purpose = str(step.get("purpose") or "")
+    started = time.perf_counter()
     try:
         result = graph._dispatch(ctx, tool, args)  # noqa: SLF001 - 统一工具分发
         if not isinstance(result, Mapping):
             result = {"result": result}
         return ExecutedStep(tool=tool, args=args, purpose=purpose, ok=True,
-                            result=dict(result), observation=_observe(result))
+                            result=dict(result), observation=_observe(result),
+                            elapsed_ms=int((time.perf_counter() - started) * 1000))
     except Exception as exc:  # 工具层异常（参数错/越权/断库）都只影响这一步
         observation = f"{type(exc).__name__}: {exc}"[:300]
         return ExecutedStep(tool=tool, args=args, purpose=purpose, ok=False,
-                            result={"error": observation}, observation=observation)
+                            result={"error": observation}, observation=observation,
+                            elapsed_ms=int((time.perf_counter() - started) * 1000),
+                            error=type(exc).__name__)
+
+
+def _skip_step(step: Mapping[str, Any], reason: str) -> ExecutedStep:
+    return ExecutedStep(tool=str(step.get("tool") or ""),
+                        args=dict(step.get("args") or {}),
+                        purpose=str(step.get("purpose") or ""),
+                        ok=False, result={"error": reason}, observation=reason,
+                        error=reason)
+
+
+def _run_steps(ctx: ToolContext, steps: Sequence[Mapping[str, Any]], on_event: Any,
+               deadline_at: float) -> list[ExecutedStep]:
+    """执行一批步骤，结果**按计划顺序**返回。
+
+    同一批步骤之间没有数据依赖（args 在规划阶段就固定，不能引用前一步的返回值），
+    所以并发是安全的；串行只是让「3 个工具 × 平均 8 秒」变成 24 秒的排队。
+    v2 并发后同样的任务墙钟时间接近最慢的那一步。
+    """
+    if not steps:
+        return []
+    results: list[ExecutedStep | None] = [None] * len(steps)
+    for step in steps:
+        _emit(on_event, stage="tool", tool=str(step.get("tool") or ""),
+              text=f"正在调用 {step.get('tool')}…")
+
+    if len(steps) == 1 or PARALLEL <= 1:
+        for index, step in enumerate(steps):
+            if time.monotonic() >= deadline_at:
+                results[index] = _skip_step(step, "整轮时间已到，这步没有执行")
+                continue
+            results[index] = _execute(ctx, step)
+    else:
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        with ThreadPoolExecutor(max_workers=min(PARALLEL, len(steps)),
+                                thread_name_prefix="brain-step") as pool:
+            futures = {}
+            for index, step in enumerate(steps):
+                if time.monotonic() >= deadline_at:
+                    results[index] = _skip_step(step, "整轮时间已到，这步没有执行")
+                    continue
+                futures[pool.submit(_execute, ctx, step)] = index
+            remaining = max(1.0, deadline_at - time.monotonic())
+            done, not_done = wait(futures, timeout=min(STEP_TIMEOUT, remaining))
+            for future in done:
+                index = futures[future]
+                try:
+                    results[index] = future.result()
+                except Exception as exc:  # 线程内异常不能吞掉整轮
+                    results[index] = _skip_step(steps[index], f"{type(exc).__name__}: {exc}")
+            for future in not_done:
+                future.cancel()
+                index = futures[future]
+                results[index] = _skip_step(
+                    steps[index],
+                    f"超过单步上限 {STEP_TIMEOUT:.0f}s 还没返回，已放弃这一步")
+
+    for step, outcome in zip(steps, results):
+        if outcome is not None:
+            _emit(on_event, stage="observe", tool=outcome.tool, ok=outcome.ok,
+                  text=(f"{outcome.tool} 返回结果（{outcome.elapsed_ms} ms）" if outcome.ok
+                        else f"{outcome.tool} 未成功，继续下一步"))
+    return [item if item is not None else _skip_step(steps[i], "未执行")
+            for i, item in enumerate(results)]
+
+
+def _is_empty_result(result: Mapping[str, Any]) -> bool:
+    """结果是否「看起来什么都没拿到」——决定要不要补一轮反思。"""
+    if not result:
+        return True
+    if result.get("error"):
+        return True
+    for key in ("items", "rows", "list", "data", "positions", "notices", "citations"):
+        value = result.get(key)
+        if isinstance(value, (list, tuple, dict)) and not value:
+            return True
+    return False
+
+
+def _needs_reflect(executed: Sequence[ExecutedStep]) -> bool:
+    """是否需要补计划。
+
+    旧版每轮都问一次模型「够不够」，一个问题白烧 2~4 秒。
+    auto 模式只在「有步骤失败」或「某步拿到了空结果」时才问——
+    这两类才是真的可能缺信息；全都成功且有内容时，再问也只会得到 done。
+    """
+    if REFLECT_MODE in ("always", "1", "true", "on", "yes"):
+        return True
+    if REFLECT_MODE in ("never", "0", "false", "off", "no"):
+        return False
+    if not executed:
+        return True
+    if any(not step.ok for step in executed):
+        return True
+    return any(_is_empty_result(step.result) for step in executed)
 
 
 def _template_facts(executed: Sequence[ExecutedStep]) -> str:
@@ -390,12 +501,14 @@ def _synthesize(ctx: ToolContext, query: str,
     llm_failed = False
     if facts:
         user = f"【用户问题】{query}\n【工具事实】\n{facts}"
-        # 大脑一次任务已经调了多个工具，草稿最多重写一次；再多会拖到一分钟以上
-        for attempt in range(1, min(critic.MAX_RETRY, 1) + 2):
+        # 大脑一次任务已经调了多个工具，草稿=初稿+至多一次重写；再多会拖到一分钟以上。
+        # （旧写法 min(MAX_RETRY,1)+2 会给 3 次尝试，比注释承诺多跑一轮。）
+        for attempt in (1, 2):
             attempts = attempt
             draft = llm.generate_reply(ctx.actor_type, system_prompt=_DRAFT_SYSTEM,
                                        user_prompt=user, tag="brain_draft")
             if not draft:
+                llm_failed = True   # 模型没出稿也属于降级：最终走模板直引
                 break
             verdict = critic.verify(draft, ground)
             semantic = _count_mismatches(draft, ok_steps)
@@ -551,6 +664,32 @@ def _emit(on_event: Any, **payload: Any) -> None:
         pass
 
 
+def _last_user_text(history: Sequence[Mapping[str, str]] | None) -> str:
+    for turn in reversed(list(history or [])):
+        if str(turn.get("role") or "") == "user":
+            return str(turn.get("text") or "").strip()
+    return ""
+
+
+def _recall_memories(conn, ctx: ToolContext, query: str,
+                     history: Sequence[Mapping[str, str]] | None) -> list[dict[str, Any]]:
+    """召回长期记忆；本轮召回不足时用上一轮用户原话再捞一次。
+
+    追问型对话（「那考公呢」「这个专业呢」）本身几乎没有实词，
+    只拿本轮问句去检索必然空手而归，而上下文恰恰在上一轮里。
+    """
+    hits = agent_memory.search(conn, ctx, query, top_k=4)
+    if len(hits) >= 2:
+        return hits
+    previous = _last_user_text(history)
+    if not previous or previous == str(query or "").strip():
+        return hits
+    merged = {int(hit["id"]): hit for hit in hits}
+    for hit in agent_memory.search(conn, ctx, previous, top_k=2):
+        merged.setdefault(int(hit["id"]), hit)
+    return sorted(merged.values(), key=lambda item: -float(item.get("score") or 0))[:4]
+
+
 def run_brain(ctx: ToolContext, query: str, term: str | None = None,
               history: Sequence[Mapping[str, str]] | None = None,
               session_id: int | None = None,
@@ -570,7 +709,7 @@ def run_brain(ctx: ToolContext, query: str, term: str | None = None,
             conn = _connect()
             _ensure_memory_schema(conn)
             try:
-                memories = agent_memory.search(conn, ctx, query, top_k=4)
+                memories = _recall_memories(conn, ctx, query, history)
                 conn.commit()
             except Exception as exc:
                 print(f"[brain] 记忆召回失败：{exc}", file=sys.stderr)
@@ -595,21 +734,19 @@ def run_brain(ctx: ToolContext, query: str, term: str | None = None,
             executed: list[ExecutedStep] = []
             pending = planned
             rounds = 0
+            deadline_at = started + DEADLINE
             while pending and len(executed) < MAX_STEPS and rounds < MAX_ROUNDS:
                 rounds += 1
-                for step in pending:
-                    if len(executed) >= MAX_STEPS:
-                        break
-                    if any(_signature(step) == _signature(done) for done in executed):
-                        continue
-                    tool_name = str(step.get("tool") or "")
-                    _emit(on_event, stage="tool", tool=tool_name,
-                          text=f"正在调用 {tool_name}…")
-                    outcome = _execute(ctx, step)
-                    executed.append(outcome)
-                    _emit(on_event, stage="observe", tool=tool_name, ok=outcome.ok,
-                          text=(f"{tool_name} 返回结果" if outcome.ok
-                                else f"{tool_name} 调用失败，继续下一步"))
+                batch = [step for step in pending
+                         if not any(_signature(step) == _signature(done) for done in executed)]
+                batch = batch[:MAX_STEPS - len(executed)]
+                if not batch:
+                    break
+                executed.extend(_run_steps(ctx, batch, on_event, deadline_at))
+                # 到这里三种情况都不该再问模型：时间到 / 轮次用完 / 信息已经够
+                if (time.monotonic() >= deadline_at or rounds >= MAX_ROUNDS
+                        or not _needs_reflect(executed)):
+                    break
                 _emit(on_event, stage="reflect", text="正在检查结果，判断是否补查…")
                 pending = _reflect(ctx, query, executed, catalog) or []
             if not any(step.ok for step in executed):
@@ -653,6 +790,7 @@ def run_brain(ctx: ToolContext, query: str, term: str | None = None,
             "steps": [
                 {"index": index, "tool": step.tool, "purpose": step.purpose,
                  "ok": step.ok, "args": step.args,
+                 "elapsed_ms": step.elapsed_ms,
                  "observation": step.observation[:300]}
                 for index, step in enumerate(executed, start=1)
             ],
@@ -678,6 +816,10 @@ def describe() -> dict[str, Any]:
         "mode": _brain_enabled(),
         "max_rounds": MAX_ROUNDS,
         "max_steps": MAX_STEPS,
+        "step_timeout_s": STEP_TIMEOUT,
+        "deadline_s": DEADLINE,
+        "parallel": PARALLEL,
+        "reflect": REFLECT_MODE,
         "memory": agent_memory.MEMORY_VERSION,
         "memory_vector_dim": agent_memory.VECTOR_DIM,
         "blocked_tools": sorted(_BLOCKED_TOOLS),
