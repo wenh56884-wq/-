@@ -211,9 +211,8 @@
     </section>
 
     <el-card ref="guideCard" v-loading="guideLoading" shadow="never"
-      class="guide-card bento-span-2 bento-row-2 qh-reveal"
-      :style="{ '--qh-index': 4 }"
-      :class="{ 'guide-stretch': !(guide.needs_intent) && (guide.steps || []).length }">
+      class="guide-card bento-span-2 qh-reveal"
+      :style="{ '--qh-index': 4 }">
       <template #header>
         <div class="guide-head">
           <span class="card-title" style="margin: 0">生涯规划</span>
@@ -357,7 +356,7 @@
 
     <el-card ref="warningCard" v-loading="warningLoading" shadow="never" class="info-card bento-span-2 qh-reveal" :style="{ '--qh-index': 5 }">
       <div class="card-title">本人信息</div>
-      <el-descriptions :column="3" border size="small">
+      <el-descriptions class="profile-descriptions" :column="3" border size="small">
         <el-descriptions-item label="学号">{{ warning.student_no || '-' }}</el-descriptions-item>
         <el-descriptions-item label="姓名">{{ warning.name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="学期">{{ warning.term || '-' }}</el-descriptions-item>
@@ -382,7 +381,7 @@
       </div>
 
       <div class="card-title reason-title">本人指标</div>
-      <el-descriptions :column="4" border size="small">
+      <el-descriptions class="profile-descriptions profile-metrics" :column="2" border size="small">
         <el-descriptions-item label="均分">{{ metric('gpa') }}</el-descriptions-item>
         <el-descriptions-item label="成绩下滑">{{ metric('gpa_drop') }}</el-descriptions-item>
         <el-descriptions-item label="出勤率">{{ metricRate('attendance_rate') }}</el-descriptions-item>
@@ -394,7 +393,36 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="quick-card bento-span-4 qh-reveal" :style="{ '--qh-index': 6 }">
+    <el-card shadow="never" class="profile-recommendations bento-span-2 qh-reveal" :style="{ '--qh-index': 6 }">
+      <template #header>
+        <div class="profile-rec-head">
+          <div>
+            <span class="card-title">为你匹配的岗位</span>
+            <span class="profile-rec-sub">从推荐结果先看两条，点开查看理由与差距</span>
+          </div>
+          <el-button link type="primary" @click="goJobs">查看全部岗位 <span aria-hidden="true">↗</span></el-button>
+        </div>
+      </template>
+      <el-empty v-if="!recLoading && !items.length" description="当前没有可展示的岗位推荐" />
+      <div v-else class="profile-rec-list" v-loading="recLoading">
+        <button v-for="(item, index) in profileJobs" :key="item.job_id ?? item.id ?? item.title"
+          class="profile-job" type="button" @click="openDetail(item)">
+          <span class="profile-job-main">
+            <span class="profile-job-label">{{ String(index + 1).padStart(2, '0') }}</span>
+            <span class="profile-job-copy">
+              <span class="profile-job-title">{{ item.title }}</span>
+              <span class="profile-job-meta">{{ item.company || '企业未标注' }}<template v-if="item.city"> · {{ item.city }}</template></span>
+              <span v-if="item.gap_items?.length" class="profile-job-gap">待补：{{ item.gap_items[0] }}</span>
+              <span v-else class="profile-job-hit">{{ item.hit_items?.[0] || item.advice || '推荐理由详见岗位详情' }}</span>
+            </span>
+          </span>
+          <span class="profile-job-score"><b>{{ fmtScore(item.final_score) }}</b>匹配分<span class="profile-job-arrow" aria-hidden="true">↗</span></span>
+        </button>
+      </div>
+      <div class="engine-line">推荐引擎 {{ recs.engine_version || '-' }} · 只展示接口已返回的推荐结果</div>
+    </el-card>
+
+    <el-card shadow="never" class="quick-card bento-span-4 qh-reveal" :style="{ '--qh-index': 7 }">
       <template #header>
         <div class="card-title" style="margin: 0">快捷入口</div>
       </template>
@@ -766,6 +794,9 @@ const weekActions = computed(() => {
   const first = (guide.value?.steps || [])[0]
   return ((first?.行动) || []).slice(0, 3)
 })
+
+// 首页摘要复用岗位推荐接口，不另造完成率/能力分，也不发起新的评分请求
+const profileJobs = computed(() => items.value.slice(0, 2))
 
 function goJobs() {
   router.push('/student/opportunity')
@@ -1317,15 +1348,182 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
-/* 生涯规划卡占左侧两行：有步骤数据时撑满，底部两块贴底，中间不留空槽；
-   大一待选方向（内容本身很短）时退回 start，避免卡内出现大片空白 */
-.guide-stretch {
-  /* 规划内容按自身高度收拢，避免为了匹配右侧卡片而制造大片空白 */
-  align-self: start;
+/* 生涯规划与右侧信息/摘要在同一行自动对齐：不跨两行，避免右侧只有一行卡片
+   时留下结构性空白；内容按自身高度收拢，页脚区块不参与撑高。 */
+.guide-card :deep(.el-card__body) {
+  display: block;
 }
 
-.guide-stretch :deep(.el-card__body) {
+.profile-recommendations,
+.profile-descriptions {
+  margin-bottom: 0;
+}
+
+/* 桌面（4 列栅格）：生涯规划占左列两行，本人信息与岗位摘要占右列两行，
+   左右两列高度与信息量同步填充，不留结构性空白。 */
+.guide-card {
+  grid-row: 1 / span 2;
+}
+
+.info-card {
+  grid-column: 3 / span 2;
+  grid-row: 1;
+}
+
+.profile-recommendations {
+  grid-column: 3 / span 2;
+  grid-row: 2;
+}
+
+/* 2 列（平板及小桌面）：左侧生涯规划收窄为单列并占两行，右侧信息与摘要
+   各收窄一列，由自动布局依次填充第二列，右列同样不留空槽。 */
+@media (max-width: 1180px) and (min-width: 701px) {
+  .guide-card {
+    grid-column: span 1;
+    grid-row: 1 / span 2;
+  }
+
+  .info-card,
+  .profile-recommendations {
+    grid-column: span 1;
+  }
+}
+
+/* 单列（手机）：三张卡各占一行，顺序为规划 → 本人信息 → 岗位摘要 */
+@media (max-width: 700px) {
+  .guide-card,
+  .info-card,
+  .profile-recommendations {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+.profile-rec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.profile-rec-sub {
   display: block;
+  margin-top: 3px;
+  color: var(--qh-text-sub, #5f6672);
+  font-size: 12.5px;
+}
+
+.profile-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 12px;
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid var(--qh-border, #e4e7ee);
+  border-radius: var(--qh-radius-lg, 8px);
+  background: #fff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 180ms var(--bento-ease, ease),
+    border-color 180ms var(--bento-ease, ease),
+    box-shadow 180ms var(--bento-ease, ease);
+}
+
+.profile-job:hover {
+  transform: translateY(-2px);
+  border-color: #baccf0;
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+}
+
+.profile-job-main {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-job-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--qh-primary-soft, #e9efff);
+  color: var(--qh-primary, #1951c3);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-job-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-job-title {
+  overflow: hidden;
+  color: var(--qh-text, #16181d);
+  font-size: 14.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-job-meta {
+  overflow: hidden;
+  color: var(--qh-text-sub, #5f6672);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-job-gap {
+  color: #b45309;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.profile-job-hit {
+  color: #59677c;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.profile-job-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 56px;
+  color: var(--qh-text-muted, #6b7280);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.profile-job-score b {
+  color: var(--qh-primary, #1951c3);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-job-arrow {
+  margin-top: 4px;
+  opacity: 0.55;
 }
 
 .guide-head {
