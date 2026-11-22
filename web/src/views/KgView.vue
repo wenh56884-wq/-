@@ -41,7 +41,7 @@
             :x1="340" :y1="230" :x2="n.x" :y2="n.y"
             :stroke="n.group === 'job' ? '#f59e0b' : '#3b82f6'" stroke-opacity="0.35" />
           <!-- 中心技能 -->
-          <circle cx="340" cy="230" r="34" fill="#10b981" />
+          <circle class="viz-center" cx="340" cy="230" r="34" fill="#10b981" />
           <text x="340" y="235" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">{{ nb.center }}</text>
           <!-- 环绕节点 -->
           <g v-for="(n, i) in ringNodes" :key="n.id">
@@ -229,12 +229,30 @@ onMounted(async () => {
   min-height: 112px;
   text-align: center;
 }
-.stat-num { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 统计数字：科技蓝 + 青色光晕 + 滚动入场（保持深色字，投影/浅底都可读） */
+.stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tech-blue, #1951c3);
+  text-shadow: 0 0 18px rgba(0, 194, 255, 0.3);
+  animation: qh-tech-count-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 .stat-label { font-size: 13.5px; color: var(--bento-mute); }
 .muted { color: var(--bento-mute); font-size: 13.5px; }
 .ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sel { width: 280px; }
-.viz-wrap { display: flex; flex-direction: column; align-items: center; }
+/* 图谱展示区：局部淡青光晕底 + 中心节点发光，仍是浅色卡内展示，不铺深色 */
+.viz-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 16px;
+  background: radial-gradient(440px 250px at 50% 50%, rgba(0, 194, 255, 0.06), transparent 72%);
+}
+.viz-center {
+  filter: drop-shadow(0 0 12px rgba(0, 194, 255, 0.55));
+}
 .viz { width: 100%; max-width: 720px; color: var(--el-text-color-primary); }
 .viz-legend { display: flex; gap: 16px; font-size: 13.5px; color: var(--el-text-color-secondary); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
