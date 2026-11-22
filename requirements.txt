@@ -32,6 +32,7 @@ cryptography==50.0.2
 
 # ===== Config =====
 python-dotenv==1.2.4
+pywebpush==2.5.0
 
 # ===== Testing =====
 pytest==9.1.1

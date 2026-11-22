@@ -19,3 +19,10 @@ import './styles/tech.css'
 // 组件由 unplugin-vue-components 按需引入；这里只注册全站共用的 v-loading 指令。
 // 中文 locale 由 App.vue 的 <el-config-provider :locale="zhCn"> 提供。
 createApp(App).use(ElLoading).use(router).mount('#app')
+
+// Service Worker 只在安全上下文注册；失败不阻断业务，也不主动请求通知权限。
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}

@@ -43,6 +43,7 @@ from app.routers import interview_lab as interview_lab_router
 from app.routers import job as job_router
 from app.routers import kb as kb_router
 from app.routers import kg as kg_router
+from app.routers import notifications as notifications_router
 from app.routers import pet as pet_router
 from app.routers import question_bank as qb_router
 from app.routers import student as student_router
@@ -190,6 +191,7 @@ def create_app() -> FastAPI:
     app.include_router(web_router.router)
     app.include_router(workflow_router.router)
     app.include_router(pet_router.router)
+    app.include_router(notifications_router.router)
 
     @app.middleware("http")
     async def audit_middleware(request: Request, call_next):
@@ -387,6 +389,15 @@ try:
     start_guokao_sync()
 except Exception:
     logger.exception("guokao sync startup failed")
+
+
+# 后台推送：仅扫描既有未读水位里的真实通知；未配置 VAPID 时静默跳过
+try:
+    from app.push_sender import start_background_dispatch
+
+    start_background_dispatch()
+except Exception:
+    logger.exception("web push dispatch startup failed")
 
 
 if __name__ == "__main__":  # pragma: no cover

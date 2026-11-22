@@ -218,6 +218,7 @@
       :seed-question="chatSeed"
       @seed-consumed="chatSeed = ''"
     />
+    <NotificationCenter v-if="role === 'student'" />
   </div>
 </template>
 
@@ -227,6 +228,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { clearSession, currentRole } from '../api/http'
 import ChatDrawer from '../components/ChatDrawer.vue'
+import NotificationCenter from '../components/notifications/NotificationCenter.vue'
 import { useAssistant } from '../composables/useAssistant'
 import { useClock, useSystemStatus } from '../composables/useSystemStatus'
 

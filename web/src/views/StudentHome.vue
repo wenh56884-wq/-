@@ -647,29 +647,6 @@
       </div>
     </el-drawer>
 
-    <!-- 竞赛通知中心：官方一发布即推送 -->
-    <el-drawer v-model="noticeOpen" :size="drawerSize" direction="rtl" :with-header="false">
-      <div class="detail-shell drawer-panel">
-        <header class="detail-head">
-          <div class="detail-head-text">
-            <div class="detail-title">竞赛通知</div>
-            <div class="detail-sub">重庆财经学院教务处发布，系统定期自动同步</div>
-          </div>
-          <button class="icon-btn" type="button" aria-label="关闭通知" @click="noticeOpen = false">
-            <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
-        </header>
-        <div class="detail-body">
-          <el-empty v-if="!notices.length" description="暂无新通知" />
-          <div v-for="n in notices" :key="n.title" class="notice-cell">
-            <div class="notice-date">{{ n.published_at }}</div>
-            <div class="notice-title">{{ n.title }}</div>
-            <a class="comp-link" :href="n.url" target="_blank" rel="noopener">打开原文 →</a>
-          </div>
-          <div class="engine-line">已读水位：{{ lastReadAt || '未读' }}</div>
-        </div>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
@@ -943,42 +920,22 @@ async function loadCompetitions() {
   }
 }
 
-// ---- 竞赛通知推送 ----
-const noticeOpen = ref(false)
-const notices = ref([])
+// ---- 竞赛通知角标：仅读未读数；通知列表与已读操作交给统一通知中心 ----
 const unreadCnt = ref(0)
-const lastReadAt = ref('')
 let noticeTimer = null
 
-async function loadNotices() {
+async function loadNoticeCount() {
   try {
-    const { data } = await http.get('/student/notices', { params: { limit: 20 } })
+    const { data } = await http.get('/student/notices', { params: { limit: 1 } })
     unreadCnt.value = Number(data?.unread_cnt || 0)
-    lastReadAt.value = data?.last_read_at || ''
-    if (!noticeOpen.value) return
-    notices.value = data?.items || []
   } catch {
     unreadCnt.value = 0
   }
 }
 
-async function openNotices() {
-  noticeOpen.value = true
-  await loadNotices()
+function openNotices() {
+  window.dispatchEvent(new CustomEvent('qh:open-notices'))
 }
-
-watch(noticeOpen, async (opened) => {
-  if (opened) return
-  if (!unreadCnt.value) return
-  // 关闭通知即视为已读：把水位推到当前时间，之后的新通知才会再提醒
-  try {
-    await http.post('/student/notices/read')
-    unreadCnt.value = 0
-    await loadNotices()
-  } catch {
-    /* 标记失败不影响使用 */
-  }
-})
 
 async function loadGuide() {
   guideLoading.value = true
@@ -1093,10 +1050,10 @@ watch(autoRefresh, (on) => {
 onMounted(async () => {
   queueReveal()
   const guideTask = loadGuide().then(maybeOpenFreshmanGuide)
-  const pageTask = Promise.all([reloadAll(), loadNotices(), loadWfRuns()])
+  const pageTask = Promise.all([reloadAll(), loadNoticeCount(), loadWfRuns()])
   await Promise.all([guideTask, pageTask])
   // 每 60 秒查一次未读：官方发布新通知后，这里会自己亮红点
-  noticeTimer = setInterval(loadNotices, 60000)
+  noticeTimer = setInterval(loadNoticeCount, 60000)
 })
 
 onBeforeUnmount(() => {
@@ -2342,26 +2299,6 @@ onBeforeUnmount(() => {
 
 .comp-link:hover {
   text-decoration: underline;
-}
-
-.notice-cell {
-  background: #ffffff;
-  border: 1px solid var(--qh-border, #e4e7ee);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-}
-
-.notice-date {
-  font-size: 12.5px;
-  color: #6b7280;
-}
-
-.notice-title {
-  margin-top: 4px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #16181d;
 }
 
 .twin-panel {

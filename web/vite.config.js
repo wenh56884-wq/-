@@ -48,7 +48,7 @@ function ElementPlusPerComponentResolver() {
 const BACKEND_PREFIXES = [
   '/auth', '/assessment', '/career', '/chat', '/elective', '/exam', '/export',
   '/forecast', '/grades', '/interview', '/job', '/kb', '/kg', '/pet', '/qb',
-  '/student', '/teacher', '/web', '/workflow'
+  '/student', '/teacher', '/web', '/workflow', '/notifications'
 ]
 
 // 页面路由与 API 前缀同名（/student、/teacher、/kg…），整段转发会让深链接

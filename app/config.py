@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     # 每用户每日问答配额（0 = 不限量）。按 audit_log 里 agent.chat 实数计数。
     agent_daily_limit: int = 0
 
+    # --- 浏览器 Web Push（VAPID，密钥只从环境变量读取）---
+    web_push_enabled: bool = False
+    web_push_public_key: str = ""
+    web_push_private_key: str = ""
+    web_push_contact: str = ""
+    web_push_interval_minutes: float = 5.0
+
     # --- 前端静态托管（P10-3）---
     # 空串 = 纯 API 不托管；填了路径且目录存在时才挂载 web\dist
     frontend_dist: str = "web/dist"
