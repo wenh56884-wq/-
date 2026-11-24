@@ -3,24 +3,37 @@
 // 新增图表类型时在这里补注册，不要在页面里改回 import 'echarts'。
 
 import * as echarts from 'echarts/core'
-import { BarChart, LineChart, RadarChart, ScatterChart } from 'echarts/charts'
 import {
+  BarChart,
+  HeatmapChart,
+  LineChart,
+  MapChart,
+  RadarChart,
+  ScatterChart
+} from 'echarts/charts'
+import {
+  GeoComponent,
   GridComponent,
   LegendComponent,
   RadarComponent,
-  TooltipComponent
+  TooltipComponent,
+  VisualMapComponent
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
 echarts.use([
   BarChart,
+  HeatmapChart,
   LineChart,
+  MapChart,
   RadarChart,
   ScatterChart,
+  GeoComponent,
   GridComponent,
   LegendComponent,
   RadarComponent,
   TooltipComponent,
+  VisualMapComponent,
   CanvasRenderer
 ])
 

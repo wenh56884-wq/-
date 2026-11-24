@@ -278,7 +278,8 @@ const MENUS = {
     { path: '/teacher/campus', label: '校园洞察', hint: '图书馆 / 消费 / 考勤 / 活动', icon: 'pulse' },
     { path: '/teacher/opportunity', label: '机会库', hint: '企业岗位 + 招考公告', icon: 'briefcase' },
     { path: '/teacher/approvals', label: '工作流审批', hint: '人工审核执行申请', icon: 'doc' },
-    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' }
+    { path: '/teacher/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
+    { path: '/teacher/innovation', label: '创新全景', hint: '证据链 · 数据溯源 · 师生闭环', icon: 'grid' }
   ],
   student: [
     { path: '/student', label: '我的画像', hint: '预警 + 岗位推荐', icon: 'self' },
@@ -288,7 +289,8 @@ const MENUS = {
     { path: '/student/plan', label: '生涯规划', hint: '报考分析 + 职业测评', icon: 'target' },
     { path: '/student/interview', label: '模拟面试', hint: '实战演练 + 复盘实验室', icon: 'mic' },
     { path: '/student/kg', label: '知识图谱', hint: '专业-课程-岗位-技能', icon: 'graph' },
-    { path: '/student/campus', label: '校园洞察', hint: '校园行为五域洞察', icon: 'pulse' }
+    { path: '/student/campus', label: '校园洞察', hint: '校园行为五域洞察', icon: 'pulse' },
+    { path: '/student/innovation', label: '创新全景', hint: '证据链 · 数据溯源 · 师生闭环', icon: 'grid' }
   ]
 }
 

@@ -38,6 +38,7 @@ from app.routers import exam as exam_router
 from app.routers import export as export_router
 from app.routers import forecast as forecast_router
 from app.routers import grades as grades_router
+from app.routers import innovation as innovation_router
 from app.routers import interview as interview_router
 from app.routers import interview_lab as interview_lab_router
 from app.routers import job as job_router
@@ -178,6 +179,7 @@ def create_app() -> FastAPI:
     app.include_router(elective_router.router)
     app.include_router(forecast_router.router)
     app.include_router(grades_router.router)
+    app.include_router(innovation_router.router)
     app.include_router(exam_router.router)
     app.include_router(cert_router.router)
     app.include_router(export_router.router)

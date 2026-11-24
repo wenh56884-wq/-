@@ -8,6 +8,7 @@ const AgentQuality = () => import('../views/AgentQuality.vue')
 const Assistant = () => import('../views/Assistant.vue')
 const CampusInsight = () => import('../views/CampusInsight.vue')
 const InterviewHub = () => import('../views/InterviewHub.vue')
+const InnovationHub = () => import('../views/InnovationHub.vue')
 
 // 聚合板块：几个强相关的旧页面合并成一个板块，二级 Tab 见各自视图
 const AcademicHub = () => import('../views/AcademicHub.vue')
@@ -52,6 +53,8 @@ const routes = [
         meta: { title: '工作流审批' } },
       { path: 'kg', name: 'teacher-kg', component: KgView,
         meta: { title: '知识图谱' } },
+      { path: 'innovation', name: 'teacher-innovation', component: InnovationHub,
+        meta: { title: '创新全景' } },
       { path: 'assistant', name: 'teacher-assistant', component: Assistant,
         meta: { title: 'AI 助手' } },
       { path: 'agent-quality', name: 'teacher-agent-quality', component: AgentQuality,
@@ -91,6 +94,8 @@ const routes = [
         meta: { title: '校园洞察' } },
       { path: 'assistant', name: 'student-assistant', component: Assistant,
         meta: { title: 'AI 助手' } },
+      { path: 'innovation', name: 'student-innovation', component: InnovationHub,
+        meta: { title: '创新全景' } },
       { path: ':pathMatch(.*)*', name: 'student-not-found', component: NotFound,
         meta: { title: '页面不存在' } }
     ]
