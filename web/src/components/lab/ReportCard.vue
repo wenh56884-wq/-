@@ -5,9 +5,23 @@
     <header class="rc-top">
       <span class="rc-brand">启航 · 模拟面试复盘</span>
       <span class="rc-date">{{ dateText }}</span>
+      <button class="rc-print" type="button" @click="printPage">打印本页</button>
     </header>
 
     <div class="rc-job" :title="jobTitle">{{ jobTitle }}</div>
+
+    <section class="rc-printable" aria-label="可打印复盘摘要">
+      <p class="rc-summary">{{ summaryText }}</p>
+      <div class="rc-groups">
+        <div v-for="g in printableGroups" :key="g.key" class="rc-group">
+          <div class="sec-h">{{ g.title }}</div>
+          <p v-for="(t, i) in g.items" :key="g.key + i" class="line">
+            <span class="idx">{{ i + 1 }}</span><span>{{ t }}</span>
+          </p>
+          <p v-if="!g.items.length" class="line muted">暂无该维度数据</p>
+        </div>
+      </div>
+    </section>
 
     <div class="rc-score-row">
       <div class="rc-total">
@@ -160,6 +174,47 @@ const actions = computed(() =>
   (props.data?.next_actions || []).slice(0, 2).map(textOf).filter(Boolean)
 )
 
+// ---------- 可打印摘要：优先用后端 printable；缺失/空数组时回退旧字段，不造数字 ----------
+function textList(value, max = 3) {
+  if (!Array.isArray(value)) return []
+  return value.map(textOf).filter(Boolean).slice(0, max)
+}
+
+const printable = computed(() => props.data?.printable || null)
+
+const summaryText = computed(() => {
+  const text = printable.value?.summary
+  if (typeof text === 'string' && text.trim()) return text.trim()
+  if (totalNum.value != null) {
+    return `本场模拟面试总分 ${totalText.value} 分，评级 ${gradeText.value}。`
+  }
+  if (props.data?.grade) return `本场模拟面试评级 ${gradeText.value}。`
+  return '暂无该维度数据'
+})
+
+const printableGroups = computed(() => {
+  const p = printable.value
+  const strengths = textList(p?.strengths)
+  const weaknesses = textList(p?.weaknesses)
+  const steps = textList(p?.actions)
+  const dimFallback = [...dimBars.value]
+    .filter((d) => d.value != null)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3)
+    .map((d) => `${d.label}维度 ${d.value.toFixed(1)} 分`)
+  return [
+    { key: 'strengths', title: '三项最强', items: strengths.length ? strengths : dimFallback },
+    { key: 'weaknesses', title: '三项最弱',
+      items: weaknesses.length ? weaknesses : textList(props.data?.top_problems) },
+    { key: 'actions', title: '三步行动',
+      items: steps.length ? steps : textList(props.data?.next_actions) }
+  ]
+})
+
+function printPage() {
+  if (typeof window !== 'undefined') window.print()
+}
+
 function barWidth(v) {
   if (v == null) return '0%'
   return `${Math.min(100, Math.max(0, v))}%`
@@ -196,7 +251,8 @@ function initial(p) {
   flex-direction: column;
   gap: 12px;
   width: 360px;
-  height: 640px;
+  min-height: 640px;
+  height: auto;
   padding: 22px 22px 18px;
   overflow: hidden;
   border-radius: 20px;
@@ -224,10 +280,47 @@ function initial(p) {
 
 .rc-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
 }
+
+.rc-print {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid rgba(147, 197, 253, .5);
+  border-radius: 7px;
+  background: rgba(37, 99, 235, .18);
+  color: #bfdbfe;
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.rc-print:hover { border-color: #93c5fd; color: #eff6ff; }
+
+.rc-printable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .5);
+}
+
+.rc-summary {
+  margin: 0;
+  color: #93c5fd;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.rc-groups { display: flex; flex-direction: column; gap: 9px; }
+
+.rc-group { display: flex; flex-direction: column; gap: 4px; }
 
 .rc-brand {
   color: #bfdbfe;
@@ -426,5 +519,78 @@ function initial(p) {
   color: #4b5563;
   font-size: 9.5px;
   line-height: 1.5;
+}
+
+/* ---------------- 打印：白底黑字，只保留卡内容 ---------------- */
+/* 屏上是深色数据卡；打印时浏览器默认不打印背景，若强制印背景则耗墨且发灰，
+   所以直接把配色整个翻成白底黑字，装饰层全部隐藏。 */
+@media print {
+  .rc {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    overflow: visible;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #111827;
+    box-shadow: none;
+  }
+  /* 光晕装饰与打印按钮不上纸 */
+  .rc-aura, .rc-print { display: none; }
+  .rc-brand { color: #374151; }
+  .rc-job { color: #111827; }
+  .rc-total b { color: #000000; }
+  .rc-total span { color: #4b5563; }
+  .rc-grade { color: #111827; background: #ffffff; }
+  .rc-grade.ga, .rc-grade.gb, .rc-grade.gc { border-color: #9ca3af; background: #ffffff; color: #111827; }
+  .rc-dims { border-color: #d1d5db; background: #ffffff; }
+  .dim-label { color: #4b5563; }
+  .dim-track { background: #e5e7eb; }
+  .dim-track i { background: #374151 !important; }
+  .dim-val { color: #111827; }
+  .rc-panelist { border-color: #d1d5db; background: #ffffff; }
+  .rc-panelist b { color: #111827; }
+  .dot { color: #ffffff; }
+  .dot-name { color: #374151; }
+  .rc-sec { border-top-color: #d1d5db; }
+  .sec-h { color: #111827; }
+  .line { color: #111827; }
+  .line.muted { color: #6b7280; }
+  .idx { background: #e5e7eb; color: #374151; }
+  .arrow { color: #111827; }
+  .rc-foot { color: #6b7280; }
+  /* 打印时高度自适应，固定 640px 会把后面的内容裁掉 */
+  .rc { height: auto; min-height: 0; }
+
+  :global(html), :global(body) { background: #fff !important; color: #000 !important; }
+  /* 侧边导航、工位切换、弹层工具条与下载/关闭按钮都不进纸面 */
+  :global(.sidebar), :global(.nav-drawer), :global(.topbar), :global(.page-head),
+  :global(.lab-tabs), :global(.picker), :global(.pet-root), :global(.ai-launcher),
+  :global(.rc-tools), :global(.rc-actions) { display: none !important; }
+  :global(.shell), :global(.shell-main), :global(.page-main), :global(.lab), :global(.pane),
+  :global(.el-overlay), :global(.el-dialog), :global(.el-dialog__body),
+  :global(.rc-shell), :global(.rc-print-root) {
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  .rc, .rc * { box-shadow: none !important; background-image: none !important; }
+  .rc, .rc * { font-size: 11pt !important; }
+  .rc-summary { color: #000 !important; font-size: 14pt !important; }
+  .rc-printable { border: 1px solid #9ca3af !important; background: #fff !important; }
+  .sec-h, .rc-summary, .line, .line.muted, .idx { color: #000 !important; }
+  .rc-top, .rc-job, .rc-printable, .rc-score-row, .rc-dims,
+  .rc-panel, .rc-sec, .rc-group, .rc-foot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 </style>
