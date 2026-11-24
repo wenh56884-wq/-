@@ -54,6 +54,53 @@
 
       <blockquote v-if="data.narrative" class="att-quote">{{ data.narrative }}</blockquote>
 
+      <!-- 同题型趋势：最近最多 3 场。后端给的是「场次 × 题型」平铺列表，
+           同一场含多个题型时在一场内取均值，一个场次只落一个点。 -->
+      <section class="att-trend">
+        <div class="att-sec-head">
+          <span class="att-sec-title">同题型得分趋势</span>
+          <span v-if="trendPoints.length" class="att-sec-sub">最近 {{ trendPoints.length }} 场 · 含本场</span>
+        </div>
+        <div v-if="trendPoints.length" class="att-trend-body">
+          <div
+            ref="trendRef"
+            class="att-trend-chart"
+            role="img"
+            :aria-label="trendAria"
+          ></div>
+          <ol class="att-trend-list" aria-label="各场次得分读数">
+            <li v-for="p in trendPoints" :key="p.sid">
+              <span class="att-trend-date">{{ p.asOf || '时间未记录' }}</span>
+              <b class="att-trend-score">{{ p.score }}</b>
+            </li>
+          </ol>
+          <p v-if="trendAveraged" class="att-trend-note">同一场含多个同题型考点，取平均分</p>
+        </div>
+        <div v-else class="att-empty-inline att-empty-slim">
+          <span>暂无该维度数据</span>
+        </div>
+      </section>
+
+      <!-- 相关课程提示：失分维度 → 对应课程 → 本人在该课的分位 -->
+      <section class="att-hints">
+        <div class="att-sec-head">
+          <span class="att-sec-title">相关课程</span>
+          <span v-if="courseHints.length" class="att-sec-sub">{{ courseHints.length }} 个失分维度对应到课程</span>
+        </div>
+        <div v-if="courseHints.length" class="att-hint-row">
+          <span v-for="(h, i) in courseHints" :key="'h' + i" class="att-hint">
+            <span class="att-hint-dim">{{ h.dimension }}</span>
+            <span class="att-hint-sep" aria-hidden="true">·</span>
+            <span class="att-hint-course">{{ h.course }}</span>
+            <span v-if="h.percentile != null" class="att-hint-pct">本人该课分位 {{ h.percentile }}</span>
+            <span v-else class="att-hint-pct is-missing">本人分位未记录</span>
+          </span>
+        </div>
+        <div v-else class="att-empty-inline att-empty-slim">
+          <span>暂无该维度数据</span>
+        </div>
+      </section>
+
       <section class="att-courses">
         <div class="att-sec-head">
           <span class="att-sec-title">课程归因</span>
@@ -129,9 +176,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import http from '../../api/http'
+import echarts from '../../utils/echarts'
 
 const props = defineProps({
   sessionId: { type: Number, required: true }
@@ -160,6 +208,116 @@ const sharePct = computed(() => {
   if (v == null) return null
   return Math.round(Math.min(1, Math.max(0, v)) * 100)
 })
+
+// ---- 同题型趋势：后端 trend = [{sid, as_of, type, score}]（场次 × 题型，平铺） ----
+// 按场次聚成一个点：同一场多个题型的分数取平均。score 不是有限数字的条目直接丢弃，
+// 缺失或全空时 trendPoints 为空，界面显示「暂无该维度数据」，不画 0。
+const trendRef = ref(null)
+let trendChart = null
+const trendPoints = computed(() => {
+  const raw = data.value?.trend
+  if (!Array.isArray(raw)) return []
+  const bySid = new Map()
+  for (const row of raw) {
+    const sid = row?.sid
+    const score = numOf(row?.score)
+    if (sid === null || sid === undefined || sid === '' || score == null) continue
+    const key = String(sid)
+    if (!bySid.has(key)) {
+      bySid.set(key, { sid: key, asOf: dayOf(row.as_of), scores: [] })
+    }
+    bySid.get(key).scores.push(score)
+  }
+  // 时间升序（旧 → 新）；时间相同或缺失时按场次编号升序，保证同输入同顺序
+  return [...bySid.values()]
+    .map((p) => ({ sid: p.sid, asOf: p.asOf, score: Math.round((sum(p.scores) / p.scores.length) * 10) / 10 }))
+    .sort((a, b) => String(a.asOf || '').localeCompare(String(b.asOf || '')) || a.sid.localeCompare(b.sid))
+})
+// 是否发生过「同一场多个题型取均值」——发生过才显示说明，没发生不啰嗦
+const trendAveraged = computed(() => {
+  const raw = data.value?.trend
+  if (!Array.isArray(raw)) return false
+  const countBySid = new Map()
+  for (const row of raw) {
+    const key = String(row?.sid)
+    countBySid.set(key, (countBySid.get(key) || 0) + 1)
+  }
+  return [...countBySid.values()].some((n) => n > 1)
+})
+const trendAria = computed(() => {
+  if (!trendPoints.value.length) return '同题型得分趋势：暂无数据'
+  const parts = trendPoints.value.map((p) => `${p.asOf || '时间未记录'} 得 ${p.score} 分`)
+  return `同题型得分趋势折线图，最近 ${trendPoints.value.length} 场，由早到晚：${parts.join('，')}`
+})
+
+// ---- 相关课程：后端 course_hint = [{dimension, course, percentile}] ----
+// percentile 缺失时保留 null，标签上如实写「未记录」，不补 0
+const courseHints = computed(() => {
+  const raw = data.value?.course_hint
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((h) => h && String(h.dimension || '').trim() && String(h.course || '').trim())
+    .map((h) => ({
+      dimension: String(h.dimension).trim(),
+      course: String(h.course).trim(),
+      percentile: numOf(h.percentile),
+    }))
+})
+
+function dayOf(value) {
+  // 后端给的是 'YYYY-MM-DD HH:MM:SS' 或 'YYYY-MM-DD'，只取日期部分；非法值返回空串
+  const text = String(value || '')
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : ''
+}
+
+function sum(list) {
+  return list.reduce((acc, n) => acc + n, 0)
+}
+
+function renderTrend() {
+  const points = trendPoints.value
+  if (!points.length || !trendRef.value) return
+  const chart = ensureTrendChart()
+  if (!chart) return
+  chart.setOption({
+    animation: false,
+    grid: { left: 8, right: 16, top: 14, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#111827',
+      borderColor: 'rgba(148, 163, 184, 0.35)',
+      textStyle: { color: '#e5e7eb', fontSize: 12 },
+      formatter: (params) => {
+        const p = params?.[0]
+        const hit = points[p?.dataIndex]
+        return hit ? `${hit.asOf || '时间未记录'}<br/>同题型得分：${hit.score}` : ''
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: points.map((p) => p.asOf || '—'),
+      axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.3)' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#9ca3af', fontSize: 10.5, interval: 0 }
+    },
+    yAxis: {
+      type: 'value',
+      // 纵轴固定 0~100：分数的量程是确定的，不随数据伸缩，避免 2 个相近分数看起来像陡崖
+      min: 0, max: 100,
+      splitNumber: 2,
+      axisLabel: { color: '#6b7280', fontSize: 10.5 },
+      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.14)' } }
+    },
+    series: [{
+      type: 'line',
+      data: points.map((p) => p.score),
+      symbol: 'circle', symbolSize: 7,
+      lineStyle: { color: '#3b82f6', width: 2 },
+      itemStyle: { color: '#3b82f6', borderColor: '#0d1117', borderWidth: 2 },
+      label: { show: true, color: '#e5e7eb', fontSize: 11, position: 'top' }
+    }]
+  }, true)
+}
 
 const typeStyle = computed(() => ({
   color: tone.value.color,
@@ -235,8 +393,52 @@ watch(
   },
   { immediate: true }
 )
-</script>
 
+// 趋势图：数据变化后等 DOM 更新（容器是 v-if 控制的）再初始化 / 重绘
+watch(trendPoints, async () => {
+  await nextTick()
+  renderTrend()
+})
+
+// 图表是 v-if 控制的：数据清空时容器已被移除，旧实例要销毁，否则下次会挂到失效的节点上
+watch(() => trendPoints.value.length, (len) => {
+  if (len === 0 && trendChart) disposeTrendChart()
+})
+
+function resizeTrend() {
+  trendChart?.resize()
+}
+
+window.addEventListener('resize', resizeTrend)
+
+// 本组件可能挂在 v-show 隐藏的工位里（宽度为 0）。用 ResizeObserver 盯住容器：
+// 图表在 0 宽度下初始化后，等工位切出来、容器有了尺寸，再自动重绘一次。
+let trendObserver = null
+
+function ensureTrendChart() {
+  if (!trendRef.value) return null
+  if (!trendChart) {
+    trendChart = echarts.init(trendRef.value)
+    if (typeof ResizeObserver !== 'undefined') {
+      trendObserver = new ResizeObserver(() => trendChart?.resize())
+      trendObserver.observe(trendRef.value)
+    }
+  }
+  return trendChart
+}
+
+function disposeTrendChart() {
+  trendObserver?.disconnect()
+  trendObserver = null
+  trendChart?.dispose()
+  trendChart = null
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeTrend)
+  disposeTrendChart()
+})
+</script>
 <style scoped>
 .att {
   --att-bg: #0d1117;
@@ -358,6 +560,34 @@ watch(
 
 /* ---------------- 课程卡 ---------------- */
 .att-courses { margin-top: 16px; }
+
+/* ---------------- 同题型趋势 ---------------- */
+.att-trend, .att-hints { margin-top: 16px; }
+.att-trend-body { position: relative; }
+.att-trend-chart { width: 100%; height: 132px; }
+.att-trend-list {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 0; padding: 0; list-style: none;
+}
+.att-trend-list li { display: inline-flex; align-items: baseline; gap: 6px; font-size: 11.5px; }
+.att-trend-date { color: #6b7280; font-variant-numeric: tabular-nums; }
+.att-trend-score { color: #e5e7eb; font-weight: 650; }
+.att-trend-note { margin: 6px 0 0; color: #6b7280; font-size: 11.5px; }
+/* 空态比「课程归因」的更矮：这里只是一行说明，不需要 16px 内边距的大块 */
+.att-empty-slim { padding: 10px 14px; }
+.att-empty-slim span { color: #9ca3af; }
+
+/* ---------------- 相关课程 ---------------- */
+.att-hint-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.att-hint {
+  display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 5px;
+  padding: 5px 12px; border: 1px solid rgba(59, 130, 246, 0.28); border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1); font-size: 12px; line-height: 1.6;
+}
+.att-hint-dim { color: #f3f4f6; font-weight: 600; }
+.att-hint-sep { color: #6b7280; }
+.att-hint-course { color: #bfdbfe; }
+.att-hint-pct { color: #93c5fd; font-variant-numeric: tabular-nums; }
+.att-hint-pct.is-missing { color: #6b7280; }
 
 .att-sec-head {
   display: flex;

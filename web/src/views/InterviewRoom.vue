@@ -196,6 +196,32 @@
             <el-option v-for="j in jobs" :key="j.id" :value="j.id"
               :label="`${j.title} · ${j.company || ''} · ${j.city || ''}`" />
           </el-select>
+
+          <!-- 模式三档：选中的 mode 随 start 请求一起发给后端，出题节奏由后端决定 -->
+          <div class="mode-field" role="radiogroup" aria-label="面试模式">
+            <div class="mode-field-head">
+              <span class="field-label">面试模式</span>
+              <span class="mode-field-note">影响出题节奏与点评语气，不影响评分口径</span>
+            </div>
+            <div class="mode-grid">
+              <button
+                v-for="mode in MODES" :key="mode.value" type="button"
+                class="mode-card" :class="{ active: interviewMode === mode.value }"
+                role="radio" :aria-checked="interviewMode === mode.value"
+                :disabled="starting" @click="interviewMode = mode.value"
+              >
+                <span class="mode-card-top">
+                  <b>{{ mode.label }}</b>
+                  <i class="mode-check" aria-hidden="true"></i>
+                </span>
+                <span class="mode-card-desc">{{ mode.desc }}</span>
+                <span class="mode-card-tags">
+                  <span v-for="tag in mode.tags" :key="tag">{{ tag }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+
           <el-button type="primary" class="start-button" :loading="starting" :disabled="!jobId || !resume"
             @click="startInterview">开始模拟面试</el-button>
           <div v-if="!resume" class="muted mt8">还没有简历：请先在「我的简历」页录入</div>
@@ -217,10 +243,32 @@
                   class="probe-tag">追问</el-tag>
               </span>
               <el-tag size="small">{{ jobTitle }}</el-tag>
+              <!-- 本场模式徽标：只认接口返回的 mode_label，缺失就不显示，不用前端选项名冒充 -->
+              <el-tag v-if="session.modeLabel" size="small" effect="plain" class="mode-badge"
+                :type="session.mode === 'stress' ? 'danger' : session.mode === 'easy' ? 'success' : 'info'">
+                本场：{{ session.modeLabel }}
+              </el-tag>
+              <el-button size="small" class="end-button" :loading="abandoning" :disabled="abandoning || answering"
+                @click="confirmAbandon">结束本场</el-button>
             </div>
           </template>
           <div class="progress-heading">
             <span>练习进度</span><b>第 {{ session.round }} / {{ session.total }} 题</b>
+            <span v-if="currentClock" class="question-clock" aria-label="本题已用时">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 1.5M9 2h6" /></svg>
+              本题已用 {{ currentClock }}
+            </span>
+            <!-- 压力模式单题倒计时：仅前端提示，归零不自动提交、不自动跳题 -->
+            <span v-if="countdownVisible" class="countdown" :class="{ 'is-low': countdownLeft <= COUNTDOWN_LOW, 'is-up': countdownUp }"
+              role="timer" aria-live="off"
+              :aria-label="countdownUp ? '时间到，仍可继续作答' : `本题建议用时剩余 ${countdownLeft} 秒`">
+              <svg class="countdown-ring" viewBox="0 0 36 36" aria-hidden="true">
+                <circle class="ring-track" cx="18" cy="18" r="15.9" />
+                <circle class="ring-value" cx="18" cy="18" r="15.9"
+                  :stroke-dasharray="`${countdownArc} ${COUNTDOWN_CIRC}`" />
+              </svg>
+              <span class="countdown-text">{{ countdownUp ? '时间到，仍可继续作答' : `剩余 ${countdownLeft} 秒` }}</span>
+            </span>
           </div>
           <el-progress :percentage="Math.round(((session.round - 1) / session.total) * 100)"
             :stroke-width="8" :show-text="false" class="iv-progress" />
@@ -255,9 +303,27 @@
             </template>
           </div>
           <label class="field-label" for="interview-answer">你的回答</label>
-          <el-input id="interview-answer" v-model="answerText" type="textarea" :rows="6" :maxlength="2000"
+          <el-input id="interview-answer" v-model="answerText" type="textarea" :rows="6" :maxlength="VOICE_MAX_CHARS"
             show-word-limit resize="vertical" aria-describedby="answer-hint"
+            :disabled="answering || voice.listening"
             placeholder="试着按 STAR 结构组织：背景是什么、目标是什么、你采取了哪些行动、结果如何？" />
+          <!-- 语音作答：识别文本实时追加到上面的输入框，已打字的内容原样保留 -->
+          <div class="voice-bar">
+            <button type="button" class="voice-btn" :class="{ 'is-recording': voice.listening }"
+              :disabled="!voiceSupported || answering" @click="toggleVoice"
+              :aria-pressed="voice.listening">
+              <span class="voice-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+              </span>
+              <span class="voice-label">{{ voice.listening ? '停止录音' : '开始录音' }}</span>
+              <span v-if="voice.listening" class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            </button>
+            <span v-if="voice.listening" class="voice-status" role="status" aria-live="polite">
+              正在听你说，识别到的内容会接在已写内容后面
+            </span>
+            <span v-else-if="!voiceSupported" class="voice-status is-muted">{{ voiceUnsupportedHint }}</span>
+            <span v-else class="voice-status is-muted">可以边说边打字，识别内容会追加在后面</span>
+          </div>
           <div id="answer-hint" class="input-hint">尽量写清你亲自采取的行动和可验证的结果。暂时没有思路时，也可以跳过——卡住约 45 秒，小航会在旁边递一句提示。</div>
           <div class="mt8 head-row">
             <el-button type="primary" :loading="answering" :disabled="answering || !answerText.trim()"
@@ -266,16 +332,54 @@
           </div>
         </el-card>
 
-        <el-card v-if="lastComment && !report" shadow="never" class="block-card bento-span-2 cap-body">
+        <!-- 点评卡：始终在场，形成「答 → 看点评 → 下一题」的节奏。
+             提交后进入等待态（骨架屏），点评渲染完「下一题」才出现并贴在卡片底部，
+             不会和「提交回答」同时可点。 -->
+        <el-card v-if="session && !report" shadow="never" class="block-card bento-span-2 cap-body comment-card"
+          :class="{ 'is-waiting': commentPending }">
           <template #header>
-            <div class="head-row"><span class="card-title">上一题点评</span>
-              <el-tag size="small" :type="lastComment.version === 'comment-fallback-v1' ? 'info' : 'success'">
-                {{ lastComment.version === 'comment-fallback-v1' ? '模板点评' : 'AI 点评·引文已校验' }}
-              </el-tag>
-              <el-tag v-if="lastComment.score != null" size="small" type="warning">{{ lastComment.score }} 分</el-tag>
+            <div class="head-row">
+              <span class="card-title">上一题点评</span>
+              <template v-if="lastComment && !commentPending">
+                <el-tag size="small" :type="lastComment.version === 'comment-fallback-v1' ? 'info' : 'success'">
+                  {{ lastComment.version === 'comment-fallback-v1' ? '模板点评' : 'AI 点评·引文已校验' }}
+                </el-tag>
+                <el-tag v-if="lastComment.score != null" size="small" type="warning">{{ lastComment.score }} 分</el-tag>
+                <el-tag v-if="lastComment.elapsed" size="small" type="info" effect="plain">用时 {{ lastComment.elapsed }}</el-tag>
+              </template>
             </div>
           </template>
-          <div class="comment">{{ lastComment.text }}</div>
+
+          <!-- 等待态：点评请求进行中 -->
+          <div v-if="commentPending" class="comment-waiting" role="status" aria-live="polite">
+            <div class="skeleton-block" aria-hidden="true"></div>
+            <div class="skeleton-block is-short" aria-hidden="true"></div>
+            <p class="waiting-text">
+              <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              面试官正在看你的回答…
+            </p>
+          </div>
+
+          <!-- 错误态：不把后端原文案丢给学生，给一句人话 + 可执行的动作 -->
+          <div v-else-if="commentError" class="comment-error" role="alert">
+            <p>{{ commentError.text }}</p>
+            <div class="comment-error-actions">
+              <el-button v-if="commentError.action === 'reload'" size="small" type="primary" @click="reloadPage">刷新页面</el-button>
+              <el-button v-else size="small" type="primary" @click="retryLastAction">重试</el-button>
+            </div>
+          </div>
+
+          <!-- 空态：本题还没提交 -->
+          <div v-else-if="!lastComment" class="comment-empty">提交回答后，面试官会在这里给出点评。</div>
+
+          <!-- 点评正文 + 底部「下一题」 -->
+          <template v-else>
+            <div class="comment">{{ lastComment.text }}</div>
+            <div class="comment-footer">
+              <span class="comment-footer-hint">看完点评再继续</span>
+              <el-button type="primary" @click="goNextQuestion">下一题</el-button>
+            </div>
+          </template>
         </el-card>
 
         <el-card v-if="report" shadow="never" class="block-card bento-span-4 report-card">
@@ -400,10 +504,10 @@
           </p>
         </el-card>
 
-        <!-- 动态跨列补空位：无点评时与答题卡并排，有点评时占满整行；
-             空闲时与「选择目标岗位开局」并排（历史场次始终同屏可见） -->
+        <!-- 动态跨列补空位：无答题卡时与「选择目标岗位开局」并排（历史场次始终同屏可见）。
+             有答题卡时它和常驻的点评卡各占半宽，历史卡落到下一行占满整行 -->
         <el-card shadow="never" class="block-card"
-          :class="session && lastComment ? 'bento-span-4' : 'bento-span-2'">
+          :class="session ? 'bento-span-4' : 'bento-span-2'">
           <template #header><span class="card-title">历史场次</span></template>
           <!-- 这张表在半宽卡片里，7 列必然横向溢出（操作列被裁）。
                合并成 4 列：场次 / 岗位 / 结果（状态 + 分数 + 进度）/ 操作。
@@ -440,8 +544,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus/es/components/message/index.mjs'
+import { ElMessageBox } from 'element-plus/es/components/message-box/index.mjs'
 import http from '../api/http'
 import { useIdleHint } from '../composables/useIdleHint'
 
@@ -474,11 +580,48 @@ const jobTitle = ref('')
 const answerText = ref('')
 const answering = ref(false)
 const starting = ref(false)
+
+// ---- 面试模式：三档，选中的 mode 随 start 请求发给后端，出题节奏由后端决定 ----
+// tags 是给学生看的说明；真正的抗压题 / 追问 / 点评语气都由后端按 mode 处理，前端只负责选择与展示。
+const MODES = [
+  { value: 'easy', label: '轻松', desc: '先适应流程，不怕答不好',
+    tags: ['去掉抗压题', '追问少', '点评多鼓励'] },
+  { value: 'standard', label: '标准', desc: '贴近常见面试的节奏',
+    tags: ['常规抗压题', '常规追问', '点评均衡'] },
+  { value: 'stress', label: '压力', desc: '模拟高压面，练临场反应',
+    tags: ['抗压题提前', '追问紧', '点评直接'] },
+]
+const interviewMode = ref('standard')
+
+// ---- 压力模式单题倒计时：仅前端提示用 ----
+// 90 秒只是给学生的节奏提示：到点不会自动提交，也不会自动跳题，学生仍可继续作答。
+// 这个数字不发给后端、不参与评分，后端也没有「答题限时」的口径，所以写死在前端。
+const STRESS_COUNTDOWN_SEC = 90
+const COUNTDOWN_LOW = 15                        // 剩余不足 15 秒转为警示色
+const COUNTDOWN_CIRC = 2 * Math.PI * 15.9155    // 环形进度条周长（r=15.9155，与模板里的 r 对应）
+const countdownLeft = ref(0)
+const countdownUp = ref(false)                  // 归零：显示「时间到，仍可继续作答」，倒计时停止
+const countdownVisible = computed(() => (
+  session.value?.mode === 'stress' && !report.value && !answering.value
+))
+const countdownArc = computed(() => (COUNTDOWN_CIRC * countdownLeft.value) / STRESS_COUNTDOWN_SEC)
 const lastComment = ref(null)
 const report = ref(null)
 const evaluation = ref({})
 const history = ref([])
 const openingSession = ref(null)
+
+// ---- 面试节奏：答 → 看点评 → 下一题 ----
+// 提交接口一次性返回「点评 + 下一题」。为了不让学生看到点评时题目已经跳走，
+// 下一题先暂存到 pendingNext，点「下一题」才真正换题并开始计时。
+const router = useRouter()
+const commentPending = ref(false)     // 点评请求进行中（骨架屏）
+const commentError = ref(null)        // { text, action: 'retry' | 'reload' } | null
+const pendingNext = ref(null)         // 已取回但尚未展示的下一题
+const questionStartedAt = ref(null)   // 当前题开始作答的时间戳（毫秒）
+const questionClock = ref(0)           // 当前题已用秒数，仅驱动界面上的走时显示
+const abandoning = ref(false)
+let clockTimer = null
 const resumeTemplates = [
   { id: 'campus', name: '应届生校招', description: '适合在校生 / 应届生，强调课程项目、实习和校园实践。',
     content: '【基本信息】姓名｜电话｜邮箱｜求职意向\n【教育经历】学校｜专业｜学历｜起止时间\n主修课程：\n【项目 / 实习经历】项目名称｜角色｜时间\n背景与目标：\n个人行动：\n结果与证据（只填真实数据）：\n【技能与证书】\n【自我评价】' },
@@ -560,6 +703,229 @@ watch(answerText, (text) => {
 // 历史场次的状态由引擎返回英文枚举，界面统一译成中文
 const STATUS_LABELS = { ongoing: '进行中', finished: '已完成', aborted: '已中止', pending: '待开始' }
 const statusText = (status) => STATUS_LABELS[status] || status || '—'
+
+// ---- 单题计时：题目出现即开始，提交时停表。纯前端展示，不参与任何评分 ----
+function formatClock(totalSeconds) {
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const mm = String(Math.floor(safe / 60)).padStart(2, '0')
+  const ss = String(safe % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+// 开表：走时与压力模式倒计时共用同一个定时器，避免两个 interval 各走各的产生漂移
+function startQuestionClock() {
+  stopQuestionClock()
+  questionStartedAt.value = Date.now()
+  questionClock.value = 0
+  // 倒计时只在压力模式走；其余模式归零、不启动
+  countdownUp.value = false
+  countdownLeft.value = session.value?.mode === 'stress' ? STRESS_COUNTDOWN_SEC : 0
+  clockTimer = setInterval(() => {
+    if (questionStartedAt.value) {
+      questionClock.value = Math.floor((Date.now() - questionStartedAt.value) / 1000)
+      tickCountdown()
+    }
+  }, 1000)
+}
+
+// 倒计时走一步。归零后置 countdownUp 并停止递减：此后只是提示，绝不自动提交、不自动跳题。
+function tickCountdown() {
+  if (countdownUp.value || countdownLeft.value <= 0) return
+  const next = countdownLeft.value - 1
+  if (next <= 0) {
+    countdownLeft.value = 0
+    countdownUp.value = true
+    ElMessage.info('时间到，仍可继续作答')
+  } else {
+    countdownLeft.value = next
+  }
+}
+
+// 停表并返回本题用时（mm:ss）；从没开过表就返回 null，不显示假 00:00
+function stopQuestionClock() {
+  if (clockTimer) {
+    clearInterval(clockTimer)
+    clockTimer = null
+  }
+  const started = questionStartedAt.value
+  questionStartedAt.value = null
+  if (!started) return null
+  return formatClock((Date.now() - started) / 1000)
+}
+
+// 当前题走时：没开表返回空串，界面上不显示
+const currentClock = computed(() => (questionStartedAt.value ? formatClock(questionClock.value) : ''))
+
+// ---- 错误文案映射：把后端的错误码 / 文案翻译成学生看得懂的话 ----
+// 每条给出「发生了什么」和「接下来能做什么」；action 决定点评卡里出现哪个按钮。
+// 未命中任何规则的错误一律落到网络提示，绝不把后端原文案直接丢到页面上。
+const ERROR_MESSAGES = [
+  { test: (e) => e?.response?.status === 401,
+    text: '登录已过期，请重新登录后再继续。', action: 'reload' },
+  { test: (e) => /轮次已变化|round.*(changed|mismatch)/i.test(e?.response?.data?.detail || ''),
+    text: '页面数据已更新，请刷新后继续。', action: 'reload' },
+  { test: (e) => e?.response?.status === 409 && /已结束|finished/i.test(e?.response?.data?.detail || ''),
+    text: '这场面试已经结束，正在为你加载评估报告。', action: 'reload' },
+  { test: (e) => e?.response?.status === 409 && /最后一题|last/i.test(e?.response?.data?.detail || ''),
+    text: '这已经是最后一题了，刷新后即可查看评估报告。', action: 'reload' },
+  { test: (e) => e?.response?.status === 409,
+    text: '页面数据已更新，请刷新后继续。', action: 'reload' },
+  { test: (e) => e?.response?.status === 403,
+    text: '你没有访问这场面试的权限，请回到面试列表重新进入。', action: 'reload' },
+  { test: (e) => e?.response?.status === 404,
+    text: '没有找到这场面试，可能已被清理，请回到面试列表重新开始。', action: 'reload' },
+  { test: (e) => e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message || ''),
+    text: '面试官这次想得有点久，你的回答还在，可以再提交一次。', action: 'retry' },
+  { test: (e) => !e?.response,
+    text: '网络似乎不稳定，请重试', action: 'retry' },
+]
+const FALLBACK_ERROR = { text: '网络似乎不稳定，请重试', action: 'retry' }
+
+function friendlyError(err) {
+  const hit = ERROR_MESSAGES.find((rule) => {
+    try { return rule.test(err) } catch { return false }
+  })
+  return hit ? { text: hit.text, action: hit.action } : { ...FALLBACK_ERROR }
+}
+
+// ---- 语音作答：浏览器原生 Web Speech API，不引入任何依赖 ----
+// 与 ExpressionLab 的区别：那边录音结束用识别结果「替换」整段文本；
+// 这里要「追加」——学生已经打的字原样保留，识别内容接在后面。
+// 做法：开始录音时记下 base = 当前答案，之后每次回调都把输入框设为 base + 本次识别文本。
+// interim 结果会反复刷新，用「重设整段」而不是「往后拼」才不会重复追加。
+const SpeechCtor = typeof window === 'undefined'
+  ? null
+  : (window.SpeechRecognition || window.webkitSpeechRecognition)
+// 与项目里 useVoice.js 同一口径：语音识别要求「有接口 + 安全上下文（HTTPS 或 localhost）」。
+// 非安全上下文下浏览器虽然暴露了构造函数，但 start() 必然报 not-allowed，提前判掉更诚实。
+const voiceSecure = typeof window === 'undefined' ? true : window.isSecureContext !== false
+const voiceSupported = Boolean(SpeechCtor) && voiceSecure
+// 答案字数上限：与输入框 maxlength 共用同一个常量，语音追加时同样不越过这条线
+const VOICE_MAX_CHARS = 2000
+const voiceUnsupportedHint = !SpeechCtor
+  ? '当前浏览器不支持语音，请打字作答'
+  : (!voiceSecure ? '语音作答需要 HTTPS 环境，当前请打字作答' : '')
+
+const voice = ref({ listening: false })
+let voiceRec = null          // 当前识别实例
+let voiceBase = ''           // 开始录音时的答案文本
+let voiceFinal = ''          // 本次录音已确定的识别文本
+let voiceInterim = ''        // 本次录音临时的识别文本
+let voiceStopRequested = false   // 学生主动点了停止（用于区分自动 onend 的续录）
+
+// 把「base + 本次识别」写回输入框。超过字数上限时不再追加，避免把已有内容挤掉。
+function applyVoiceText() {
+  const recognized = voiceFinal + voiceInterim
+  const needsGap = voiceBase && !/\s$/.test(voiceBase) && recognized
+  const next = voiceBase + (needsGap ? ' ' : '') + recognized
+  answerText.value = next.slice(0, VOICE_MAX_CHARS)
+}
+
+function handleVoiceResult(event) {
+  voiceInterim = ''
+  for (let i = event.resultIndex; i < event.results.length; i += 1) {
+    const result = event.results[i]
+    const piece = String(result?.[0]?.transcript || '')
+    if (!piece) continue
+    if (result.isFinal) voiceFinal += piece
+    else voiceInterim += piece
+  }
+  applyVoiceText()
+}
+
+function handleVoiceError(event) {
+  const code = event?.error || ''
+  if (code === 'not-allowed' || code === 'service-not-allowed') {
+    ElMessage.warning('麦克风权限被拒绝：请在地址栏的权限设置里允许麦克风后重试，或直接打字作答')
+  } else if (code === 'audio-capture') {
+    ElMessage.warning('没有找到可用的麦克风，请直接打字作答')
+  } else if (code === 'network') {
+    ElMessage.warning('语音识别服务网络异常，已说的内容已保留，可以打字继续')
+  } else if (code === 'aborted') {
+    // 主动停止会触发 aborted，属正常流程，不提示
+  } else if (code === 'no-speech') {
+    ElMessage.info('没有听到声音，可以再试一次或直接打字')
+  }
+  // 其余错误码不逐个解释：识别已中断，已有文本保留，提示一句即可
+}
+
+function releaseVoiceRec() {
+  const current = voiceRec
+  voiceRec = null
+  if (!current) return
+  current.onresult = null
+  current.onerror = null
+  current.onend = null
+}
+
+function handleVoiceEnd() {
+  // 学生没有主动停止、且页面仍在录音状态：Chrome 单段识别约 60 秒会自动结束，这里续录
+  if (!voiceStopRequested && voice.value.listening && voiceRec) {
+    try {
+      voiceRec.start()
+      return
+    } catch {
+      /* 已在运行时 start 会抛错，落到下面按结束处理 */
+    }
+  }
+  // 结束：最终文本已通过 applyVoiceText 写入输入框，原样保留，不做清空
+  releaseVoiceRec()
+  voice.value.listening = false
+  voiceFinal = ''
+  voiceInterim = ''
+  voiceBase = ''
+}
+
+function startVoice() {
+  if (!voiceSupported || voice.value.listening) return
+  let instance
+  try {
+    instance = new SpeechCtor()
+  } catch {
+    ElMessage.error('当前浏览器无法启动语音识别，请打字作答')
+    return
+  }
+  instance.lang = 'zh-CN'
+  instance.continuous = true
+  instance.interimResults = true
+  instance.onresult = handleVoiceResult
+  instance.onerror = handleVoiceError
+  instance.onend = handleVoiceEnd
+
+  voiceBase = answerText.value
+  voiceFinal = ''
+  voiceInterim = ''
+  voiceStopRequested = false
+  voiceRec = instance
+  try {
+    instance.start()
+  } catch {
+    releaseVoiceRec()
+    ElMessage.error('麦克风启动失败，请检查浏览器权限后重试，或直接打字作答')
+    return
+  }
+  voice.value.listening = true
+}
+
+function stopVoice() {
+  if (!voice.value.listening) return
+  voiceStopRequested = true
+  const current = voiceRec
+  if (!current) {
+    handleVoiceEnd()
+    return
+  }
+  try {
+    current.stop()
+  } catch {
+    handleVoiceEnd()
+  }
+}
+
+function toggleVoice() {
+  if (voice.value.listening) stopVoice()
+  else startVoice()
+}
 
 // 报告页的题目出处表：题库题给链接，模板题明确标注，不含糊
 const reportSources = computed(() => (report.value && report.value.sources) || [])
@@ -702,19 +1068,24 @@ async function startInterview() {
   starting.value = true
   try {
     const { data } = await http.post('/interview/start', {
-      job_id: jobId.value, job_pool: jobPool.value
+      job_id: jobId.value, job_pool: jobPool.value, mode: interviewMode.value
     })
     const job = jobs.value.find((j) => j.id === jobId.value)
     jobTitle.value = job ? job.title : ''
+    // mode 以接口回传为准；mode_label 缺失时为 null，徽标不显示（不用前端选项名冒充）
     session.value = { round: data.round, total: data.total_rounds, question: data.question,
       type: data.question_type, label: data.question_label, id: data.session_id,
       source: data.source || null, isProbe: false,
-      personalized: data.personalized || null }
+      personalized: data.personalized || null,
+      mode: data.mode || interviewMode.value, modeLabel: data.mode_label || null }
     report.value = null
     evaluation.value = {}
     lastComment.value = null
+    pendingNext.value = null
+    commentError.value = null
     answerText.value = ''
     diagnosis.value = null
+    startQuestionClock()   // 题目出现即开始计时
   } finally {
     starting.value = false
   }
@@ -722,38 +1093,81 @@ async function startInterview() {
 
 // 提交/跳过共用入口：expected_round 取当前展示题号（1-based），服务端据此拒绝双击或
 // 旧页面的过期请求（409）。answering 同时承担按钮 loading 与函数级防重入，先于任何 await 置位。
-async function submitAnswer(real) {
-  if (answering.value) return
+// 流程：停表 → 请求（期间点评区是骨架屏）→ 只展示点评，下一题暂存，等学生点「下一题」。
+// retryElapsed：出错重试时传入首次提交停表得到的用时（那时表已停，重试不能再停一次）
+async function submitAnswer(real, retryElapsed = null) {
+  if (answering.value || commentPending.value || pendingNext.value) return
   const sid = session.value?.id
   const expectedRound = session.value?.round
   if (!sid || !expectedRound) return
+  // 录音中点提交：先停录音。输入框里已是「已打字 + 已识别」的全部内容，按所见提交。
+  if (voice.value.listening) stopVoice()
+  const submittedText = real ? answerText.value : null
+  const elapsed = retryElapsed || stopQuestionClock()   // 提交即停表
   answering.value = true
+  commentPending.value = true
+  commentError.value = null
   try {
     const { data } = await http.post(`/interview/${sid}/answer`,
-      { text: real ? answerText.value : null, expected_round: expectedRound })
+      { text: submittedText, expected_round: expectedRound })
     if (data.finished) {
+      commentPending.value = false
       report.value = data
       evaluation.value = data.evaluation || {}
       session.value = null
+      lastComment.value = null
+      pendingNext.value = null
       await loadHistory()
       return
     }
-    lastComment.value = { text: data.comment, score: data.score, version: data.comment_version }
-    session.value = { ...session.value, round: data.next.round, question: data.next.question,
+    // 接口若回传用时则优先用它的，否则用前端停表结果
+    lastComment.value = { text: data.comment, score: data.score, version: data.comment_version,
+      elapsed: data.elapsed_time || data.elapsed || elapsed }
+    pendingNext.value = { ...session.value, round: data.next.round, question: data.next.question,
       type: data.next.question_type, source: data.next.source || null,
       total: data.total_rounds || session.value.total,
       isProbe: !!data.next.is_probe, probeOf: data.next.probe_of || null }
     if (data.probed) ElMessage.info('这道题答得比较浅，面试官追加了一道追问')
     answerText.value = ''
   } catch (e) {
+    // 冲突：服务端已不在我们以为的那一轮，按 GET 的真实状态恢复，不让用户猜是否提交成功
     if (e?.response?.status === 409) {
-      // 冲突：服务端已不在我们以为的那一轮，按 GET 的真实状态恢复，不让用户猜是否提交成功
+      commentPending.value = false
       await recoverFromConflict(sid, expectedRound)
+      return
     }
-    // 普通网络错误 / 5xx：拦截器已提示，原样保留未提交答案与当前题，不做任何复位
+    // 其它错误：点评区显示人话 + 重试按钮；未提交的答案原样保留
+    commentPending.value = false
+    commentError.value = {
+      ...friendlyError(e),
+      retry: () => submitAnswer(real, elapsed || null),
+    }
+    answerText.value = real ? (answerText.value || submittedText || '') : answerText.value
   } finally {
     answering.value = false
   }
+}
+
+function retryLastAction() {
+  const retry = commentError.value?.retry
+  commentError.value = null
+  if (retry) retry()
+}
+
+function reloadPage() {
+  window.location.reload()
+}
+
+// 「下一题」：把暂存的下一题真正换上来，并开始新一题的计时
+function goNextQuestion() {
+  const next = pendingNext.value
+  if (!next) return
+  if (voice.value.listening) stopVoice()   // 换题前收尾录音，避免旧识别回调把内容写进新题
+  session.value = next
+  pendingNext.value = null
+  commentError.value = null
+  answerText.value = ''
+  startQuestionClock()
 }
 
 // 409 恢复：以 GET /interview/{sid} 为准。服务器确实推进了才清掉过期答案；
@@ -766,6 +1180,7 @@ async function recoverFromConflict(sid, expectedRound) {
     if (data.session?.['状态'] === 'ongoing') {
       const next = data.outline?.[completed]
       if (!next) {
+        commentError.value = { text: '页面数据已更新，请刷新后继续。', action: 'reload' }
         ElMessage.warning('冲突已确认，但暂时无法恢复本题，请刷新页面后重试（答案已保留）')
         return
       }
@@ -775,10 +1190,15 @@ async function recoverFromConflict(sid, expectedRound) {
         total: data.session['最大轮次'] || data.outline.length,
         question: next.question, type: next.type, label: labelOf(next.type),
         source: next.source || null, isProbe: !!next.probe_of, probeOf: next.probe_of || null,
+        mode: data.mode || 'standard', modeLabel: data.mode_label || null,
       }
+      // 从服务器恢复：前端没有这道题的开始时间，用时如实留空（elapsed 不给）
       lastComment.value = previous?.点评
-        ? { text: previous['点评'], score: previous['评分'], version: previous['点评版本'] }
+        ? { text: previous['点评'], score: previous['评分'], version: previous['点评版本'], elapsed: null }
         : null
+      pendingNext.value = null
+      commentError.value = null
+      startQuestionClock()   // 恢复出来的题从此刻重新计时
       if (serverRound > expectedRound) {
         answerText.value = ''
         ElMessage.success(`刚才的回答已提交，已同步到第 ${serverRound} 题，请作答新题`)
@@ -806,12 +1226,17 @@ async function recoverFromConflict(sid, expectedRound) {
     evaluation.value = eva
     session.value = null
     lastComment.value = null
+    pendingNext.value = null
+    commentError.value = null
+    stopQuestionClock()
     answerText.value = ''
     jobTitle.value = data.session['岗位名称'] || jobTitle.value
     ElMessage.success('本场面试已结束，已为你加载评估报告，可在逐题复盘中核对刚才的回答是否已计入')
     await loadHistory()
   } catch {
-    // 恢复本身失败（网络等）：保留当前题与未提交答案，提示手动刷新
+    // 恢复本身失败（网络等）：保留当前题与未提交答案，点评区给出可执行的下一步
+    stopQuestionClock()
+    commentError.value = { text: '页面数据已更新，请刷新后继续。', action: 'reload' }
     ElMessage.warning('冲突状态恢复失败，未提交答案已保留，请刷新页面后重试')
   }
 }
@@ -839,13 +1264,18 @@ async function openHistory(row) {
         total: data.session['最大轮次'] || data.outline.length,
         question: next.question, type: next.type, label: labelOf(next.type),
         source: next.source || null, isProbe: !!next.probe_of, probeOf: next.probe_of || null,
+        mode: data.mode || 'standard', modeLabel: data.mode_label || null,
       }
+      // 从服务器恢复：这道题的开始时间前端没有，用时如实留空
       lastComment.value = previous?.点评
-        ? { text: previous['点评'], score: previous['评分'], version: previous['点评版本'] }
+        ? { text: previous['点评'], score: previous['评分'], version: previous['点评版本'], elapsed: null }
         : null
+      pendingNext.value = null
+      commentError.value = null
       answerText.value = ''
       report.value = null
       evaluation.value = {}
+      startQuestionClock()   // 恢复出来的题从此刻重新计时
       ElMessage.success(`已恢复到第 ${completed + 1} 题，可以继续作答`)
       return
     }
@@ -868,6 +1298,8 @@ async function openHistory(row) {
     evaluation.value = eva
     session.value = null
     lastComment.value = null
+    pendingNext.value = null
+    commentError.value = null
   } finally {
     openingSession.value = null
   }
@@ -878,12 +1310,65 @@ function resetInterview() {
   evaluation.value = {}
   session.value = null
   lastComment.value = null
+  pendingNext.value = null
+  commentError.value = null
   jobId.value = null
   jobTitle.value = ''
+  if (voice.value.listening) stopVoice()
+  stopQuestionClock()
+}
+
+// ---- 结束本场：确认后调用 abandon；接口未上线（404）时如实提示并保持可重试 ----
+async function confirmAbandon() {
+  const sid = session.value?.id
+  if (!sid || abandoning.value) return
+  try {
+    await ElMessageBox.confirm(
+      '结束本场后，这道题的作答不会计入，已答题目仍可在历史场次里查看。确定现在结束吗？',
+      '结束本场面试',
+      { confirmButtonText: '确定结束', cancelButtonText: '继续作答', type: 'warning',
+        confirmButtonClass: 'el-button--primary' }
+    )
+  } catch {
+    return   // 点了「继续作答」或关掉弹窗：什么都不做
+  }
+  abandoning.value = true
+  try {
+    await http.post(`/interview/${sid}/abandon`)
+    ElMessage.success('本场面试已结束')
+    router.push('/student/interview')
+  } catch (e) {
+    if (e?.response?.status === 404) {
+      // 接口尚未上线：不离开页面、不改会话状态，学生可以继续作答或稍后再试
+      ElMessageBox.alert('该功能即将上线', '暂时无法结束本场', {
+        confirmButtonText: '知道了',
+        callback: () => {},
+      }).catch(() => {})
+      return
+    }
+    if (e?.response?.status === 401) return   // 拦截器已处理登录失效
+    commentError.value = { ...friendlyError(e), action: 'reload' }
+  } finally {
+    abandoning.value = false
+  }
 }
 
 onMounted(async () => {
   await Promise.all([loadResume(), loadJobs(), loadFacets(), loadHistory()])
+})
+
+onBeforeUnmount(() => {
+  stopQuestionClock()
+  // 离开页面时直接释放识别实例：不续录、不走正常收尾，并真正中止会话，放开麦克风
+  voiceStopRequested = true
+  voice.value.listening = false
+  const current = voiceRec
+  releaseVoiceRec()
+  try {
+    current?.abort()
+  } catch {
+    /* 已结束的实例 abort 会抛错，忽略 */
+  }
 })
 </script>
 
@@ -944,6 +1429,114 @@ onMounted(async () => {
 .q-source .src-txt a { color: #1951c3; text-decoration: none; }
 .q-source .src-txt a:hover { text-decoration: underline; }
 .comment { line-height: 1.7; font-size: 14px; }
+
+/* ===== 点评卡：等待态 / 错误态 / 空态 / 底部「下一题」 ===== */
+.end-button { margin-left: auto; }
+.question-clock { display: inline-flex; align-items: center; gap: 4px; color: #245da6;
+  font-variant-numeric: tabular-nums; }
+.question-clock svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.comment-card.is-waiting :deep(.el-card__body) { min-height: 196px; }
+.comment-waiting { padding: 4px 0 8px; }
+/* 骨架屏：与正文同宽的两行灰块，浅靛蓝呼吸，不抢眼 */
+.skeleton-block { height: 16px; margin: 12px 0; border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f8 25%, #e3eaf6 37%, #eef2f8 63%);
+  background-size: 400% 100%; animation: skeleton-shimmer 1.4s ease infinite; }
+.skeleton-block.is-short { width: 62%; }
+@keyframes skeleton-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+.waiting-text { display: flex; align-items: center; gap: 8px; margin: 16px 0 0;
+  color: var(--el-text-color-secondary); font-size: 13.5px; }
+/* 三个点的「正在思考」动画 */
+.thinking-dots { display: inline-flex; gap: 3px; }
+.thinking-dots i { width: 5px; height: 5px; border-radius: 50%; background: #245da6;
+  animation: thinking-bounce 1.2s ease-in-out infinite; }
+.thinking-dots i:nth-child(2) { animation-delay: .15s; }
+.thinking-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes thinking-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30% { transform: translateY(-3px); opacity: 1; } }
+.comment-empty { padding: 14px 0 4px; color: var(--el-text-color-secondary); font-size: 13.5px; }
+/* 错误态：浅琥珀底 + 一句人话 + 一个动作，不出现后端原文 */
+.comment-error { margin: 8px 0; padding: 14px 16px; border: 1px solid #f4d7a1; border-radius: 12px;
+  background: #fffaf0; }
+.comment-error p { margin: 0; color: #8a5a13; font-size: 14px; line-height: 1.6; }
+.comment-error-actions { display: flex; gap: 8px; margin-top: 10px; }
+/* 底部「下一题」：点评渲染完才出现，靠右贴边，与上方正文用细线分隔 */
+.comment-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e5eaf3; }
+.comment-footer-hint { color: var(--el-text-color-secondary); font-size: 13px; }
+.comment-footer :deep(.el-button) { min-height: 38px; padding-inline: 22px; }
+
+/* ===== 面试模式：三档卡片（单选） ===== */
+.mode-field { margin: 4px 0 16px; }
+.mode-field-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.mode-field-head .field-label { margin-bottom: 8px; }
+.mode-field-note { color: var(--el-text-color-secondary); font-size: 12.5px; }
+.mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mode-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; text-align: left;
+  font: inherit; color: var(--el-text-color-regular); cursor: pointer;
+  border: 1.5px solid #e7eaf1; border-radius: 12px; background: #fff;
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+.mode-card:hover:not(:disabled) { border-color: #b9cdf0; }
+.mode-card:focus-visible { outline: 2px solid #1951c3; outline-offset: 2px; }
+.mode-card:disabled { cursor: not-allowed; opacity: .6; }
+.mode-card.active { border-color: #1951c3; background: #f3f7ff; box-shadow: 0 0 0 3px rgba(25, 81, 195, .08); }
+.mode-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mode-card-top b { font-size: 15px; color: var(--el-text-color-primary); }
+.mode-card.active .mode-card-top b { color: #1951c3; }
+/* 选中标记：空心圆 → 实心带勾，状态不只靠颜色表达 */
+.mode-check { width: 16px; height: 16px; flex: none; border-radius: 50%;
+  border: 1.5px solid #c4cad6; background: #fff; transition: border-color .18s ease, background-color .18s ease; }
+.mode-card.active .mode-check { border-color: #1951c3; background: #1951c3;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.3l2.6 2.6L12 5.4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center; }
+.mode-card-desc { font-size: 13px; line-height: 1.5; color: var(--el-text-color-secondary); }
+.mode-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.mode-card-tags span { padding: 1px 7px; border-radius: 999px; background: #f1f4f9;
+  color: #536680; font-size: 11.5px; line-height: 1.7; white-space: nowrap; }
+.mode-card.active .mode-card-tags span { background: #e6eefb; color: #245da6; }
+.mode-badge { margin-left: 2px; }
+
+/* ===== 压力模式单题倒计时：环形进度 + 剩余秒数 ===== */
+.countdown { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  padding: 2px 10px 2px 4px; border: 1px solid #f4d7a1; border-radius: 999px; background: #fffaf0;
+  color: #8a5a13; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.countdown-ring { width: 22px; height: 22px; flex: none; transform: rotate(-90deg); }
+.countdown-ring circle { fill: none; stroke-width: 3.4; }
+.countdown-ring .ring-track { stroke: #f1dcb4; }
+.countdown-ring .ring-value { stroke: #c98900; stroke-linecap: round; transition: stroke-dasharray .9s linear, stroke .3s ease; }
+.countdown.is-low { border-color: #f1b9b3; background: #fdf3f2; color: #a12d22; }
+.countdown.is-low .ring-value { stroke: #d83b32; }
+.countdown.is-up { border-color: #f1b9b3; background: #fdf3f2; color: #a12d22; }
+.countdown.is-up .ring-value { stroke: transparent; }
+
+/* ===== 语音作答 ===== */
+.voice-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
+.voice-btn {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 14px;
+  font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  color: #245da6; border: 1px solid #cddcf3; border-radius: 999px; background: #f7faff;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+.voice-btn:hover:not(:disabled) { border-color: #245da6; background: #eef4ff; }
+.voice-btn:focus-visible { outline: 2px solid #1951c3; outline-offset: 2px; }
+.voice-btn:disabled { cursor: not-allowed; color: #a3acb9; border-color: #e7eaf1; background: #f7f8fa; }
+.voice-icon { display: grid; place-items: center; width: 18px; height: 18px; }
+.voice-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+/* 录音中：主色实底 + 四根跳动波形；同时有「停止录音」文字，状态不只靠动效表达 */
+.voice-btn.is-recording { color: #fff; border-color: #1951c3; background: #1951c3; }
+.voice-btn.is-recording:hover { background: #123a8f; border-color: #123a8f; }
+.voice-wave { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.voice-wave i { width: 3px; height: 6px; border-radius: 2px; background: #fff;
+  animation: voice-bounce 1s ease-in-out infinite; }
+.voice-wave i:nth-child(2) { animation-delay: .12s; }
+.voice-wave i:nth-child(3) { animation-delay: .24s; }
+.voice-wave i:nth-child(4) { animation-delay: .36s; }
+@keyframes voice-bounce { 0%, 100% { height: 5px; opacity: .65; } 50% { height: 14px; opacity: 1; } }
+.voice-status { color: #245da6; font-size: 12.5px; }
+.voice-status.is-muted { color: var(--el-text-color-secondary); }
 .report { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.8; margin: 0; }
 .diag-item { margin: 10px 0; font-size: 14px; line-height: 1.6; }
 .rewrite { color: var(--el-color-success); margin-top: 4px; }
@@ -1076,6 +1669,12 @@ onMounted(async () => {
 .qreview-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .tag-muted { font-size: 13.5px; color: #6b7280; }
 
+/* 窄屏：模式卡片折成单列，三档说明竖排更好读；倒计时独占一行不挤进度 */
+@media (max-width: 640px) {
+  .mode-grid { grid-template-columns: minmax(0, 1fr); }
+  .countdown { margin-left: 0; }
+}
+
 @media (max-width: 768px) {
   .iv-hero { align-items: flex-start; flex-direction: column; gap: 16px; padding: 18px 16px; border-radius: 14px; }
   .hero-status { width: 100%; min-width: 0; flex-direction: row; flex-wrap: wrap; }
@@ -1095,6 +1694,9 @@ onMounted(async () => {
   .question { font-size: 17px; }
   .head-row { flex-wrap: wrap; }
   .head-row :deep(.el-button) { min-height: 42px; }
+  .progress-heading { flex-wrap: wrap; }
+  .comment-footer { flex-direction: column-reverse; align-items: stretch; }
+  .comment-footer-hint { text-align: center; }
   .input-hint { margin-top: 6px; }
 }
 
@@ -1110,5 +1712,12 @@ onMounted(async () => {
 
 @media (prefers-reduced-motion: reduce) {
   .iv-hero *, .score-ring *, .block-card { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  /* 等待态的两段循环动画在「减少动态效果」下停掉，保留静态的骨架与三个点 */
+  .skeleton-block, .thinking-dots i { animation: none !important; }
+  .skeleton-block { background: #eef2f8; }
+  .thinking-dots i { opacity: .8; }
+  /* 录音波形同理停掉：按钮仍是主色实底并写着「停止录音」，状态不靠动效也能看出来 */
+  .voice-wave i { animation: none !important; height: 9px; opacity: 1; }
+  .countdown-ring .ring-value { transition: none !important; }
 }
 </style>

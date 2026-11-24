@@ -203,6 +203,51 @@
           </li>
         </ol>
       </section>
+
+      <!-- 其他岗位按缺口数分两组：这是「除当前岗位外，还有哪些岗位离你更近」，
+           不是当前所选岗位的属性。每组最多 5 条，由后端分好组。 -->
+      <section class="rd-buckets-wrap">
+        <div class="rd-sec-head">
+          <span class="rd-sec-title">还差几项就能投</span>
+          <span class="rd-sec-sub">与你已修课程相关的其他岗位，按缺口数分组</span>
+        </div>
+        <div class="rd-buckets">
+          <div class="rd-bucket is-near">
+            <div class="rd-bucket-head">
+              <span class="rd-bucket-title">差 1–2 项即可投</span>
+              <span v-if="gapNearCount" class="rd-bucket-count">{{ gapNearCount }}</span>
+            </div>
+            <ul v-if="gapNear.length" class="rd-bucket-list">
+              <li v-for="(g, i) in gapNear" :key="'n' + i" class="rd-bucket-item">
+                <span class="rd-bucket-job">{{ g.job }}</span>
+                <span class="rd-bucket-gaps">
+                  <span v-for="(s, si) in g.gaps" :key="'ng' + si" class="rd-bucket-gap">{{ s }}</span>
+                </span>
+                <span v-if="g.hint" class="rd-bucket-hint">{{ g.hint }}</span>
+              </li>
+            </ul>
+            <p v-else class="rd-bucket-empty">暂无该维度数据</p>
+          </div>
+
+          <div class="rd-bucket is-far">
+            <div class="rd-bucket-head">
+              <span class="rd-bucket-title">差 3 项以上</span>
+              <span v-if="gapFarCount" class="rd-bucket-count">{{ gapFarCount }}</span>
+            </div>
+            <ul v-if="gapFar.length" class="rd-bucket-list">
+              <li v-for="(g, i) in gapFar" :key="'f' + i" class="rd-bucket-item">
+                <span class="rd-bucket-job">{{ g.job }}</span>
+                <span class="rd-bucket-gaps">
+                  <span v-for="(s, si) in g.gaps" :key="'fg' + si" class="rd-bucket-gap">{{ s }}</span>
+                  <span v-if="g.moreGaps > 0" class="rd-bucket-gap is-more">另 {{ g.moreGaps }} 项</span>
+                </span>
+                <span v-if="g.hint" class="rd-bucket-hint">{{ g.hint }}</span>
+              </li>
+            </ul>
+            <p v-else class="rd-bucket-empty">暂无该维度数据</p>
+          </div>
+        </div>
+      </section>
     </template>
   </div>
 </template>
@@ -405,6 +450,30 @@ function gapCourses(g) {
 
 const hooks = computed(() => (Array.isArray(result.value?.interview_hooks) ? result.value.interview_hooks.filter(Boolean) : []))
 const advice = computed(() => (Array.isArray(result.value?.advice) ? result.value.advice : []))
+
+// ---- 其他岗位按缺口数分组：后端 gap_bucket = {near: [...], far: [...]}，各最多 5 条 ----
+// near = 差 1-2 项即可投，far = 差 3 项以上。字段缺失、不是对象或两组都为空时整节不出现，
+// 组内为空则显示「暂无该维度数据」。缺口标签最多展示 3 个，其余汇成「另 N 项」（N 是真实差值，不是占位）。
+const BUCKET_MAX_TAGS = 3
+function cleanBucket(list) {
+  if (!Array.isArray(list)) return []
+  return list
+    .filter((g) => g && String(g.job || '').trim() && Array.isArray(g.gaps) && g.gaps.length)
+    .map((g) => {
+      const gapList = g.gaps.map((s) => String(s || '').trim()).filter(Boolean)
+      return {
+        job: String(g.job).trim(),
+        gaps: gapList.slice(0, BUCKET_MAX_TAGS),
+        moreGaps: Math.max(0, gapList.length - BUCKET_MAX_TAGS),
+        hint: String(g.hint || '').trim(),
+      }
+    })
+}
+const gapNear = computed(() => cleanBucket(result.value?.gap_bucket?.near))
+const gapFar = computed(() => cleanBucket(result.value?.gap_bucket?.far))
+// 两组条目数：为 0 时返回空串，标题旁不显示「0 个岗位」这种占位数字
+const gapNearCount = computed(() => (gapNear.value.length ? `${gapNear.value.length} 个岗位` : ''))
+const gapFarCount = computed(() => (gapFar.value.length ? `${gapFar.value.length} 个岗位` : ''))
 
 // ---- 复制：clipboard API 优先，execCommand 兜底 ----
 async function copyText(text, idx) {
@@ -1010,6 +1079,67 @@ onUnmounted(() => {
 
 .rd-advice-body { min-width: 0; }
 
+/* ---------------- 其他岗位按缺口数分组：左 near（主色强调）右 far ---------------- */
+.rd-buckets-wrap { margin-top: 18px; }
+.rd-buckets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.rd-bucket {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--rd-line);
+  border-radius: 12px;
+  background: var(--rd-card);
+}
+/* near 组：主色描边 + 左上角淡靛蓝提亮，是整节的视觉重心 */
+.rd-bucket.is-near {
+  border-color: rgba(59, 130, 246, 0.5);
+  background:
+    radial-gradient(260px 120px at 0% 0%, rgba(37, 99, 235, 0.2), transparent 70%),
+    var(--rd-card);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+}
+.rd-bucket-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.rd-bucket-title { font-size: 13.5px; font-weight: 650; color: #f3f4f6; }
+.rd-bucket.is-near .rd-bucket-title { color: #93c5fd; }
+.rd-bucket-count { font-size: 11.5px; color: #6b7280; white-space: nowrap; }
+.rd-bucket-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.rd-bucket-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.6);
+}
+.rd-bucket.is-near .rd-bucket-item { background: rgba(37, 99, 235, 0.12); }
+.rd-bucket-job { font-size: 13px; font-weight: 600; color: #e5e7eb; }
+.rd-bucket.is-near .rd-bucket-job { color: #fff; }
+.rd-bucket-gaps { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.rd-bucket-gap {
+  padding: 1px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.rd-bucket.is-near .rd-bucket-gap { border-color: rgba(96, 165, 250, 0.5); color: #bfdbfe; }
+.rd-bucket-gap.is-more { border-style: dashed; color: #6b7280; }
+/* hint 由后端拼好（「补上 X、Y 就能投「岗位」」），与岗位名重复，弱化成一行说明 */
+.rd-bucket-hint { flex-basis: 100%; font-size: 12px; line-height: 1.6; color: #9ca3af; }
+.rd-bucket.is-near .rd-bucket-hint { color: #bfdbfe; }
+.rd-bucket-empty { margin: 0; padding: 6px 2px; font-size: 12.5px; color: #6b7280; }
+
 .rd-what {
   margin: 0;
   color: #e5e7eb;
@@ -1028,6 +1158,7 @@ onUnmounted(() => {
 @media (max-width: 640px) {
   .rd-summary { flex-direction: column; align-items: center; }
   .rd-summary-main { width: 100%; }
+  .rd-buckets { grid-template-columns: minmax(0, 1fr); }
   .rd-item { flex-wrap: wrap; }
   .rd-item-right { max-width: 100%; align-items: flex-start; }
   .rd-item-ev { text-align: left; }

@@ -166,6 +166,127 @@ def _grade(total: float | None) -> str | None:
 
 
 # ----------------------------------------------------------------
+# 复盘升级：三处确定性拼装（不调模型、不写库、不新增算法）
+# ----------------------------------------------------------------
+def _focus_type(pairs: Sequence[tuple[Mapping, Mapping | None]],
+                scores: Sequence[Mapping | None]) -> str:
+    """焦点题型：本场有评分时取均分最低的题型；全无评分时取题量最多的题型。"""
+    totals: dict[str, float] = defaultdict(float)
+    answered: dict[str, int] = defaultdict(int)
+    counts: dict[str, int] = defaultdict(int)
+    for (outline, _answer), score in zip(pairs, scores):
+        qtype = str(outline.get("type") or "").strip()
+        if not qtype:
+            continue
+        counts[qtype] += 1
+        if score and score.get("score") is not None:
+            try:
+                totals[qtype] += float(score["score"])
+                answered[qtype] += 1
+            except (TypeError, ValueError):
+                pass
+    if answered:
+        return min(answered, key=lambda qtype: (totals[qtype] / answered[qtype], qtype))
+    if counts:
+        return min(counts, key=lambda qtype: (-counts[qtype], qtype))
+    return ""
+
+
+def _build_trend(sessions: Sequence[Mapping], scores: Sequence[Mapping],
+                 focus_type: str) -> list[dict[str, Any]]:
+    """同一焦点题型、按 as_of 升序（旧→新）的最多 3 场得分；同场多题取均分。"""
+    if not focus_type:
+        return []
+    ordered = sorted(sessions, key=lambda s: (str(s.get("as_of") or ""),
+                                              int(s.get("sid") or 0)))
+    out: list[dict[str, Any]] = []
+    for sess in ordered:
+        sid = int(sess.get("sid") or 0)
+        if not sid:
+            continue
+        values = [float(r["score"]) for r in scores
+                  if int(r.get("sid") or 0) == sid
+                  and str(r.get("type") or focus_type) == focus_type
+                  and r.get("score") is not None]
+        if not values:
+            continue
+        out.append({"sid": sid, "as_of": str(sess.get("as_of") or ""),
+                    "type": focus_type, "score": round(sum(values) / len(values), 2)})
+    return out[:3]
+
+
+def _course_hints(attr_result: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """直接复用 attribution 引擎已算好的「考点 → 课程」结果，每个失分维度取一门。"""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in attr_result.get("items") or []:
+        dimension = str(item.get("concept") or "").strip()
+        course = str(item.get("course") or "").strip()
+        if not dimension or not course or dimension in seen:
+            continue
+        seen.add(dimension)
+        pct = item.get("percentile")
+        out.append({
+            "dimension": dimension,
+            "course": course,
+            "percentile": float(pct) if isinstance(pct, (int, float)) and not isinstance(pct, bool) else None,
+        })
+    return out
+
+
+def _gap_buckets(rows: Sequence[Mapping], pool: set[str]) -> dict[str, list[dict[str, Any]]]:
+    """按缺口数分组：差 1-2 项 near，差 3 项以上 far；只列与本人课程技能有关的岗位。"""
+    buckets: dict[str, list[dict[str, Any]]] = {"near": [], "far": []}
+    for row in rows:
+        skills = [str(s).strip() for s in (row.get("skills") or []) if str(s).strip()]
+        if not skills or not any(_skill_hit(s, p) for s in skills for p in pool):
+            continue
+        gaps = [s for s in skills if not any(_skill_hit(s, p) for p in pool)]
+        if not gaps:
+            continue
+        bucket = "near" if len(gaps) <= 2 else "far"
+        job = str(row.get("title") or "").strip() or "未命名岗位"
+        buckets[bucket].append({
+            "job": job,
+            "gaps": gaps,
+            "hint": f"补上{'、'.join(gaps[:2])}就能投「{job}」",
+        })
+    for key in ("near", "far"):
+        buckets[key].sort(key=lambda item: (len(item["gaps"]), str(item["job"])))
+        buckets[key] = buckets[key][:5]
+    return buckets
+
+
+def _printable_card(agg: Mapping[str, Any] | None, dims: Mapping[str, float],
+                    problems: Sequence[Mapping], gaps: Sequence[Mapping],
+                    plan: Sequence[Mapping]) -> dict[str, Any]:
+    """复盘卡可打印摘要：所有句子由引擎已算好的结构化结果拼装，无模型参与。"""
+    total = (agg or {}).get("total")
+    grade = _grade(float(total) if total is not None else None)
+    if total is None:
+        summary = "本场暂无可汇总的评分数据。"
+    else:
+        summary = (f"本场模拟面试总分 {total} 分，评级 {grade or '—'}；"
+                   f"已答 {(agg or {}).get('answered') or 0} 题，"
+                   f"跳过 {(agg or {}).get('skipped') or 0} 题。")
+    strengths = [
+        f"{DIM_LABELS.get(key, key)}维度 {value} 分"
+        for key, value in sorted(dims.items(), key=lambda kv: (-float(kv[1]), str(kv[0])))[:3]
+    ]
+    weaknesses = [
+        f"[{p.get('dimension') or '综合'}] {p.get('problem') or '暂无描述'}"
+        for p in list(problems or [])[:3]
+    ]
+    actions = [
+        f"{s.get('when') or ''}｜{s.get('focus') or ''}：{s.get('action') or ''}"
+        for s in list(plan or [])[:3]
+    ] or [f"{g.get('dimension') or '综合'}：{g.get('action') or ''}"
+          for g in list(gaps or [])[:3]]
+    return {"summary": summary, "strengths": strengths,
+            "weaknesses": weaknesses, "actions": actions}
+
+
+# ----------------------------------------------------------------
 # 1. 圆桌评审
 # ----------------------------------------------------------------
 @router.get("/panel/{sid}")
@@ -349,6 +470,31 @@ def attribution(sid: int, ctx: ToolContext = Depends(require_student)) -> dict:
                     dist[int(r["cid"])].append(float(r["score"]))
         evidence = _evidence(ctxd["resume"], ctxd["snapshot"])
         scores = _score_pairs(ctxd["pairs"], evidence, ctxd["job_skills"])
+        # 失分趋势：本场焦点题型在最近最多 3 场有评分会话里的走势（只读会话/问答表）
+        focus_type = _focus_type(ctxd["pairs"], scores)
+        trend_sessions: list[dict[str, Any]] = []
+        trend_scores: list[dict[str, Any]] = []
+        if focus_type:
+            with conn.cursor() as cur:
+                trend_sessions = _rows(
+                    cur,
+                    "SELECT s.`编号` AS sid, COALESCE(s.`完成时间`,s.`创建时间`) AS as_of"
+                    " FROM `面试会话` s JOIN `面试问答` a ON a.`会话编号`=s.`编号`"
+                    " WHERE s.`租户编号`=%s AND s.`学生编号`=%s AND s.`状态`='finished'"
+                    "   AND a.`问题类型`=%s AND a.`评分` IS NOT NULL"
+                    " GROUP BY s.`编号`, as_of"
+                    " ORDER BY as_of DESC, s.`编号` DESC LIMIT 3",
+                    (ctx.tenant_id, ctx.student_id, focus_type))
+                sids = [int(r["sid"]) for r in trend_sessions if r.get("sid") is not None]
+                if sids:
+                    marks = ",".join(["%s"] * len(sids))
+                    trend_scores = _rows(
+                        cur,
+                        "SELECT `会话编号` AS sid, `问题类型` AS type, AVG(`评分`) AS score"
+                        f" FROM `面试问答` WHERE `会话编号` IN ({marks})"
+                        "   AND `问题类型`=%s AND `评分` IS NOT NULL"
+                        " GROUP BY `会话编号`,`问题类型`",
+                        tuple(sids) + (focus_type,))
         # 漏考点按轮次归集（同一考点在多轮漏掉 → 更该被点名）
         missed_by_round: dict[int, list[str]] = {}
         for (o, _a), s in zip(ctxd["pairs"], scores):
@@ -360,8 +506,10 @@ def attribution(sid: int, ctx: ToolContext = Depends(require_student)) -> dict:
             c["percentile"] = peer_engine.percentile_of(c["score"], vals) if vals else None
             # 知识图谱的「课程→技能」映射：考点命中技能即可命中课程，比 2-gram 准得多
             c["skills"] = list(skills_for_course(str(c["name"])))
-        return {"session_id": sid, "job_title": ctxd["sess"].get("岗位名称"),
-                **attr_engine.attribute(missed_by_round, courses)}
+        result = attr_engine.attribute(missed_by_round, courses)
+        result["trend"] = _build_trend(trend_sessions, trend_scores, focus_type)
+        result["course_hint"] = _course_hints(result)
+        return {"session_id": sid, "job_title": ctxd["sess"].get("岗位名称"), **result}
     finally:
         conn.close()
 
@@ -461,6 +609,7 @@ def report_card(sid: int, ctx: ToolContext = Depends(require_student)) -> dict:
             "top_problems": [f"[{p['dimension']}] {p['problem']}" for p in problems][:3],
             "next_actions": [f"{s['when']}｜{s['focus']}：{s['action']}" for s in plan][:2]
                             or [f"{g['dimension']}：{g['action']}" for g in gaps][:2],
+            "printable": _printable_card(agg, dims, problems, gaps, plan),
             "expression": None,
         }
     finally:
@@ -741,14 +890,26 @@ def readiness(inp: ReadinessIn, ctx: ToolContext = Depends(require_student)) -> 
                               " AND `状态`='active' ORDER BY `版本号` DESC LIMIT 1",
                         (ctx.student_id, ctx.tenant_id))
             resume = _load_resume(cur, int(rrow["编号"]), ctx.tenant_id) if rrow else None
+            pool = _my_skill_pool(cur, ctx)
         catalog = _catalog_names(conn)
+        jobs = _all_jobs(conn)
     finally:
         conn.close()
     job_title = title or "未命名岗位"
     result = readi_engine.assess(
         {"title": job_title, "industry": industry, "skills": skills},
         courses, _resume_text_of(resume), catalog)
+    result["gap_bucket"] = _gap_buckets(jobs, pool)
     return {"job_id": job_id, "job_title": job_title, **result}
+
+
+@router.get("/readiness")
+def readiness_get(job_id: int | None = None, skills: list[str] | None = None,
+                  job_title: str | None = None, industry: str | None = None,
+                  ctx: ToolContext = Depends(require_student)) -> dict:
+    """与 POST 同一份只读评估：GET 便于直接刷新/分享当前岗位的就绪度。"""
+    return readiness(ReadinessIn(job_id=job_id, skills=skills, job_title=job_title,
+                                 industry=industry), ctx)
 
 
 # ----------------------------------------------------------------

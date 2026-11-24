@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import re
@@ -38,9 +39,31 @@ from engine.interview import (
     rubric_of,
     score_answer,
 )
-from engine.interview_probe import probe_plan
+from engine.interview_probe import probe_plan, should_probe
 from engine.recommend import clean_skill_tags
 from agents.tools import ToolContext
+
+# 模式契约：引擎提供 MODE_LABELS / normalize_mode；并行改造未落地时按同一契约兜底，
+# 不让路由 import 失败，引擎签到位后自动改用引擎版本。
+try:
+    from engine.interview import MODE_LABELS, normalize_mode
+except ImportError:  # pragma: no cover - 仅引擎未落地期间生效
+    MODE_LABELS = {"easy": "轻松模式", "standard": "标准模式", "stress": "压力模式"}
+
+    def normalize_mode(value: str | None) -> str:
+        text = str(value or "").strip().lower()
+        if text in MODE_LABELS:
+            return text
+        if text in {"轻松", "简单", "easy_mode"} or "轻松" in text or "easy" in text:
+            return "easy"
+        if text in {"压力", "hard", "stress_mode"} or "压力" in text or "stress" in text:
+            return "stress"
+        return "standard"
+
+try:
+    from engine.interview_probe import probe_thresholds
+except ImportError:  # pragma: no cover - 引擎未提供 mode 阈值时沿用引擎现有判定
+    probe_thresholds = None
 
 router = APIRouter(prefix="/interview", tags=["interview"])
 
@@ -53,11 +76,92 @@ _MAX_ANSWER = 2000
 _JOB_POOLS = ("national", "tenant")
 # 追问预算：一场面试最多追加几道追问（不含在开局的 max_rounds 里）
 _PROBE_MAX = max(0, int(os.getenv("INTERVIEW_PROBE_MAX", "2")))
+# 进行中会话超时收口阈值（小时）：中途关页面不收卷的场次，超过此时长按放弃处理
+ONGOING_ABANDON_AFTER_HOURS = 24
 
 
 def _probe_enabled() -> bool:
     """追问总开关（与 engine.interview_probe.enabled 同一环境变量）。"""
     return str(os.getenv("INTERVIEW_PROBE", "1")).strip().lower() not in ("0", "false", "off", "no")
+
+
+def _safe_mode(value: Any) -> str:
+    """任何入参都归一到三个合法模式；失败/越界一律 standard，绝不 500。"""
+    try:
+        mode = normalize_mode(value)
+    except Exception:
+        mode = "standard"
+    return mode if mode in MODE_LABELS else "standard"
+
+
+def _mode_label(mode: str) -> str:
+    return str(MODE_LABELS.get(mode) or MODE_LABELS.get("standard") or "标准模式")
+
+
+def _snapshot_mode(raw: Any) -> str:
+    """从岗位要求快照读模式：老会话无 mode / 坏 JSON 都按 standard。"""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw or "null")
+        except (TypeError, ValueError):
+            raw = None
+    snapshot = raw if isinstance(raw, Mapping) else {}
+    return _safe_mode(snapshot.get("mode"))
+
+
+def _build_outline_for_mode(job, resume, *, max_rounds: int,
+                            exclude_bank_ids: set[str], weak, variant: int,
+                            mode: str) -> list[dict[str, Any]]:
+    """引擎签了 mode 就传；未签到的过渡期按老调用，不破坏现有出题。"""
+    kwargs: dict[str, Any] = {"max_rounds": max_rounds, "exclude_bank_ids": exclude_bank_ids,
+                              "weak": weak, "variant": variant}
+    try:
+        params = inspect.signature(build_outline).parameters
+        if "mode" in params or any(p.kind == inspect.Parameter.VAR_KEYWORD
+                                   for p in params.values()):
+            kwargs["mode"] = mode
+    except (TypeError, ValueError):
+        pass
+    return build_outline(job, resume, **kwargs)
+
+
+def _run_turn_with_tone(question: str, qtype: str, answer: str | None,
+                        item: dict[str, Any] | None, evidence: list[str],
+                        tone: str) -> dict[str, Any]:
+    """点评语气走 tone；引擎未签 tone 参数时退回原调用，不丢历史行为。"""
+    try:
+        params = inspect.signature(interviewer.run_turn).parameters
+        if "tone" in params or any(p.kind == inspect.Parameter.VAR_KEYWORD
+                                   for p in params.values()):
+            return interviewer.run_turn(question, qtype, answer, item, evidence, tone=tone)
+    except (TypeError, ValueError):
+        pass
+    return interviewer.run_turn(question, qtype, answer, item, evidence)
+
+
+def _should_probe_for_mode(item: dict[str, Any] | None, answer: str | None,
+                           qtype: str, mode: str) -> bool:
+    """按模式的阈值决定是否值得追问；阈值未落地时沿用引擎既有 should_probe。"""
+    if probe_thresholds is None:
+        return should_probe(item, answer, qtype)
+    try:
+        thresholds = probe_thresholds(mode) or {}
+        score_below = float(thresholds["score_below"])
+        answer_min = int(thresholds["answer_min"])
+        coverage_below = float(thresholds["coverage_below"])
+    except (KeyError, TypeError, ValueError):
+        return should_probe(item, answer, qtype)
+    text = str(answer or "").strip()
+    if item is None or not text or qtype == "counter":
+        return False
+    if float(item.get("score") or 0) < score_below:
+        return True
+    if len(text) < answer_min:
+        return True
+    hits = list(item.get("keyword_hits") or [])
+    missed = list(item.get("keyword_missed") or [])
+    coverage = 1.0 if not (hits or missed) else len(hits) / (len(hits) + len(missed))
+    return coverage < coverage_below
 
 
 def _conn() -> pymysql.connections.Connection:
@@ -158,6 +262,49 @@ def _load_resume(cur, resume_id: int, tenant_id: int) -> dict[str, Any] | None:
 def _rows(cur, sql: str, params: tuple) -> list[dict[str, Any]]:
     cur.execute(sql, params)
     return [dict(r) for r in cur.fetchall()]
+
+
+def _close_stale_ongoing(cur, tenant_id: int, student_id: int) -> int:
+    """收口超时未答完的会话：只改本租户本人、且超过阈值的 ongoing。
+
+    只写状态，不改提纲/分数/已有问答；调用方负责 commit，读接口的查询语义不变。
+    """
+    cur.execute(
+        "UPDATE `面试会话` SET `状态`='abandoned' "
+        "WHERE `租户编号`=%s AND `学生编号`=%s AND `状态`='ongoing' "
+        "AND `创建时间` < DATE_SUB(NOW(), INTERVAL %s HOUR)",
+        (tenant_id, student_id, ONGOING_ABANDON_AFTER_HOURS))
+    return int(getattr(cur, "rowcount", 0) or 0)
+
+
+def _report_text(facts: dict[str, Any]) -> str:
+    """最终报告先交给 LLM 组织语言；导入或调用失败一律回退模板，收尾接口不 500。"""
+    try:
+        from agents.interviewer import render_report_llm
+        text = render_report_llm(facts)
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("LLM 报告为空")
+        return text
+    except Exception:
+        return interviewer.render_report(facts)
+
+
+def _finalize_report(evaluation: dict[str, Any]) -> str:
+    """收尾/历史报告 datapoint：用引擎已算好的结构化结果换 LLM 组织语言，失败回退模板。"""
+    facts = {
+        "total": evaluation.get("total"),
+        "answered": evaluation.get("answered") or 0,
+        "skipped": evaluation.get("skipped") or 0,
+        "probes": evaluation.get("probes") or 0,
+        "items": evaluation.get("per_question") or [],
+        "strengths": evaluation.get("strengths") or [],
+        "core_problems": evaluation.get("core_problems") or [],
+        "improvement_plan": evaluation.get("improvement_plan") or [],
+        "gaps": evaluation.get("gaps") or [],
+    }
+    report = _report_text(facts)
+    evaluation["report"] = report
+    return report
 
 
 class ResumeIn(BaseModel):
@@ -494,14 +641,20 @@ class StartIn(BaseModel):
     job_pool: str | None = None      # national（默认，全国池）/ tenant（租户在招池）
     resume_id: int | None = None
     max_rounds: int = 6
+    # 面试模式：引擎归一，非法值不报错，一律归一到 easy/standard/stress
+    mode: str = "standard"
 
 
 @router.post("/start")
 def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     max_rounds = max(3, min(int(inp.max_rounds or 6), 8))
+    mode = _safe_mode(inp.mode)
     conn = _conn()
     try:
         with conn.cursor() as cur:
+            # 开新面试前先收口本人超时未答完的场次，避免 ongoing 脏数据堆积
+            _close_stale_ongoing(cur, ctx.tenant_id, ctx.student_id or 0)
+            conn.commit()
             if inp.resume_id:
                 resume = _load_resume(cur, int(inp.resume_id), ctx.tenant_id)
                 if not resume or int(resume["学生编号"]) != int(ctx.student_id or 0):
@@ -552,20 +705,22 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
                 wtype, wscore = min(scored, key=lambda kv: kv[1])
                 if wscore < 70:
                     weak = {"type": wtype, "score": round(wscore, 1)}
-            outline = build_outline(job, resume, max_rounds=max_rounds,
-                                    exclude_bank_ids=exclude_bank_ids, weak=weak,
-                                    variant=variant)
+            outline = _build_outline_for_mode(job, resume, max_rounds=max_rounds,
+                                              exclude_bank_ids=exclude_bank_ids, weak=weak,
+                                              variant=variant, mode=mode)
             if not outline:
                 raise HTTPException(422, "简历信息不足以出题（连基本经历都没有），请先补全简历")
             # 行业要进快照：追问/题库检索都靠 industry 归族，缺了就只能落 general
+            # mode 只追加一个键，岗位信息等其他键原样保留；无岗位也要留 mode，零迁移
             job_snapshot = {"title": job["title"], "skill_tags": job["skill_tags"],
                             "education": job.get("education"), "industry": job.get("industry"),
-                            "city": job.get("city"), "pool": job.get("pool")} if job else None
+                            "city": job.get("city"), "pool": job.get("pool")} if job else {}
+            job_snapshot["mode"] = mode
             cur.execute(
                 "INSERT INTO `面试会话`(`租户编号`,`学生编号`,`简历编号`,`岗位编号`,`岗位名称`,`岗位要求快照`,"
                 "`状态`,`提纲`,`当前轮次`,`最大轮次`,`引擎版本`) VALUES (%s,%s,%s,%s,%s,%s,'ongoing',%s,0,%s,%s)",
                 (ctx.tenant_id, ctx.student_id, resume["编号"], inp.job_id,
-                 (job or {}).get("title"), json.dumps(job_snapshot, ensure_ascii=False) if job_snapshot else None,
+                 (job or {}).get("title"), json.dumps(job_snapshot, ensure_ascii=False),
                  json.dumps(outline, ensure_ascii=False), len(outline), INTERVIEW_ENGINE_VERSION))
             sid = cur.lastrowid
         conn.commit()
@@ -579,8 +734,10 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
             "weak_label": QUESTION_TYPES[weak["type"]]["label"] if weak else None,
         }
         return {"session_id": sid, "total_rounds": len(outline), "round": 1,
-                "question_type": q["type"], "question_label": _rubric_of_q(q, job_snapshot["skill_tags"] if job_snapshot else [])["label"],
+                "question_type": q["type"],
+                "question_label": _rubric_of_q(q, job_snapshot.get("skill_tags") or [])["label"],
                 "question": q["question"], "source": q.get("source"),
+                "mode": mode, "mode_label": _mode_label(mode),
                 "personalized": personalized}
     finally:
         conn.close()
@@ -589,6 +746,8 @@ def interview_start(inp: StartIn, ctx: ToolContext = Depends(require_student)) -
 class AnswerIn(BaseModel):
     expected_round: int = Field(..., ge=1)
     text: str | None = None   # None=跳过本题
+    # 单题用时（秒，前端计时回传）；未传保持 NULL，不推算、不补 0
+    elapsed_seconds: int | None = Field(default=None, ge=0)
 
 
 # ----------------------------------------------------------------
@@ -681,27 +840,29 @@ def interview_answer(sid: int, inp: AnswerIn,
 
             # 证据与收卷共用同一口径（防虚构比对源 + 评分 evidence_score）
             job_snapshot = json.loads(sess["岗位要求快照"] or "null") or {}
+            mode = _snapshot_mode(job_snapshot)  # 老会话快照无 mode → standard
             resume = _load_resume(cur, int(sess["简历编号"]), ctx.tenant_id)
             evidence = _evidence(resume, job_snapshot)
 
             rubric = _rubric_of_q(q, job_snapshot.get("skill_tags") or [])
             item = score_answer(answer, rubric, evidence)
-            turn = interviewer.run_turn(q["question"], q["type"], answer, item, evidence)
+            turn = _run_turn_with_tone(q["question"], q["type"], answer, item, evidence, tone=mode)
 
             cur.execute(
-                "INSERT INTO `面试问答`(`会话编号`,`轮次`,`问题类型`,`问题`,`学生回答`,`点评`,`评分`,`引用原文`,`点评版本`)"
-                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "INSERT INTO `面试问答`(`会话编号`,`轮次`,`问题类型`,`问题`,`学生回答`,`点评`,`评分`,`引用原文`,`点评版本`,`用时秒`)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (sid, rnd + 1, q["type"], q["question"], answer, turn["comment"],
                  item["score"] if item else None,
                  json.dumps([f"「{x}」" for x in (item.get("keyword_hits") or [])], ensure_ascii=False) if item else None,
-                 turn["comment_version"]))
+                 turn["comment_version"], inp.elapsed_seconds))
             nxt = rnd + 1
 
             # 追问：答得浅/漏考点 → 从同族题库补一道更深的题插到本轮之后。
             # 追问是「额外一轮」而不是 x.y 小数轮次：轮次保持整型，
             # 提纲重排后与质问答的 `轮次` 一一对应，收卷 zip 不会错位。
             probed = False
-            if _probe_enabled() and _probe_count(outline) < _PROBE_MAX:
+            if (_probe_enabled() and _probe_count(outline) < _PROBE_MAX
+                    and _should_probe_for_mode(item, answer, q["type"], mode)):
                 plan = probe_plan(_job_for_outline(job_snapshot), q["type"], item, answer,
                                   used_ids=_used_bank_ids(outline))
                 entry = _build_probe_entry(plan, int(q.get("round") or rnd + 1)) if plan else None
@@ -746,7 +907,7 @@ def _finish(sid: int, ctx: ToolContext) -> dict[str, Any]:
         # 与答题时同一证据集，否则报告分会和逐题落库分不一致
         evidence = _evidence(resume, job_snapshot)
         evaluation = _build_evaluation(outline, answers, evidence, job, resume)
-        report = evaluation["report"]
+        report = _finalize_report(evaluation)
         gaps = evaluation["gaps"]
 
         with conn.cursor() as cur:
@@ -833,6 +994,33 @@ def _build_evaluation(outline: list[dict[str, Any]], answers: list[dict[str, Any
     }
 
 
+@router.post("/{sid}/abandon")
+def interview_abandon(sid: int, ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
+    """中途退出：把本人进行中的场次收口为 abandoned；重复调用幂等。"""
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            sess = _one(cur, "SELECT `租户编号`,`学生编号`,`状态` FROM `面试会话` WHERE `编号`=%s", (sid,))
+            if not sess:
+                raise HTTPException(404, "会话不存在")
+            if int(sess["租户编号"]) != int(ctx.tenant_id) \
+                    or int(sess["学生编号"]) != int(ctx.student_id or 0):
+                raise HTTPException(403, "无权操作他人面试会话")
+            state = str(sess["状态"] or "")
+            if state == "abandoned":
+                return {"status": "abandoned"}
+            if state != "ongoing":
+                raise HTTPException(409, "该场面试已结束，不能放弃")
+            cur.execute("UPDATE `面试会话` SET `状态`='abandoned' "
+                        "WHERE `编号`=%s AND `状态`='ongoing'", (sid,))
+        conn.commit()
+        audit_event(tenant_id=ctx.tenant_id, actor_type="student",
+                    actor_id=ctx.student_id, action="interview.abandon", target=str(sid))
+        return {"status": "abandoned"}
+    finally:
+        conn.close()
+
+
 @router.get("/{sid}/evaluation")
 def interview_evaluation(sid: int, ctx: ToolContext = Depends(require_student)) -> dict[str, Any]:
     """历史场次的结构化评估报告：与收卷同一引擎重算（确定性，结果一致）。"""
@@ -853,7 +1041,10 @@ def interview_evaluation(sid: int, ctx: ToolContext = Depends(require_student)) 
                "education": job_snapshot.get("education")}
         evidence = _evidence(resume, job_snapshot)
         evaluation = _build_evaluation(outline, answers, evidence, job, resume)
-        return {"session_id": sid, "job_title": sess.get("岗位名称"), "evaluation": evaluation}
+        _finalize_report(evaluation)
+        mode = _snapshot_mode(job_snapshot)
+        return {"session_id": sid, "job_title": sess.get("岗位名称"),
+                "mode": mode, "mode_label": _mode_label(mode), "evaluation": evaluation}
     finally:
         conn.close()
 
@@ -909,13 +1100,20 @@ def interview_detail(sid: int, ctx: ToolContext = Depends(require_student)) -> d
     conn = _conn()
     try:
         with conn.cursor() as cur:
+            # 拉取面试状态前先收口本人超时场次；已超时的一条会按 abandoned 返回
+            _close_stale_ongoing(cur, ctx.tenant_id, ctx.student_id or 0)
+            conn.commit()
             sess = _one(cur, "SELECT * FROM `面试会话` WHERE `编号`=%s AND `租户编号`=%s", (sid, ctx.tenant_id))
             if not sess or int(sess["学生编号"]) != int(ctx.student_id or 0):
                 raise HTTPException(404, "会话不存在或不属于本人")
             qa = _rows(cur, "SELECT * FROM `面试问答` WHERE `会话编号`=%s ORDER BY `轮次`", (sid,))
-        return {"session": {k: sess[k] for k in
-                            ("编号", "岗位名称", "状态", "总分", "报告", "差距清单", "当前轮次", "最大轮次", "创建时间")},
-                "outline": json.loads(sess["提纲"] or "[]"), "qa": qa}
+        mode = _snapshot_mode(sess.get("岗位要求快照"))
+        result = {"session": {k: sess[k] for k in
+                              ("编号", "岗位名称", "状态", "总分", "报告", "差距清单", "当前轮次", "最大轮次", "创建时间")},
+                  "outline": json.loads(sess["提纲"] or "[]"), "qa": qa,
+                  "mode": mode, "mode_label": _mode_label(mode)}
+        conn.commit()
+        return result
     finally:
         conn.close()
 
@@ -925,9 +1123,12 @@ def interview_history(ctx: ToolContext = Depends(require_student)) -> dict[str, 
     conn = _conn()
     try:
         with conn.cursor() as cur:
+            _close_stale_ongoing(cur, ctx.tenant_id, ctx.student_id or 0)
+            conn.commit()
             rows = _rows(cur, "SELECT `编号`,`岗位名称`,`状态`,`总分`,`当前轮次`,`最大轮次`,`创建时间`,`完成时间`"
                               " FROM `面试会话` WHERE `租户编号`=%s AND `学生编号`=%s ORDER BY `编号` DESC LIMIT 50",
                          (ctx.tenant_id, ctx.student_id))
+        conn.commit()
         return {"total": len(rows), "items": rows}
     finally:
         conn.close()

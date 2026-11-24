@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from engine.interview import normalize_mode
 from engine.question_bank import BANK_DIR, retrieve_for_job
 
 # 追问阈值：分数低于此值、或回答过短、或考点覆盖率不足时触发
@@ -17,6 +18,19 @@ PROBE_ANSWER_MIN = 80
 PROBE_COVERAGE_BELOW = 0.5
 # 追问优先在同题型里找；同题型没有新题时，按这个顺序换题型深挖
 _PROBE_ORDER: tuple[str, ...] = ("project", "scenario", "major")
+
+# 模式阈值：只影响「要不要追问」，不参与任何评分计算
+_PROBE_THRESHOLDS: dict[str, dict[str, float | int]] = {
+    "easy": {"score_below": 60.0, "answer_min": 60, "coverage_below": 0.4},
+    "standard": {"score_below": PROBE_SCORE_BELOW, "answer_min": PROBE_ANSWER_MIN,
+                 "coverage_below": PROBE_COVERAGE_BELOW},
+    "stress": {"score_below": 75.0, "answer_min": 100, "coverage_below": 0.55},
+}
+
+
+def probe_thresholds(mode: str | None) -> dict[str, Any]:
+    """按模式返回追问阈值（未知/空值回 standard）；返回副本，调用方改不动常量。"""
+    return dict(_PROBE_THRESHOLDS[normalize_mode(mode)])
 
 
 def _coverage(item: Mapping[str, Any]) -> float:
@@ -28,18 +42,24 @@ def _coverage(item: Mapping[str, Any]) -> float:
 
 
 def should_probe(item: Mapping[str, Any] | None, answer: str | None,
-                 qtype: str | None = None) -> bool:
-    """是否值得追问：未答/反问环节不追问；答得浅或漏考点才追问。"""
+                 qtype: str | None = None,
+                 thresholds: Mapping[str, Any] | None = None) -> bool:
+    """是否值得追问：未答/反问环节不追问；答得浅或漏考点才追问。
+
+    thresholds 不传时走 standard，与改动前逐字一致；传入 probe_thresholds(mode)
+    即按模式放宽/收紧，但只读阈值，不碰分数。
+    """
     text = str(answer or "").strip()
     if item is None or not text:
         return False
     if qtype == "counter":
         return False
-    if float(item.get("score") or 0) < PROBE_SCORE_BELOW:
+    th = thresholds if thresholds is not None else _PROBE_THRESHOLDS["standard"]
+    if float(item.get("score") or 0) < float(th["score_below"]):
         return True
-    if len(text) < PROBE_ANSWER_MIN:
+    if len(text) < int(th["answer_min"]):
         return True
-    return _coverage(item) < PROBE_COVERAGE_BELOW
+    return _coverage(item) < float(th["coverage_below"])
 
 
 def pick_probe(job: Mapping[str, Any] | None, qtype: str,
@@ -71,9 +91,10 @@ def build_probe_question(probe: Mapping[str, Any], answer: str | None) -> str:
 def probe_plan(job: Mapping[str, Any] | None, qtype: str,
                item: Mapping[str, Any] | None, answer: str | None,
                used_ids: Sequence[str] = (),
-               bank_dir: Path | str | None = None) -> dict[str, Any] | None:
+               bank_dir: Path | str | None = None,
+                thresholds: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
     """追问计划：不需要追问/题库取不到 → None；否则返回可直接落库的结构。"""
-    if not should_probe(item, answer, qtype):
+    if not should_probe(item, answer, qtype, thresholds=thresholds):
         return None
     probe = pick_probe(job, qtype, used_ids=used_ids, bank_dir=bank_dir)
     if not probe:

@@ -24,6 +24,16 @@ QUESTION_TYPES: dict[str, dict[str, Any]] = {
     "counter": {"label": "反问环节", "weight": 0.10},
 }
 
+# 面试模式：只改变提纲顺序、追问阈值与点评语气，绝不改变评分口径
+MODE_LABELS: dict[str, str] = {"easy": "轻松", "standard": "标准", "stress": "压力"}
+
+
+def normalize_mode(v: str | None) -> str:
+    """模式归一化：未知/空值一律回 standard。"""
+    text = str(v or "").strip().lower()
+    return text if text in MODE_LABELS else "standard"
+
+
 # 每种题型的机械模板（LLM 只做个性化润色，替换 {占位符} 后不得改变考点）
 _TEMPLATES: dict[str, list[str]] = {
     "motivation": [
@@ -54,12 +64,42 @@ _TEMPLATES: dict[str, list[str]] = {
     ],
 }
 
-# 各题型的评分要点关键词（答到才得分；引擎逐词匹配，不靠模型感觉）
-_RUBRIC_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "motivation": ("岗位", "规划", "行业", "原因", "因为", "希望", "目标"),
-    "major": (),     # 动态：技能标签 / 课程名
-    "project": ("角色", "负责", "困难", "结果", "实现", "解决", "完成", "成果"),
-    "scenario": ("先", "然后", "确认", "沟通", "方案", "优先", "复盘", "反馈"),
+# 各题型的评分要点关键词（答到才得分；引擎逐词匹配，不靠模型感觉）。
+# 每个考点是一组同义/近义表达（首词为规范考点词）：组内任一词命中学生原话即算该考点命中，
+# 分母仍按「考点数」计——扩词只提高「答到」的召回，不稀释分值。
+# 扩词原则：必须能定位到学生原话的具体语义，禁止泛词（是/的/我们）；
+# 同一题型内各组用词不重叠（含子串），避免一个词被两个考点双计。
+_RUBRIC_KEYWORDS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "motivation": (
+        ("岗位", "职位", "应聘", "求职"),          # 应聘对象的不同说法
+        ("规划", "计划", "打算"),                  # 职业规划口语化表达
+        ("行业", "领域", "赛道", "业界"),          # 行业认知
+        ("原因", "理由", "为什么"),                # 动机归因
+        ("因为", "由于", "之所以"),                # 因果连接（可定位，非泛词）
+        ("希望", "期望", "想要", "渴望"),          # 意愿
+        ("目标", "方向", "追求", "理想"),          # 目标感
+    ),
+    "major": (),     # 动态：技能标签 / 课程名（按简历/岗位实词匹配，不扩词）
+    "project": (
+        ("角色", "职责", "分工", "承担"),          # 承担角色
+        ("负责", "主导", "推动", "牵头", "落地"),  # 主导动作（任务示例）
+        ("困难", "难题", "挑战", "瓶颈", "难点"),  # 遇到的困难
+        ("结果", "成效", "产出", "效果"),          # 结果导向
+        ("实现", "搭建", "开发", "构建"),          # 实现手段
+        ("解决", "处理", "攻克", "克服", "化解"),  # 解决问题
+        ("完成", "交付", "上线", "做完"),          # 完成度
+        ("成果", "成绩", "收获"),                  # 量化成果
+    ),
+    "scenario": (
+        ("先", "首先", "第一步"),                  # 步骤起点
+        ("然后", "接着", "随后", "之后"),          # 步骤推进
+        ("确认", "核实", "核对", "弄清", "明确"),  # 先确认信息
+        ("沟通", "协调", "对接", "交流", "协作", "配合", "跨部门"),  # 沟通协作（任务示例：团队→协作/配合/跨部门）
+        ("方案", "办法", "对策", "思路"),          # 解决方案
+        ("优先", "排序", "轻重缓急"),              # 优先级
+        ("复盘", "总结", "回顾", "反思"),          # 复盘
+        ("反馈", "回报", "同步", "汇报"),          # 反馈闭环
+    ),
     "stress": (),    # 只看结构与长度（抗压题无标准答案）
     "counter": (),   # 反问环节不打分，只记录
 }
@@ -70,8 +110,24 @@ _STRUCT_MARKS: tuple[str, ...] = (
     "第一", "第二", "第三", "一是", "二是", "三是",
 )
 
-# 深度分档（字符数；中文按 1 计）
-_DEPTH_BANDS: tuple[tuple[int, float], ...] = ((30, 0.0), (120, 0.6), (10**9, 1.0))
+# 深度分档（字符数；中文按 1 计）——按题型自适应，不再一刀切 30/120。
+# 每档含义：n < 第一阈 → 0 分；第一阈 ≤ n < 第二阈 → 0.6；n ≥ 第二阈 → 1.0。
+# 取值理由：
+#   motivation/stress/counter 重在观点与态度，短答即可拿满分（门槛下调），
+#     避免「话少但答到点」被判低分；counter 反问一句即可，门槛最低。
+#   major 专业基础需要一定展开，门槛居中。
+#   project/scenario 必须讲清具体例子与处理过程，篇幅要求最高（门槛上调），
+#     防止空泛短句蒙混。
+_DEPTH_BANDS_BY_TYPE: dict[str, tuple[tuple[int, float], ...]] = {
+    "motivation": ((20, 0.0), (60, 0.6), (10**9, 1.0)),
+    "stress":     ((20, 0.0), (60, 0.6), (10**9, 1.0)),
+    "counter":    ((10, 0.0), (40, 0.6), (10**9, 1.0)),
+    "major":      ((30, 0.0), (100, 0.6), (10**9, 1.0)),
+    "project":    ((40, 0.0), (150, 0.6), (10**9, 1.0)),
+    "scenario":   ((40, 0.0), (150, 0.6), (10**9, 1.0)),
+}
+# 未知题型 / 老会话 rubric 不带 type 时的兜底：沿用旧统一阈值，保证向后兼容。
+_DEPTH_BANDS_DEFAULT: tuple[tuple[int, float], ...] = ((30, 0.0), (120, 0.6), (10**9, 1.0))
 
 _MAX_ROUNDS = 6
 
@@ -91,7 +147,8 @@ def build_outline(job: Mapping[str, Any] | None,
                   use_bank: bool = True,
                   exclude_bank_ids: set[str] | frozenset[str] | None = None,
                   weak: Mapping[str, Any] | None = None,
-                  variant: int = 0) -> list[dict[str, Any]]:
+                  variant: int = 0,
+                   mode: str = "standard") -> list[dict[str, Any]]:
     """按证据决定考什么题：有项目经历→项目深挖；岗位有技能→专业+情景。
 
     出题来源两级（题库优先、模板兜底）：
@@ -126,6 +183,13 @@ def build_outline(job: Mapping[str, Any] | None,
         plan.insert(2, "project")
     if not job_skills and not courses and "major" in plan:
         plan.remove("major")  # 无技能无课程 → 专业题没有抓手，不出（缺失不编题）
+    # 模式只改题型顺序/数量，不改任何 rubric 与分数口径
+    mode = normalize_mode(mode)
+    if mode == "easy":
+        plan = [q for q in plan if q != "stress"]
+    elif mode == "stress" and "stress" in plan:
+        plan.remove("stress")
+        plan.insert(min(2, len(plan)), "stress")
     plan = plan[:max(2, max_rounds)]
     # 弱点题型被裁剪掉了 → 换回权重次低的题型，保证靶向题一定在场
     if weak_ok and weak_type not in plan:
@@ -302,16 +366,17 @@ def rubric_from_bank(hit: Mapping[str, Any]) -> dict[str, Any]:
     meta = QUESTION_TYPES.get(qtype, {"weight": 0.2, "label": qtype})
     return {"keywords": kws, "struct_marks": list(_STRUCT_MARKS),
             "weight": meta["weight"], "label": meta["label"],
-            "bank_id": hit.get("id")}
+            "type": qtype, "bank_id": hit.get("id")}
 
 
 def rubric_of(qtype: str, job_skills: Sequence[str]) -> dict[str, Any]:
     """评分要点（引擎逐词核对）：关键词 + 结构标记 + 深度档。"""
-    kws = list(_RUBRIC_KEYWORDS.get(qtype, ()))
+    kws = [g[0] for g in _RUBRIC_KEYWORDS.get(qtype, ())]
     if qtype == "major":
         kws = [str(s) for s in job_skills][:4] or ["课程", "掌握"]
     return {"keywords": kws, "struct_marks": list(_STRUCT_MARKS),
-            "weight": QUESTION_TYPES[qtype]["weight"], "label": QUESTION_TYPES[qtype]["label"]}
+            "weight": QUESTION_TYPES[qtype]["weight"], "label": QUESTION_TYPES[qtype]["label"],
+            "type": qtype}
 
 
 # ----------------------------------------------------------------
@@ -326,12 +391,23 @@ def score_answer(answer: str | None, rubric: Mapping[str, Any],
     norm_ans = _norm(ans)
     detail: dict[str, Any] = {}
 
-    # 1) 关键词覆盖（30）：命中数/关键词数；无关键词的题型按满分*0.6 给底分
+    # 1) 关键词覆盖（30）：命中考点数/考点数；无关键词的题型按满分*0.6 给底分。
+    #    同义词按题型作用域展开（_RUBRIC_KEYWORDS）：组内任一词命中即算该考点命中，
+    #    命中词记录学生原话里实际出现的表达（可定位）；无 type 的 rubric（题库老会话/
+    #    校准引擎）不展开，保持逐词精确匹配。
     kws = [str(k) for k in (rubric.get("keywords") or [])]
     if kws:
-        hits = [k for k in kws if _norm(k) in norm_ans]
+        syn_map = {g[0]: g for g in _RUBRIC_KEYWORDS.get(str(rubric.get("type") or ""), ())}
+        hits: list[str] = []
+        missed: list[str] = []
+        for k in kws:
+            matched = next((s for s in syn_map.get(k, (k,)) if _norm(s) in norm_ans), None)
+            if matched is not None:
+                hits.append(matched)
+            else:
+                missed.append(k)
         detail["keyword_hits"] = hits
-        detail["keyword_missed"] = [k for k in kws if k not in hits]
+        detail["keyword_missed"] = missed
         kw_score = 30.0 * len(hits) / len(kws)
     else:
         detail["keyword_hits"] = detail["keyword_missed"] = []
@@ -344,9 +420,10 @@ def score_answer(answer: str | None, rubric: Mapping[str, Any],
     struct_score = 25.0 if len(marks) >= 3 else (17.0 if len(marks) == 2 else (10.0 if len(marks) == 1 else 0.0))
     detail["struct_score"] = struct_score
 
-    # 3) 深度分（25）：长度分档
+    # 3) 深度分（25）：按题型自适应长度分档（无 type 走旧统一阈值兜底）
     n = len(ans.strip())
-    depth_ratio = next(r for th, r in _DEPTH_BANDS if n < th or th == 10**9)
+    bands = _DEPTH_BANDS_BY_TYPE.get(str(rubric.get("type") or ""), _DEPTH_BANDS_DEFAULT)
+    depth_ratio = next(r for th, r in bands if n < th or th == 10**9)
     detail["depth_score"] = round(25.0 * depth_ratio, 2)
     detail["length"] = n
 
