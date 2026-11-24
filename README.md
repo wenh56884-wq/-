@@ -101,8 +101,11 @@ D:\qihang\
 │   ├── schemas.py        # Pydantic 模型
 │   ├── config.py         # pydantic-settings 读取 .env
 │   ├── workflow_approval.py  # 工作流人工审批（挂起 / 通过 / 驳回）
-│   └── routers\          # teacher / student / career / chat / grades / job / kg /
-│                         # forecast / exam / interview / question_bank / kb / workflow
+│   └── routers\          # 21 个路由模块 / 143 个 @router 接口（2026-11-24 统计）：
+│                         # teacher / student / career / chat / grades / job / kg /
+│                         # forecast / exam / interview / interview_lab / question_bank /
+│                         # kb / workflow / assessment / cert / elective / export /
+│                         # notifications / pet / web（main.py 另挂 /health、/auth/login、/chat）
 ├── web\                  # Vue 3 + Vite + ECharts（构建后由 FastAPI 单服务托管）
 │   ├── src\views\        # 16 个页面：登录、教师端、学生端、岗位/招考、图谱、面试、
 │   │                     # 预测、测评、工作流审批、AI 助手等
@@ -397,7 +400,7 @@ D:\qihang\
   - 词表冲突回归（固化在 `tests\test_agent_entry.py`，22 种问法）：给班级排名加「平均成绩」后，**「AI20230001 的平均成绩」会被班级统计抢走**——问的是这个人、统计的却是全班。修法是 `plan_teacher` 增加「提问点名到具体学生时，班级级统计让位给成绩单 / 画像 / 预测」，但**真在问名次时不让位**：个人名次只存在于班级排名里，成绩单没有名次字段，「XX 排第几」交给成绩单会答不出来，靠 intents 新增的 `rank_markers` 名次信号词区分。另修一处老问题：`kg_skill_jobs` 原本写死「会了能做什么」，中间插个词（「会了 Python 能做什么」）就不认，掉到兜底的班级概貌。
   - 上线自查（Edge 浏览器实测 + 问法压测）发现并修复：教师**点名班级但没点名到人**时，「成绩怎么样 / 的均分 / 平均绩点」会落到个人成绩单、再兜底成随机一个学生的成绩——问的是全班，看到的是一个人。修法是给 `plan_teacher` 加「班级信号」规则：提问里有班级名或说「这个班 / 我们班」且未点名到人时，成绩类问法一律归班级统计（10 种问法压测全对，含「点名到人归成绩单」「挂科归预警名单」的反例）。同时排名卡注明「任教范围内共 N 个班参与比较」，教师只带一个班时明确提示无法横向比较，不让用户对着只有 1 行的排名猜。
 - **联网搜索真正打通（web-v1 · 博查适配）**：原先教师问「联网查最新的公开招聘信息」，回答是「没检索到任何公开招聘信息」——实际上从来没连过网。逐层定位出三个原因，都在代码里修掉：① 项目里**没有任何 `load_dotenv`**，`.env` 只被 pydantic 的 `get_settings` 读走、从不写回 `os.environ`，而 `engine/web_search.py` 是读 `os.getenv` 的，等于服务进程里永远读不到搜索密钥 → `app/main.py` 启动时加载一次；② 补上**博查**（api.bochaai.com，国内可直连）适配层，与 serper / bing 形成三级选择；③ 联网与知识库共用 RAG 提示词，那条提示词要求「查不到就说知识库里没有相关规定」，于是「网上没查到」被说成「知识库里没有」，用户以为查的是校内知识库 → 给 `web_search` 单独写提示词 `_WEB_SYSTEM`，并规定联网无结果时**跳过模型润色**直出模板。附带一处：检索词里的「联网查一下」这类动作词要洗掉——带着「联网」去搜会被召回一堆「什么是联网搜索」的页面，洗完后引用从招聘平台首页变成真实公告与政府官网（武汉青山区政府、盐城新闻网、本溪人社局）。密钥经 `.env` 的 `BOCHA_API_KEY` 配置（注意是 `sk-` 开头的搜索服务密钥，`ak-` 开头的是别的平台的访问密钥，博查不认）。新增测试：无密钥话术断言、provider 选中博查。
-- **智能体成为统一入口（agent-entry-v1）**：原先智能体只有 9 个工具，成绩、学业预测、报考分析、知识图谱、竞赛、通知这些功能只能走页面接口，智能体根本调不到；学生端路由更只有两条（`推荐`→`my_recommendations`，其余一律 `my_warning`）。本轮把工具集扩到 **24 个**（教师 14 / 学生 16）：新增 `my_grades`、`student_grades`、`my_forecast`、`student_forecast`、`my_career_forecast`、`kg_major_skills`、`kg_skill_jobs`、`kg_path`，并把已实现却从未暴露给智能体的 `search_jobs`、`job_facets`、`competition_guide`、`my_notices`、`my_career_guide` 一并接入，学生端路由扩到 8 条。**铁律不变**：数值仍由 `engine/` 的确定性函数算出（成绩聚合走 `engine.grades`、预测走 `engine.forecast`、图谱走 `engine.kg`），智能体只做选工具、编排与表达；学生端工具集仍不含 `student_profile` / `warning_list` / `student_grades` 等查他人的工具。
+- **智能体成为统一入口（agent-entry-v1）**：原先智能体只有 9 个工具，成绩、学业预测、报考分析、知识图谱、竞赛、通知这些功能只能走页面接口，智能体根本调不到；学生端路由更只有两条（`推荐`→`my_recommendations`，其余一律 `my_warning`）。本轮把工具集扩到 **24 个**（教师 14 / 学生 16，agent-entry-v1 当时口径；**2026-11-24 复核：现为教师 22 / 学生 25、去重 39**，见 `agents/tools.py:1983/1998`、`docs/创新点指标盘点.md` §2.3）：新增 `my_grades`、`student_grades`、`my_forecast`、`student_forecast`、`my_career_forecast`、`kg_major_skills`、`kg_skill_jobs`、`kg_path`，并把已实现却从未暴露给智能体的 `search_jobs`、`job_facets`、`competition_guide`、`my_notices`、`my_career_guide` 一并接入，学生端路由扩到 8 条。**铁律不变**：数值仍由 `engine/` 的确定性函数算出（成绩聚合走 `engine.grades`、预测走 `engine.forecast`、图谱走 `engine.kg`），智能体只做选工具、编排与表达；学生端工具集仍不含 `student_profile` / `warning_list` / `student_grades` 等查他人的工具。
   - 一个必须排在前面的顺序问题：学生端「本人数据」意图要**先于**知识库判断，否则「我的成绩」会被知识库词表里的「学分」抢走，答出一堆管理办法；同理「预测」要排在「成绩」之前，否则「预测一下我下学期的绩点」里的「绩点」会被成绩路由吃掉。
   - 工具分发从 11 个 `elif` 改成显式 `_dispatch` 表；`teacher_agent.plan_teacher` 给 `student_grades` / `student_forecast` 补了学号抠取（原来只有 `student_profile` 会抠，新工具会拿到空学号）。
   - 新增 `tests\test_agent_entry.py`（14 项）：路由正确性、学号是否真的传下去、新工具名能否被分发、学生端无越权工具、`my_grades` 只用 `ctx.student_id`。
